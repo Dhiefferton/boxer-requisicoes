@@ -57,5 +57,10 @@ router.get('/admin/usuarios',       autenticar, exigirPerfil('admin'), listarUsu
 router.post('/admin/usuarios',      autenticar, exigirPerfil('admin'), criarUsuario);
 router.patch('/admin/usuarios/:id', autenticar, exigirPerfil('admin'), atualizarUsuario);
 router.get('/admin/departamentos',  autenticar, listarDepartamentos);
-
+// Rota temporária para gerar hash — REMOVER APÓS USO
+import bcrypt from 'bcryptjs';
+router.get('/gerar-hash/:senha', async (req, res) => {
+  const hash = await bcrypt.hash(req.params.senha, 10);
+  res.json({ hash });
+});
 export default router;
