@@ -13,6 +13,8 @@ import { errorHandler, notFound } from './middlewares/errorHandler.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
+// Confia no proxy do Railway/Render
+app.set('trust proxy', 1);
 
 // ── Segurança ────────────────────────────────────────────────
 // helmet adiciona cabeçalhos HTTP de segurança automaticamente
@@ -74,3 +76,19 @@ app.listen(PORT, () => {
 });
 
 export default app;
+
+// Rate limiting: limita a 100 requisições por IP a cada 15 minutos
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max:      100,
+  message:  { erro: 'Muitas requisições. Aguarde alguns minutos.' },
+});
+app.use('/api/', limiter);
+
+// Limite menor especificamente para o login (proteção contra força bruta)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max:      10,
+  message:  { erro: 'Muitas tentativas de login. Aguarde 15 minutos.' },
+});
+app.use('/api/auth/login', loginLimiter);
