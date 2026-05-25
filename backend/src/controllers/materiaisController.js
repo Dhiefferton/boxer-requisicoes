@@ -5,26 +5,23 @@
 import { query } from '../config/db.js';
 
 // GET /materiais
-// Lista materiais com filtro opcional por categoria e busca por texto
 export async function listarMateriais(req, res, next) {
   try {
     const { categoria, busca, pagina = 1, limite = 50 } = req.query;
     const offset = (parseInt(pagina) - 1) * parseInt(limite);
 
-    // Monta a query dinamicamente conforme os filtros recebidos
-    const condicoes = ['v.ativo = TRUE'];
+    const condicoes = ['ativo = TRUE'];
     const params = [];
     let paramIdx = 1;
 
     if (categoria) {
-      condicoes.push(`v.categoria_id = $${paramIdx++}`);
+      condicoes.push(`categoria_id = $${paramIdx++}`);
       params.push(parseInt(categoria));
     }
 
     if (busca && busca.trim()) {
-      // Busca tanto no código quanto na descrição
       condicoes.push(
-        `(v.codigo ILIKE $${paramIdx} OR v.descricao ILIKE $${paramIdx})`
+        `(codigo ILIKE $${paramIdx} OR descricao ILIKE $${paramIdx})`
       );
       params.push(`%${busca.trim()}%`);
       paramIdx++;
@@ -32,7 +29,6 @@ export async function listarMateriais(req, res, next) {
 
     const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
 
-    // Query principal usando a view do banco (já calcula status_estoque)
     const sql = `
       SELECT
         id, codigo, descricao, unidade,
@@ -46,9 +42,8 @@ export async function listarMateriais(req, res, next) {
 
     params.push(parseInt(limite), offset);
 
-    // Conta o total para paginação
     const countSql = `SELECT COUNT(*) FROM vw_catalogo ${where}`;
-    const countParams = params.slice(0, -2); // remove limite e offset
+    const countParams = params.slice(0, -2);
 
     const [result, countResult] = await Promise.all([
       query(sql, params),
@@ -68,7 +63,6 @@ export async function listarMateriais(req, res, next) {
 }
 
 // GET /categorias
-// Lista todas as categorias ativas para os filtros do catálogo
 export async function listarCategorias(req, res, next) {
   try {
     const result = await query(
@@ -84,7 +78,6 @@ export async function listarCategorias(req, res, next) {
 }
 
 // GET /materiais/:id
-// Detalhes de um material específico
 export async function detalharMaterial(req, res, next) {
   try {
     const { id } = req.params;
@@ -112,7 +105,6 @@ export async function criarMaterial(req, res, next) {
       return res.status(400).json({ erro: 'Campos obrigatórios: codigo, descricao, categoria_id' });
     }
 
-    // Cria o material e o estoque zerado em uma transação
     const result = await query(
       `INSERT INTO materiais (codigo, descricao, categoria_id, unidade)
        VALUES ($1, $2, $3, $4)
@@ -122,7 +114,6 @@ export async function criarMaterial(req, res, next) {
 
     const material = result.rows[0];
 
-    // Cria o registro de estoque zerado automaticamente
     await query(
       `INSERT INTO estoques (material_id, quantidade, nivel_minimo) VALUES ($1, 0, 5)`,
       [material.id]
@@ -135,7 +126,6 @@ export async function criarMaterial(req, res, next) {
 }
 
 // PATCH /materiais/:id/estoque — Somente operador/admin
-// Atualiza a quantidade em estoque
 export async function atualizarEstoque(req, res, next) {
   try {
     const { id } = req.params;
