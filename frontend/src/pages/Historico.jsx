@@ -2,8 +2,7 @@
 // pages/Historico.jsx — Histórico de Requisições
 // ============================================================
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ClipboardList, ChevronRight, Calendar, Package } from 'lucide-react';
+import { ClipboardList, ChevronRight, Calendar, Package, User, Building2 } from 'lucide-react';
 import { requisicoesService } from '../services/api';
 import { StatusBadge, Spinner, Empty } from '../components/ui';
 
@@ -19,10 +18,9 @@ const STATUS_OPTS = [
 export default function Historico() {
   const [requisicoes, setRequisicoes] = useState([]);
   const [statusFiltro, setStatusFiltro] = useState('');
-  const [loading, setLoading]   = useState(true);
+  const [loading, setLoading]     = useState(true);
   const [expandido, setExpandido] = useState(null);
-  const [detalhe, setDetalhe]   = useState({});
-  const navigate = useNavigate();
+  const [detalhe, setDetalhe]     = useState({});
 
   useEffect(() => {
     setLoading(true);
@@ -100,7 +98,7 @@ export default function Historico() {
                     <span className="text-sm font-semibold text-[#e8eaf0]">Req. #{req.id}</span>
                     <StatusBadge status={req.status} />
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-[#8b91a8]">
+                  <div className="flex items-center gap-3 mt-1 text-xs text-[#8b91a8] flex-wrap">
                     <span className="flex items-center gap-1">
                       <Calendar size={11} />
                       {formatarData(req.created_at)}
@@ -109,6 +107,18 @@ export default function Historico() {
                       <Package size={11} />
                       {req.total_itens} {req.total_itens === 1 ? 'item' : 'itens'}
                     </span>
+                    {req.solicitante_nome && (
+                      <span className="flex items-center gap-1">
+                        <User size={11} />
+                        {req.solicitante_nome}
+                      </span>
+                    )}
+                    {req.departamento_nome && (
+                      <span className="flex items-center gap-1">
+                        <Building2 size={11} />
+                        {req.departamento_nome}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <ChevronRight
@@ -120,10 +130,9 @@ export default function Historico() {
               {/* Detalhe expandido */}
               {expandido === req.id && (
                 <div className="border-t border-[#2e3347] px-4 py-4 space-y-4">
-
-                  {/* Itens */}
                   {detalhe[req.id] ? (
                     <>
+                      {/* Itens */}
                       <div className="space-y-2">
                         <p className="text-xs font-semibold text-[#8b91a8] uppercase tracking-wide">Itens</p>
                         {detalhe[req.id].itens.map(item => (
