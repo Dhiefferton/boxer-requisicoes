@@ -26,9 +26,9 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
   const [detalhe,     setDetalhe]     = useState(null);
   const [carregando,  setCarregando]  = useState(false);
   const [processando, setProcessando] = useState(false);
-  const [obsModal,    setObsModal]    = useState(null); // { status } quando modal aberto
+  const [obsModal,    setObsModal]    = useState(null);
 
-  const proximos   = PROXIMOS_STATUS[requisicao.status] || [];
+  const proximos     = PROXIMOS_STATUS[requisicao.status] || [];
   const podeCancelar = CANCELAR_DE.includes(requisicao.status);
 
   async function toggleDetalhe() {
@@ -60,6 +60,16 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
       day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
     });
   }
+
+  function formatarDataNecessidade(data) {
+    if (!data) return null;
+    // Adiciona horário fixo para evitar problema de fuso horário
+    const d = new Date(data + 'T12:00:00');
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('pt-BR');
+  }
+
+  const dataNecessidade = formatarDataNecessidade(requisicao.data_necessidade);
 
   return (
     <>
@@ -98,9 +108,9 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
                 <div className="flex items-center gap-1.5 text-xs text-[#8b91a8]">
                   <Calendar size={12} />
                   {formatarData(requisicao.created_at)}
-                  {requisicao.data_necessidade && (
+                  {dataNecessidade && (
                     <span className="ml-2 bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded-md">
-                      Necessidade: {new Date(requisicao.data_necessidade + 'T12:00:00').toLocaleDateString('pt-BR')}
+                      Necessidade: {dataNecessidade}
                     </span>
                   )}
                 </div>
@@ -116,7 +126,6 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
 
           {/* ── Botões de ação ────────────────────────────── */}
           <div className="mt-3 flex items-center gap-2 flex-wrap">
-            {/* Próximo status */}
             {proximos.map(p => (
               <button
                 key={p.value}
@@ -129,7 +138,6 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
               </button>
             ))}
 
-            {/* Cancelar */}
             {podeCancelar && (
               <button
                 onClick={() => setObsModal({ status: 'cancelado', label: 'Cancelar requisição' })}
@@ -140,7 +148,6 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
               </button>
             )}
 
-            {/* Expandir detalhes */}
             <button
               onClick={toggleDetalhe}
               className="ml-auto flex items-center gap-1 text-xs text-[#8b91a8] hover:text-[#e8eaf0] transition-colors"
@@ -159,7 +166,6 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
               </div>
             ) : detalhe ? (
               <>
-                {/* Lista de itens */}
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[#8b91a8] mb-2">
                     Itens solicitados
@@ -183,7 +189,6 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
                   </div>
                 </div>
 
-                {/* Observações */}
                 {detalhe.observacoes && (
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest text-[#8b91a8] mb-1">Observações</p>
@@ -194,7 +199,6 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
                   </div>
                 )}
 
-                {/* Histórico de status */}
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[#8b91a8] mb-2">Histórico</p>
                   <div className="space-y-1.5">
@@ -231,10 +235,8 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
   );
 }
 
-// Modal inline de confirmação com campo de observação
 function ModalConfirmacao({ label, status, onConfirmar, onCancelar }) {
   const [obs, setObs] = useState('');
-
   const isCancelamento = status === 'cancelado';
 
   return (
