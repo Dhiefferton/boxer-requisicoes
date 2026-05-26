@@ -2,20 +2,20 @@
 // pages/operador/PainelOperador.jsx
 // ============================================================
 import { useState } from 'react';
-import { RefreshCw, LayoutGrid, List } from 'lucide-react';
+import { RefreshCw, LayoutGrid, List, FileDown } from 'lucide-react';
 import { useRequisicoes } from '../../hooks/useRequisicoes';
 import RequisicaoCard from '../../components/operador/RequisicaoCard';
 import { Spinner, StatusBadge, Empty } from '../../components/ui';
 import { ClipboardList } from 'lucide-react';
+import { requisicoesService } from '../../services/api';
+import * as XLSX from 'xlsx';
 
-// Colunas do painel (não inclui entregue/cancelado por default)
 const COLUNAS = [
   { status: 'solicitado',   label: 'Solicitado',   cor: 'border-blue-500/40'   },
   { status: 'em_separacao', label: 'Em separação', cor: 'border-amber-500/40'  },
   { status: 'separado',     label: 'Separado',     cor: 'border-purple-500/40' },
 ];
 
-// Contadores de status para o resumo do topo
 function usarContadores(requisicoes) {
   return {
     solicitado:   requisicoes.filter(r => r.status === 'solicitado').length,
@@ -26,18 +26,73 @@ function usarContadores(requisicoes) {
   };
 }
 
-export default function PainelOperador() {
-  const [modo,         setModo]         = useState('kanban');  // kanban | lista
-  const [verArquivado, setVerArquivado] = useState(false);
+function formatarData(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric'
+  });
+}
 
-  // Carrega todas as requisições (sem filtro de status)
+export default function PainelOperador() {
+  const [modo,          setModo]          = useState('kanban');
+  const [verArquivado,  setVerArquivado]  = useState(false);
+  const [gerando,       setGerando]       = useState(false);
+
   const { requisicoes, loading, erro, recarregar, mudarStatus } = useRequisicoes('');
   const contadores = usarContadores(requisicoes);
 
-  // Em modo kanban: filtra apenas as ativas (não entregue/cancelado)
-  // Em modo lista: mostra tudo ou apenas arquivadas
   const ativas    = requisicoes.filter(r => !['entregue', 'cancelado'].includes(r.status));
   const arquivadas = requisicoes.filter(r => ['entregue', 'cancelado'].includes(r.status));
+
+  async function gerarRelatorio() {
+    setGerando(true);
+    try {
+      // Busca detalhes de todas as requisições
+      const linhas = [];
+
+      for (const req of requisicoes) {
+        const { data } = await requisicoesService.detalhar(req.id);
+        const detalhe = data.requisicao;
+
+        for (const item of detalhe.itens) {
+          linhas.push({
+            'Data Solicitada':       formatarData(req.created_at),
+            'Código do Produto':     item.codigo_snapshot,
+            'Descrição do Produto':  item.descricao_snapshot,
+            'Quantidade Solicitada': item.quantidade,
+            'Solicitante':           req.solicitante_nome || '—',
+            'Departamento':          req.departamento_nome || '—',
+            'Status':                req.status,
+          });
+        }
+      }
+
+      // Gera o arquivo Excel
+      const ws = XLSX.utils.json_to_sheet(linhas);
+
+      // Ajusta largura das colunas
+      ws['!cols'] = [
+        { wch: 16 }, // Data
+        { wch: 18 }, // Código
+        { wch: 45 }, // Descrição
+        { wch: 22 }, // Quantidade
+        { wch: 25 }, // Solicitante
+        { wch: 25 }, // Departamento
+        { wch: 15 }, // Status
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Requisições');
+
+      const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+      XLSX.writeFile(wb, `relatorio-requisicoes-${dataHoje}.xlsx`);
+
+    } catch (err) {
+      console.error('Erro ao gerar relatório:', err);
+    } finally {
+      setGerando(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -51,7 +106,22 @@ export default function PainelOperador() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+
+          {/* Botão exportar Excel */}
+          <button
+            onClick={gerarRelatorio}
+            disabled={gerando || requisicoes.length === 0}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
+              bg-green-500/15 text-green-400 hover:bg-green-500/25 transition-colors
+              disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {gerando
+              ? <><RefreshCw size={13} className="animate-spin" /> Gerando...</>
+              : <><FileDown size={13} /> Exportar Excel</>
+            }
+          </button>
+
           {/* Alternar modo */}
           <div className="flex bg-[#1a1d27] border border-[#2e3347] rounded-xl p-0.5">
             <button
@@ -85,11 +155,11 @@ export default function PainelOperador() {
       {/* ── Cards de resumo ──────────────────────────────── */}
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
         {[
-          { key: 'solicitado',   label: 'Solicitados'  },
-          { key: 'em_separacao', label: 'Separando'    },
-          { key: 'separado',     label: 'Separados'    },
-          { key: 'entregue',     label: 'Entregues'    },
-          { key: 'cancelado',    label: 'Cancelados'   },
+          { key: 'solicitado',   label: 'Solicitados' },
+          { key: 'em_separacao', label: 'Separando'   },
+          { key: 'separado',     label: 'Separados'   },
+          { key: 'entregue',     label: 'Entregues'   },
+          { key: 'cancelado',    label: 'Cancelados'  },
         ].map(({ key, label }) => (
           <div key={key} className="bg-[#1a1d27] border border-[#2e3347] rounded-xl p-3 text-center">
             <p className="text-xl font-bold text-[#e8eaf0]">{contadores[key]}</p>
@@ -126,15 +196,12 @@ export default function PainelOperador() {
                 const itens = ativas.filter(r => r.status === col.status);
                 return (
                   <div key={col.status} className="space-y-2">
-                    {/* Cabeçalho da coluna */}
                     <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${col.cor} bg-[#1a1d27]`}>
                       <div className="flex items-center gap-2">
                         <StatusBadge status={col.status} />
                       </div>
                       <span className="text-xs font-bold text-[#8b91a8]">{itens.length}</span>
                     </div>
-
-                    {/* Cards da coluna */}
                     {itens.length === 0 ? (
                       <div className="border-2 border-dashed border-[#2e3347] rounded-2xl py-8 text-center">
                         <p className="text-xs text-[#8b91a8]">Sem requisições</p>
@@ -156,7 +223,6 @@ export default function PainelOperador() {
             </div>
           )}
 
-          {/* Seção de arquivados (entregue + cancelado) */}
           {arquivadas.length > 0 && (
             <div className="mt-4">
               <button
