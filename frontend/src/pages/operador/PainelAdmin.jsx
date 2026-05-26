@@ -2,10 +2,11 @@
 // pages/operador/PainelAdmin.jsx
 // Gestão de usuários e catálogo — perfil admin
 // ============================================================
-import { useState, useEffect } from 'react';
-import { UserPlus, RefreshCw, Check, X, Users, Package } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import api, { adminService, materiaisService } from '../../services/api';
-import { Button, Input, Spinner, Empty } from '../../components/ui';
+import { Button, Spinner } from '../../components/ui';
 
 // ── Aba Usuários ─────────────────────────────────────────────
 function AbaUsuarios() {
@@ -71,7 +72,6 @@ function AbaUsuarios() {
         </div>
       </div>
 
-      {/* Formulário de criação */}
       {criando && (
         <div className="bg-[#21253a] border border-[#2e3347] rounded-2xl p-4 space-y-3">
           <h3 className="text-sm font-semibold text-[#e8eaf0]">Novo usuário</h3>
@@ -96,7 +96,6 @@ function AbaUsuarios() {
         </div>
       )}
 
-      {/* Lista de usuários */}
       {loading ? <div className="flex justify-center py-8"><Spinner className="text-[#4f6ef7]" /></div> : (
         <div className="space-y-2">
           {usuarios.map(u => (
@@ -128,14 +127,17 @@ function AbaUsuarios() {
 
 // ── Aba Estoque ──────────────────────────────────────────────
 function AbaEstoque() {
-  const [materiais, setMateriais]   = useState([]);
-  const [loading,   setLoading]     = useState(true);
-  const [editando,  setEditando]    = useState(null); // { id, quantidade, nivel_minimo }
-  const [salvando,  setSalvando]    = useState(false);
+  const [materiais, setMateriais] = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [editando,  setEditando]  = useState(null);
+  const [salvando,  setSalvando]  = useState(false);
+  const [importando, setImportando] = useState(false);
+  const [resultado,  setResultado]  = useState(null); // { atualizados, erros }
+  const inputFileRef = useRef(null);
 
   useEffect(() => {
     setLoading(true);
-    materiaisService.listar({ limite: 200 })
+    materiaisService.listar({ limite: 500 })
       .then(r => setMateriais(r.data.materiais))
       .finally(() => setLoading(false));
   }, []);
@@ -159,6 +161,71 @@ function AbaEstoque() {
     } finally { setSalvando(false); }
   }
 
+  // Baixar modelo de planilha
+  function baixarModelo() {
+    const modelo = materiais.slice(0, 5).map(m => ({
+      'Codigo':    m.codigo,
+      'Descricao': m.descricao,
+      'Quantidade': m.quantidade ?? 0,
+    }));
+    const ws = XLSX.utils.json_to_sheet(modelo);
+    ws['!cols'] = [{ wch: 15 }, { wch: 45 }, { wch: 15 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Estoque');
+    XLSX.writeFile(wb, 'modelo-estoque.xlsx');
+  }
+
+  // Importar planilha
+  async function handleImportar(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImportando(true);
+    setResultado(null);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const linhas = XLSX.utils.sheet_to_json(ws);
+
+      let atualizados = 0;
+      const erros = [];
+
+      for (const linha of linhas) {
+        // Aceita colunas: Codigo/codigo/CODIGO e Quantidade/quantidade/QUANTIDADE
+        const codigo = String(linha['Codigo'] || linha['codigo'] || linha['CODIGO'] || '').trim();
+        const qtd    = parseInt(linha['Quantidade'] || linha['quantidade'] || linha['QUANTIDADE'] || 0);
+
+        if (!codigo) continue;
+
+        // Encontra o material pelo código
+        const material = materiais.find(m => m.codigo === codigo);
+        if (!material) {
+          erros.push(`Código não encontrado: ${codigo}`);
+          continue;
+        }
+
+        try {
+          await api.patch(`/materiais/${material.id}/estoque`, { quantidade: qtd });
+          atualizados++;
+        } catch {
+          erros.push(`Erro ao atualizar: ${codigo}`);
+        }
+      }
+
+      // Recarrega os materiais
+      const r = await materiaisService.listar({ limite: 500 });
+      setMateriais(r.data.materiais);
+      setResultado({ atualizados, erros });
+
+    } catch (err) {
+      alert('Erro ao ler a planilha. Verifique o formato.');
+    } finally {
+      setImportando(false);
+      e.target.value = '';
+    }
+  }
+
   const statusColor = {
     disponivel:    'bg-green-500/15 text-green-400',
     baixo_estoque: 'bg-amber-500/15 text-amber-400',
@@ -166,8 +233,66 @@ function AbaEstoque() {
   };
 
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-[#8b91a8]">Clique na quantidade para editar o estoque de qualquer material.</p>
+    <div className="space-y-4">
+
+      {/* Barra de ações */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="text-sm text-[#8b91a8]">
+          Clique na quantidade para editar individualmente ou importe uma planilha.
+        </p>
+        <div className="flex items-center gap-2">
+          {/* Baixar modelo */}
+          <button
+            onClick={baixarModelo}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium
+              bg-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0] transition-colors"
+          >
+            <FileDown size={13} /> Baixar modelo
+          </button>
+
+          {/* Importar planilha */}
+          <button
+            onClick={() => inputFileRef.current?.click()}
+            disabled={importando}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold
+              bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 transition-colors
+              disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {importando
+              ? <><RefreshCw size={13} className="animate-spin" /> Importando...</>
+              : <><Upload size={13} /> Importar planilha</>
+            }
+          </button>
+          <input
+            ref={inputFileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={handleImportar}
+            className="hidden"
+          />
+        </div>
+      </div>
+
+      {/* Resultado da importação */}
+      {resultado && (
+        <div className={`rounded-xl px-4 py-3 text-sm border ${
+          resultado.erros.length > 0
+            ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+            : 'bg-green-500/10 border-green-500/20 text-green-400'
+        }`}>
+          <p className="font-medium">✓ {resultado.atualizados} produto(s) atualizado(s) com sucesso!</p>
+          {resultado.erros.length > 0 && (
+            <div className="mt-1 space-y-0.5">
+              {resultado.erros.map((e, i) => (
+                <p key={i} className="text-xs text-red-400">{e}</p>
+              ))}
+            </div>
+          )}
+          <button onClick={() => setResultado(null)} className="mt-1 text-xs underline opacity-60">Fechar</button>
+        </div>
+      )}
+
+      {/* Lista de materiais */}
       {loading ? <div className="flex justify-center py-8"><Spinner className="text-[#4f6ef7]" /></div> : (
         <div className="space-y-1.5">
           {materiais.map(m => (
@@ -237,7 +362,6 @@ export default function PainelAdmin() {
         <p className="text-sm text-[#8b91a8] mt-0.5">Gestão de usuários e estoque</p>
       </div>
 
-      {/* Abas */}
       <div className="flex bg-[#1a1d27] border border-[#2e3347] rounded-xl p-1 w-fit gap-1">
         <button
           onClick={() => setAba('usuarios')}
