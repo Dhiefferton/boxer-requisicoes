@@ -10,9 +10,6 @@ import { Package } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import CartDrawer from '../components/cart/CartDrawer';
 
-// Categorias que não devem aparecer no filtro
-const CATEGORIAS_OCULTAS = ['Insumos'];
-
 export default function Catalogo() {
   const [materiais,   setMateriais]   = useState([]);
   const [categorias,  setCategorias]  = useState([]);
@@ -24,32 +21,22 @@ export default function Catalogo() {
 
   const { totalItens } = useCart();
 
-  // Carrega categorias uma só vez (excluindo as ocultas)
+  // Carrega todas as categorias
   useEffect(() => {
     materiaisService.categorias()
-      .then(r => {
-        const visiveis = r.data.categorias.filter(
-          c => !CATEGORIAS_OCULTAS.includes(c.nome)
-        );
-        setCategorias(visiveis);
-      })
+      .then(r => setCategorias(r.data.categorias))
       .catch(console.error);
   }, []);
 
   const carregarMateriais = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { limite: 100 };
+      const params = { limite: 5000 };
       if (busca)       params.busca     = busca;
       if (categoriaId) params.categoria = categoriaId;
       const { data } = await materiaisService.listar(params);
-
-      // Filtra materiais de categorias ocultas
-      const filtrados = data.materiais.filter(
-        m => !CATEGORIAS_OCULTAS.includes(m.categoria_nome)
-      );
-      setMateriais(filtrados);
-      setTotal(filtrados.length);
+      setMateriais(data.materiais);
+      setTotal(data.total);
     } catch (err) {
       console.error(err);
     } finally {
@@ -72,7 +59,7 @@ export default function Catalogo() {
   return (
     <div className="space-y-5">
 
-      {/* ── Título + botão carrinho fixo ─────────────────────── */}
+      {/* ── Título + botão carrinho ─────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-[#e8eaf0]">Catálogo de Materiais</h1>
@@ -81,10 +68,9 @@ export default function Catalogo() {
           </p>
         </div>
 
-        {/* Botão carrinho fixo */}
         <button
           onClick={() => setCartOpen(true)}
-          className="relative flex items-center gap-2 bg-[#4f6ef7]/15 hover:bg-[#4f6ef7]/25 
+          className="relative flex items-center gap-2 bg-[#4f6ef7]/15 hover:bg-[#4f6ef7]/25
             text-[#4f6ef7] px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
         >
           <ShoppingCart size={18} />
@@ -97,7 +83,7 @@ export default function Catalogo() {
         </button>
       </div>
 
-      {/* ── Busca ───────────────────────────────────────────── */}
+      {/* ── Busca ───────────────────────────────────────── */}
       <div className="relative">
         <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
         <input
@@ -122,7 +108,7 @@ export default function Catalogo() {
         )}
       </div>
 
-      {/* ── Filtro por categorias ────────────────────────────── */}
+      {/* ── Filtro por categorias ────────────────────────── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         <div className="shrink-0 flex items-center gap-1.5 text-xs text-[#8b91a8]">
           <SlidersHorizontal size={13} />
@@ -153,7 +139,7 @@ export default function Catalogo() {
         ))}
       </div>
 
-      {/* ── Resultado ───────────────────────────────────────── */}
+      {/* ── Resultado ───────────────────────────────────── */}
       {loading ? (
         <div className="flex justify-center py-16">
           <Spinner size={28} className="text-[#4f6ef7]" />
@@ -189,7 +175,6 @@ export default function Catalogo() {
         </>
       )}
 
-      {/* Drawer do carrinho */}
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} />
     </div>
   );
