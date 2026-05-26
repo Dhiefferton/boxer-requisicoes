@@ -146,7 +146,7 @@ function AbaEstoque() {
     setLoading(true);
     try {
       const [m, c] = await Promise.all([
-        materiaisService.listar({ limite: 500 }),
+        materiaisService.listar({ limite: 5000 }),
         materiaisService.categorias(),
       ]);
       setMateriais(m.data.materiais);
