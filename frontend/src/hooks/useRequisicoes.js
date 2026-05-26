@@ -27,11 +27,17 @@ export function useRequisicoes(statusFiltro = '') {
   useEffect(() => { carregar(); }, [carregar]);
 
   async function mudarStatus(id, novoStatus, observacao = '') {
-    await requisicoesService.mudarStatus(id, novoStatus, observacao);
-    // Atualiza localmente sem recarregar tudo
-    setRequisicoes(prev =>
-      prev.map(r => r.id === id ? { ...r, status: novoStatus } : r)
-    );
+    const { data } = await requisicoesService.mudarStatus(id, novoStatus, observacao);
+
+    // Se foi cancelado, remove o card da lista
+    if (data.excluida) {
+      setRequisicoes(prev => prev.filter(r => r.id !== id));
+    } else {
+      // Atualiza localmente sem recarregar tudo
+      setRequisicoes(prev =>
+        prev.map(r => r.id === id ? { ...r, status: novoStatus } : r)
+      );
+    }
   }
 
   return { requisicoes, loading, erro, recarregar: carregar, mudarStatus };
