@@ -1,7 +1,6 @@
 // ============================================================
 // controllers/usuariosController.js — Gestão de Usuários (Admin)
 // ============================================================
-
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { query } from '../config/db.js';
@@ -34,38 +33,49 @@ export async function listarUsuarios(req, res, next) {
 export async function criarUsuario(req, res, next) {
   try {
     const dados = criarUsuarioSchema.parse(req.body);
-
-    // Hash da senha com custo 10 (bom balanço velocidade/segurança)
     const senha_hash = await bcrypt.hash(dados.senha, 10);
-
     const result = await query(
       `INSERT INTO usuarios (nome, email, senha_hash, perfil, departamento_id)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id, nome, email, perfil, departamento_id, ativo, created_at`,
       [dados.nome, dados.email.toLowerCase(), senha_hash, dados.perfil, dados.departamento_id || null]
     );
-
     res.status(201).json({ usuario: result.rows[0] });
   } catch (err) {
     next(err);
   }
 }
 
-// PATCH /admin/usuarios/:id — Ativa/desativa ou muda perfil
+// PATCH /admin/usuarios/:id — Atualiza email, senha, perfil, ativo, departamento
 export async function atualizarUsuario(req, res, next) {
   try {
     const { id } = req.params;
-    const { ativo, perfil, departamento_id } = req.body;
+    const { ativo, perfil, departamento_id, email, senha } = req.body;
+
+    // Se enviou nova senha, gera o hash
+    let senha_hash = null;
+    if (senha && senha.length >= 6) {
+      senha_hash = await bcrypt.hash(senha, 10);
+    }
 
     const result = await query(
       `UPDATE usuarios
-       SET ativo            = COALESCE($1, ativo),
-           perfil           = COALESCE($2, perfil),
-           departamento_id  = COALESCE($3, departamento_id),
-           updated_at       = NOW()
-       WHERE id = $4
+       SET ativo           = COALESCE($1, ativo),
+           perfil          = COALESCE($2, perfil),
+           departamento_id = COALESCE($3, departamento_id),
+           email           = COALESCE($4, email),
+           senha_hash      = COALESCE($5, senha_hash),
+           updated_at      = NOW()
+       WHERE id = $6
        RETURNING id, nome, email, perfil, ativo, departamento_id`,
-      [ativo, perfil, departamento_id, parseInt(id)]
+      [
+        ativo ?? null,
+        perfil || null,
+        departamento_id || null,
+        email ? email.toLowerCase() : null,
+        senha_hash,
+        parseInt(id)
+      ]
     );
 
     if (!result.rows[0]) {
