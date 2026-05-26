@@ -4,47 +4,60 @@
 
 import { query } from '../config/db.js';
 
+const BASE_SELECT = `
+  SELECT
+    m.id, m.codigo, m.descricao, m.unidade, m.ativo,
+    c.nome AS categoria_nome, c.icone AS categoria_icone, c.id AS categoria_id,
+    e.quantidade, e.nivel_minimo,
+    CASE
+      WHEN e.quantidade = 0 THEN 'sem_estoque'
+      WHEN e.quantidade <= e.nivel_minimo THEN 'baixo_estoque'
+      ELSE 'disponivel'
+    END AS status_estoque
+  FROM materiais m
+  JOIN categorias c ON c.id = m.categoria_id
+  LEFT JOIN estoques e ON e.material_id = m.id
+`;
+
 // GET /materiais
 export async function listarMateriais(req, res, next) {
   try {
     const { categoria, busca, pagina = 1, limite = 50 } = req.query;
-    // Permite até 10000 itens por requisição
     const limiteReal = Math.min(parseInt(limite) || 50, 10000);
     const offset = (parseInt(pagina) - 1) * limiteReal;
 
-    const condicoes = ['ativo = TRUE'];
+    const condicoes = ['m.ativo = TRUE'];
     const params = [];
     let paramIdx = 1;
 
     if (categoria) {
-      condicoes.push(`categoria_id = $${paramIdx++}`);
+      condicoes.push(`m.categoria_id = $${paramIdx++}`);
       params.push(parseInt(categoria));
     }
 
     if (busca && busca.trim()) {
-      condicoes.push(
-        `(codigo ILIKE $${paramIdx} OR descricao ILIKE $${paramIdx})`
-      );
+      condicoes.push(`(m.codigo ILIKE $${paramIdx} OR m.descricao ILIKE $${paramIdx})`);
       params.push(`%${busca.trim()}%`);
       paramIdx++;
     }
 
-    const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
+    const where = `WHERE ${condicoes.join(' AND ')}`;
 
     const sql = `
-      SELECT
-        id, codigo, descricao, unidade,
-        categoria_id, categoria_nome, categoria_icone,
-        quantidade, nivel_minimo, status_estoque
-      FROM vw_catalogo
+      ${BASE_SELECT}
       ${where}
-      ORDER BY categoria_nome, descricao
+      ORDER BY c.nome, m.descricao
       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
     `;
 
     params.push(limiteReal, offset);
 
-    const countSql = `SELECT COUNT(*) FROM vw_catalogo ${where}`;
+    const countSql = `
+      SELECT COUNT(*)
+      FROM materiais m
+      JOIN categorias c ON c.id = m.categoria_id
+      ${where}
+    `;
     const countParams = params.slice(0, -2);
 
     const [result, countResult] = await Promise.all([
@@ -68,10 +81,7 @@ export async function listarMateriais(req, res, next) {
 export async function listarCategorias(req, res, next) {
   try {
     const result = await query(
-      `SELECT id, nome, icone
-       FROM categorias
-       WHERE ativo = TRUE
-       ORDER BY ordem, nome`
+      `SELECT id, nome, icone FROM categorias WHERE ativo = TRUE ORDER BY ordem, nome`
     );
     res.json({ categorias: result.rows });
   } catch (err) {
@@ -84,7 +94,7 @@ export async function detalharMaterial(req, res, next) {
   try {
     const { id } = req.params;
     const result = await query(
-      `SELECT * FROM vw_catalogo WHERE id = $1`,
+      `${BASE_SELECT} WHERE m.id = $1`,
       [parseInt(id)]
     );
 
@@ -101,7 +111,7 @@ export async function detalharMaterial(req, res, next) {
 // POST /materiais — Somente admin
 export async function criarMaterial(req, res, next) {
   try {
-    const { codigo, descricao, categoria_id, unidade = 'un' } = req.body;
+    const { codigo, descricao, categoria_id, unidade = 'UN' } = req.body;
 
     if (!codigo || !descricao || !categoria_id) {
       return res.status(400).json({ erro: 'Campos obrigatórios: codigo, descricao, categoria_id' });
