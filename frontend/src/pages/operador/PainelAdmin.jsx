@@ -3,7 +3,7 @@
 // Gestão de usuários e catálogo — perfil admin
 // ============================================================
 import { useState, useEffect, useRef } from 'react';
-import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown } from 'lucide-react';
+import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api, { adminService, materiaisService } from '../../services/api';
 import { Button, Spinner } from '../../components/ui';
@@ -127,20 +127,34 @@ function AbaUsuarios() {
 
 // ── Aba Estoque ──────────────────────────────────────────────
 function AbaEstoque() {
-  const [materiais, setMateriais] = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [editando,  setEditando]  = useState(null);
-  const [salvando,  setSalvando]  = useState(false);
-  const [importando, setImportando] = useState(false);
-  const [resultado,  setResultado]  = useState(null); // { atualizados, erros }
+  const [materiais,   setMateriais]   = useState([]);
+  const [categorias,  setCategorias]  = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [editando,    setEditando]    = useState(null);
+  const [salvando,    setSalvando]    = useState(false);
+  const [importando,  setImportando]  = useState(false);
+  const [resultado,   setResultado]   = useState(null);
+  const [criando,     setCriando]     = useState(false);
+  const [salvandoNovo, setSalvandoNovo] = useState(false);
+  const [erroNovo,    setErroNovo]    = useState('');
+  const [formNovo,    setFormNovo]    = useState({
+    codigo: '', descricao: '', categoria_id: '', unidade: 'UN', quantidade: 0
+  });
   const inputFileRef = useRef(null);
 
-  useEffect(() => {
+  async function carregar() {
     setLoading(true);
-    materiaisService.listar({ limite: 500 })
-      .then(r => setMateriais(r.data.materiais))
-      .finally(() => setLoading(false));
-  }, []);
+    try {
+      const [m, c] = await Promise.all([
+        materiaisService.listar({ limite: 500 }),
+        materiaisService.categorias(),
+      ]);
+      setMateriais(m.data.materiais);
+      setCategorias(c.data.categorias);
+    } finally { setLoading(false); }
+  }
+
+  useEffect(() => { carregar(); }, []);
 
   async function salvarEstoque() {
     if (!editando) return;
@@ -161,11 +175,38 @@ function AbaEstoque() {
     } finally { setSalvando(false); }
   }
 
-  // Baixar modelo de planilha
+  async function handleCriarProduto(e) {
+    e.preventDefault();
+    setErroNovo('');
+    setSalvandoNovo(true);
+    try {
+      // Cria o material
+      const { data } = await api.post('/materiais', {
+        codigo:       formNovo.codigo.toUpperCase(),
+        descricao:    formNovo.descricao,
+        categoria_id: parseInt(formNovo.categoria_id),
+        unidade:      formNovo.unidade,
+      });
+
+      // Atualiza o estoque inicial se informado
+      if (parseInt(formNovo.quantidade) > 0) {
+        await api.patch(`/materiais/${data.material.id}/estoque`, {
+          quantidade: parseInt(formNovo.quantidade),
+        });
+      }
+
+      setCriando(false);
+      setFormNovo({ codigo: '', descricao: '', categoria_id: '', unidade: 'UN', quantidade: 0 });
+      carregar();
+    } catch (err) {
+      setErroNovo(err.response?.data?.erro || 'Erro ao criar produto.');
+    } finally { setSalvandoNovo(false); }
+  }
+
   function baixarModelo() {
     const modelo = materiais.slice(0, 5).map(m => ({
-      'Codigo':    m.codigo,
-      'Descricao': m.descricao,
+      'Codigo':     m.codigo,
+      'Descricao':  m.descricao,
       'Quantidade': m.quantidade ?? 0,
     }));
     const ws = XLSX.utils.json_to_sheet(modelo);
@@ -175,13 +216,11 @@ function AbaEstoque() {
     XLSX.writeFile(wb, 'modelo-estoque.xlsx');
   }
 
-  // Importar planilha
   async function handleImportar(e) {
     const file = e.target.files[0];
     if (!file) return;
     setImportando(true);
     setResultado(null);
-
     try {
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer);
@@ -192,13 +231,11 @@ function AbaEstoque() {
       const erros = [];
 
       for (const linha of linhas) {
-        // Aceita colunas: Codigo/codigo/CODIGO e Quantidade/quantidade/QUANTIDADE
         const codigo = String(linha['Codigo'] || linha['codigo'] || linha['CODIGO'] || '').trim();
         const qtd    = parseInt(linha['Quantidade'] || linha['quantidade'] || linha['QUANTIDADE'] || 0);
 
         if (!codigo) continue;
 
-        // Encontra o material pelo código
         const material = materiais.find(m => m.codigo === codigo);
         if (!material) {
           erros.push(`Código não encontrado: ${codigo}`);
@@ -213,18 +250,21 @@ function AbaEstoque() {
         }
       }
 
-      // Recarrega os materiais
-      const r = await materiaisService.listar({ limite: 500 });
-      setMateriais(r.data.materiais);
+      await carregar();
       setResultado({ atualizados, erros });
-
-    } catch (err) {
+    } catch {
       alert('Erro ao ler a planilha. Verifique o formato.');
     } finally {
       setImportando(false);
       e.target.value = '';
     }
   }
+
+  const inputClass = `
+    w-full bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-3 py-2
+    text-sm placeholder:text-[#8b91a8]
+    focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]/30
+  `;
 
   const statusColor = {
     disponivel:    'bg-green-500/15 text-green-400',
@@ -237,11 +277,8 @@ function AbaEstoque() {
 
       {/* Barra de ações */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-sm text-[#8b91a8]">
-          Clique na quantidade para editar individualmente ou importe uma planilha.
-        </p>
-        <div className="flex items-center gap-2">
-          {/* Baixar modelo */}
+        <p className="text-sm text-[#8b91a8]">{materiais.length} produto(s) cadastrado(s)</p>
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={baixarModelo}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium
@@ -249,8 +286,6 @@ function AbaEstoque() {
           >
             <FileDown size={13} /> Baixar modelo
           </button>
-
-          {/* Importar planilha */}
           <button
             onClick={() => inputFileRef.current?.click()}
             disabled={importando}
@@ -263,15 +298,82 @@ function AbaEstoque() {
               : <><Upload size={13} /> Importar planilha</>
             }
           </button>
-          <input
-            ref={inputFileRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            onChange={handleImportar}
-            className="hidden"
-          />
+          <input ref={inputFileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportar} className="hidden" />
+          <button
+            onClick={() => setCriando(!criando)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold
+              bg-green-500/15 text-green-400 hover:bg-green-500/25 transition-colors"
+          >
+            <Plus size={13} /> {criando ? 'Cancelar' : 'Novo produto'}
+          </button>
         </div>
       </div>
+
+      {/* Formulário novo produto */}
+      {criando && (
+        <div className="bg-[#21253a] border border-[#2e3347] rounded-2xl p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-[#e8eaf0]">Novo produto</h3>
+          <form onSubmit={handleCriarProduto} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input
+              value={formNovo.codigo}
+              onChange={e => setFormNovo(f => ({...f, codigo: e.target.value}))}
+              placeholder="Código (ex: 12345)"
+              className={inputClass}
+              required
+            />
+            <input
+              value={formNovo.descricao}
+              onChange={e => setFormNovo(f => ({...f, descricao: e.target.value}))}
+              placeholder="Descrição do produto"
+              className={inputClass}
+              required
+            />
+            <select
+              value={formNovo.categoria_id}
+              onChange={e => setFormNovo(f => ({...f, categoria_id: e.target.value}))}
+              className={inputClass}
+              required
+            >
+              <option value="">— Categoria —</option>
+              {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+            <select
+              value={formNovo.unidade}
+              onChange={e => setFormNovo(f => ({...f, unidade: e.target.value}))}
+              className={inputClass}
+            >
+              <option value="UN">UN — Unidade</option>
+              <option value="CX">CX — Caixa</option>
+              <option value="PCT">PCT — Pacote</option>
+              <option value="RL">RL — Rolo</option>
+              <option value="KG">KG — Quilograma</option>
+              <option value="L">L — Litro</option>
+              <option value="PR">PR — Par</option>
+              <option value="KT">KT — Kit</option>
+              <option value="RS">RS — Resma</option>
+            </select>
+            <input
+              type="number"
+              min="0"
+              value={formNovo.quantidade}
+              onChange={e => setFormNovo(f => ({...f, quantidade: e.target.value}))}
+              placeholder="Quantidade inicial"
+              className={inputClass}
+            />
+            <div className="flex gap-2 items-end">
+              {erroNovo && <p className="text-xs text-red-400 flex-1">{erroNovo}</p>}
+              <button
+                type="submit"
+                disabled={salvandoNovo}
+                className="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold
+                  bg-[#4f6ef7] text-white hover:bg-[#3d5ce5] transition-colors disabled:opacity-40"
+              >
+                {salvandoNovo ? <><RefreshCw size={13} className="animate-spin" /> Salvando...</> : 'Criar produto'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Resultado da importação */}
       {resultado && (
