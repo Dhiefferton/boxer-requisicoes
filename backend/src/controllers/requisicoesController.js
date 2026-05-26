@@ -5,7 +5,6 @@
 import { z } from 'zod';
 import { query, transaction } from '../config/db.js';
 
-// Schema de validação para criar uma requisição
 const criarRequisicaoSchema = z.object({
   data_necessidade: z.string().optional().nullable(),
   observacoes:      z.string().max(1000).optional().nullable(),
@@ -15,13 +14,12 @@ const criarRequisicaoSchema = z.object({
   })).min(1, 'A requisição precisa ter pelo menos 1 item'),
 });
 
-// Schema de validação para mudar status
 const mudarStatusSchema = z.object({
   status:     z.enum(['solicitado', 'em_separacao', 'separado', 'entregue', 'cancelado']),
   observacao: z.string().max(500).optional().nullable(),
 });
 
-// POST /requisicoes — Colaborador cria uma requisição
+// POST /requisicoes
 export async function criarRequisicao(req, res, next) {
   try {
     const dados = criarRequisicaoSchema.parse(req.body);
@@ -98,7 +96,7 @@ export async function criarRequisicao(req, res, next) {
   }
 }
 
-// GET /requisicoes — Lista as requisições do usuário logado
+// GET /requisicoes
 export async function listarRequisicoes(req, res, next) {
   try {
     const { status, pagina = 1, limite = 20 } = req.query;
@@ -109,7 +107,6 @@ export async function listarRequisicoes(req, res, next) {
     const params = [];
     let idx = 1;
 
-    // Colaborador só vê as próprias requisições
     if (perfil === 'colaborador') {
       condicoes.push(`usuario_id = $${idx++}`);
       params.push(usuarioId);
@@ -153,7 +150,7 @@ export async function listarRequisicoes(req, res, next) {
   }
 }
 
-// GET /requisicoes/:id — Detalhe com itens e histórico
+// GET /requisicoes/:id
 export async function detalharRequisicao(req, res, next) {
   try {
     const { id } = req.params;
@@ -206,7 +203,7 @@ export async function detalharRequisicao(req, res, next) {
   }
 }
 
-// PATCH /requisicoes/:id/status — Operador/Admin muda o status
+// PATCH /requisicoes/:id/status
 export async function mudarStatus(req, res, next) {
   try {
     const { id } = req.params;
@@ -228,6 +225,45 @@ export async function mudarStatus(req, res, next) {
       return res.status(400).json({ erro: `A requisição já está com status "${status}".` });
     }
 
+    // ── CANCELAMENTO: devolve estoque e exclui a requisição ──
+    if (status === 'cancelado') {
+      await transaction(async (client) => {
+        // Busca os itens para devolver ao estoque
+        const itens = await client.query(
+          `SELECT material_id, quantidade FROM itens_requisicao WHERE requisicao_id = $1`,
+          [parseInt(id)]
+        );
+
+        // Devolve o saldo ao estoque de cada item
+        for (const item of itens.rows) {
+          await client.query(
+            `UPDATE estoques
+             SET quantidade = quantidade + $1, updated_at = NOW()
+             WHERE material_id = $2`,
+            [item.quantidade, item.material_id]
+          );
+        }
+
+        // Exclui itens, histórico e a requisição
+        await client.query(`DELETE FROM historico_status WHERE requisicao_id = $1`, [parseInt(id)]);
+        await client.query(`DELETE FROM itens_requisicao WHERE requisicao_id = $1`, [parseInt(id)]);
+        await client.query(`DELETE FROM requisicoes WHERE id = $1`, [parseInt(id)]);
+      });
+
+      await query(
+        `INSERT INTO logs (usuario_id, acao, tabela, registro_id, payload_json, ip)
+         VALUES ($1, 'CANCELAR_REQUISICAO', 'requisicoes', $2, $3, $4)`,
+        [
+          usuarioId, parseInt(id),
+          JSON.stringify({ status_anterior: statusAnterior, observacao }),
+          req.ip
+        ]
+      );
+
+      return res.json({ mensagem: 'Requisição cancelada e estoque devolvido com sucesso.', excluida: true });
+    }
+
+    // ── OUTROS STATUS: apenas atualiza ──
     await transaction(async (client) => {
       await client.query(
         `UPDATE requisicoes SET status = $1, updated_at = NOW() WHERE id = $2`,
