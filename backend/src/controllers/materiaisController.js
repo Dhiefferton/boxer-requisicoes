@@ -8,7 +8,9 @@ import { query } from '../config/db.js';
 export async function listarMateriais(req, res, next) {
   try {
     const { categoria, busca, pagina = 1, limite = 50 } = req.query;
-    const offset = (parseInt(pagina) - 1) * parseInt(limite);
+    // Permite até 10000 itens por requisição
+    const limiteReal = Math.min(parseInt(limite) || 50, 10000);
+    const offset = (parseInt(pagina) - 1) * limiteReal;
 
     const condicoes = ['ativo = TRUE'];
     const params = [];
@@ -40,7 +42,7 @@ export async function listarMateriais(req, res, next) {
       LIMIT $${paramIdx} OFFSET $${paramIdx + 1}
     `;
 
-    params.push(parseInt(limite), offset);
+    params.push(limiteReal, offset);
 
     const countSql = `SELECT COUNT(*) FROM vw_catalogo ${where}`;
     const countParams = params.slice(0, -2);
@@ -54,7 +56,7 @@ export async function listarMateriais(req, res, next) {
       materiais: result.rows,
       total:     parseInt(countResult.rows[0].count),
       pagina:    parseInt(pagina),
-      limite:    parseInt(limite),
+      limite:    limiteReal,
     });
 
   } catch (err) {
