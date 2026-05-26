@@ -27,7 +27,6 @@ export async function criarRequisicao(req, res, next) {
     const dados = criarRequisicaoSchema.parse(req.body);
     const usuarioId = req.usuario.id;
 
-    // Busca os dados atuais de cada material (para os snapshots)
     const materialIds = dados.itens.map(i => i.material_id);
     const materiaisResult = await query(
       `SELECT id, codigo, descricao, unidade FROM materiais WHERE id = ANY($1) AND ativo = TRUE`,
@@ -37,7 +36,6 @@ export async function criarRequisicao(req, res, next) {
     const materaisMap = {};
     materiaisResult.rows.forEach(m => { materaisMap[m.id] = m; });
 
-    // Verifica se todos os materiais foram encontrados
     const naoEncontrados = materialIds.filter(id => !materaisMap[id]);
     if (naoEncontrados.length > 0) {
       return res.status(400).json({
@@ -45,9 +43,7 @@ export async function criarRequisicao(req, res, next) {
       });
     }
 
-    // Cria requisição + itens + histórico em uma transação atômica
     const requisicao = await transaction(async (client) => {
-      // 1. Cria a requisição
       const reqResult = await client.query(
         `INSERT INTO requisicoes
            (usuario_id, departamento_id, data_necessidade, observacoes, status)
@@ -62,7 +58,6 @@ export async function criarRequisicao(req, res, next) {
       );
       const req_ = reqResult.rows[0];
 
-      // 2. Insere cada item com os snapshots do material
       for (const item of dados.itens) {
         const material = materaisMap[item.material_id];
         await client.query(
@@ -77,7 +72,6 @@ export async function criarRequisicao(req, res, next) {
         );
       }
 
-      // 3. Registra a criação no histórico de status
       await client.query(
         `INSERT INTO historico_status
            (requisicao_id, status_anterior, status_novo, usuario_id, observacao)
@@ -88,7 +82,6 @@ export async function criarRequisicao(req, res, next) {
       return req_;
     });
 
-    // Log da ação
     await query(
       `INSERT INTO logs (usuario_id, acao, tabela, registro_id, ip)
        VALUES ($1, 'CRIAR_REQUISICAO', 'requisicoes', $2, $3)`,
@@ -106,7 +99,6 @@ export async function criarRequisicao(req, res, next) {
 }
 
 // GET /requisicoes — Lista as requisições do usuário logado
-// Operador/admin vê todas
 export async function listarRequisicoes(req, res, next) {
   try {
     const { status, pagina = 1, limite = 20 } = req.query;
@@ -119,12 +111,12 @@ export async function listarRequisicoes(req, res, next) {
 
     // Colaborador só vê as próprias requisições
     if (perfil === 'colaborador') {
-      condicoes.push(`v.usuario_id = $${idx++}`);
+      condicoes.push(`usuario_id = $${idx++}`);
       params.push(usuarioId);
     }
 
     if (status) {
-      condicoes.push(`v.status = $${idx++}`);
+      condicoes.push(`status = $${idx++}`);
       params.push(status);
     }
 
@@ -178,12 +170,10 @@ export async function detalharRequisicao(req, res, next) {
 
     const requisicao = result.rows[0];
 
-    // Colaborador não pode ver requisição de outro usuário
     if (perfil === 'colaborador' && requisicao.usuario_id !== usuarioId) {
       return res.status(403).json({ erro: 'Acesso negado.' });
     }
 
-    // Busca os itens da requisição
     const itensResult = await query(
       `SELECT ir.id, ir.quantidade,
               ir.descricao_snapshot, ir.unidade_snapshot, ir.codigo_snapshot,
@@ -193,7 +183,6 @@ export async function detalharRequisicao(req, res, next) {
       [parseInt(id)]
     );
 
-    // Busca o histórico de status
     const historicoResult = await query(
       `SELECT hs.status_anterior, hs.status_novo, hs.observacao, hs.created_at,
               u.nome AS usuario_nome
@@ -224,7 +213,6 @@ export async function mudarStatus(req, res, next) {
     const { status, observacao } = mudarStatusSchema.parse(req.body);
     const usuarioId = req.usuario.id;
 
-    // Busca o status atual
     const atual = await query(
       `SELECT id, status FROM requisicoes WHERE id = $1`,
       [parseInt(id)]
@@ -240,7 +228,6 @@ export async function mudarStatus(req, res, next) {
       return res.status(400).json({ erro: `A requisição já está com status "${status}".` });
     }
 
-    // Atualiza status + registra no histórico em transação
     await transaction(async (client) => {
       await client.query(
         `UPDATE requisicoes SET status = $1, updated_at = NOW() WHERE id = $2`,
@@ -255,7 +242,6 @@ export async function mudarStatus(req, res, next) {
       );
     });
 
-    // Log
     await query(
       `INSERT INTO logs (usuario_id, acao, tabela, registro_id, payload_json, ip)
        VALUES ($1, 'MUDAR_STATUS', 'requisicoes', $2, $3, $4)`,
