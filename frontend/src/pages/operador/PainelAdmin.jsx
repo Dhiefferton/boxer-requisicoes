@@ -2,7 +2,7 @@
 // pages/operador/PainelAdmin.jsx
 // ============================================================
 import { useState, useEffect, useRef } from 'react';
-import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil } from 'lucide-react';
+import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api, { adminService, materiaisService } from '../../services/api';
 import { Button, Spinner } from '../../components/ui';
@@ -183,6 +183,7 @@ function AbaEstoque() {
   const [materiais,    setMateriais]    = useState([]);
   const [categorias,   setCategorias]   = useState([]);
   const [loading,      setLoading]      = useState(true);
+  const [busca,        setBusca]        = useState('');
   const [editandoQtd,  setEditandoQtd]  = useState(null);
   const [editandoProd, setEditandoProd] = useState(null);
   const [salvando,     setSalvando]     = useState(false);
@@ -431,10 +432,28 @@ function AbaEstoque() {
         </div>
       )}
 
+      {/* Campo de busca */}
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
+        <input
+          type="search"
+          placeholder="Buscar por código ou descrição..."
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          className="w-full bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl pl-9 pr-4 py-2.5 text-sm placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] transition-colors"
+        />
+        {busca && (
+          <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b91a8] hover:text-[#e8eaf0]">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
       {/* Lista de materiais */}
       {loading ? <div className="flex justify-center py-8"><Spinner className="text-[#4f6ef7]" /></div> : (
         <div className="space-y-1.5">
-          {materiais.map(m => (
+          {busca && <p className="text-xs text-[#8b91a8]">{materiais.filter(m => m.codigo.toLowerCase().includes(busca.toLowerCase()) || m.descricao.toLowerCase().includes(busca.toLowerCase())).length} resultado(s)</p>}
+          {materiais.filter(m => !busca || m.codigo.toLowerCase().includes(busca.toLowerCase()) || m.descricao.toLowerCase().includes(busca.toLowerCase())).map(m => (
             <div key={m.id} className="flex items-center gap-3 bg-[#1a1d27] border border-[#2e3347] rounded-xl px-4 py-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
