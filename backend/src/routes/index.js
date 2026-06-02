@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { login, me } from '../controllers/authController.js';
 import {
   listarMateriais, listarCategorias, detalharMaterial,
-  criarMaterial, atualizarEstoque
+  criarMaterial, editarMaterial, atualizarEstoque
 } from '../controllers/materiaisController.js';
 import {
   criarRequisicao, listarRequisicoes,
@@ -26,6 +26,7 @@ router.get('/materiais',               autenticar, listarMateriais);
 router.get('/materiais/:id',           autenticar, detalharMaterial);
 router.get('/categorias',              autenticar, listarCategorias);
 router.post('/materiais',              autenticar, exigirPerfil('admin'), criarMaterial);
+router.patch('/materiais/:id',         autenticar, exigirPerfil('admin'), editarMaterial);
 router.patch('/materiais/:id/estoque', autenticar, exigirPerfil('operador', 'admin'), atualizarEstoque);
 
 // ── Requisições
@@ -40,7 +41,7 @@ router.post('/admin/usuarios',      autenticar, exigirPerfil('admin'), criarUsua
 router.patch('/admin/usuarios/:id', autenticar, exigirPerfil('admin'), atualizarUsuario);
 router.get('/admin/departamentos',  autenticar, listarDepartamentos);
 
-// Rota temporária para gerar hash — REMOVER APÓS USO
+// Rota para gerar hash
 router.get('/gerar-hash/:senha', async (req, res) => {
   const hash = await bcrypt.hash(req.params.senha, 10);
   res.json({ hash });
