@@ -137,6 +137,40 @@ export async function criarMaterial(req, res, next) {
   }
 }
 
+// PATCH /materiais/:id — Editar informações do material — Somente admin
+export async function editarMaterial(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { descricao, codigo, categoria_id, unidade } = req.body;
+
+    const result = await query(
+      `UPDATE materiais
+       SET descricao    = COALESCE($1, descricao),
+           codigo       = COALESCE($2, codigo),
+           categoria_id = COALESCE($3, categoria_id),
+           unidade      = COALESCE($4, unidade),
+           updated_at   = NOW()
+       WHERE id = $5
+       RETURNING id, codigo, descricao, categoria_id, unidade`,
+      [
+        descricao || null,
+        codigo ? codigo.toUpperCase() : null,
+        categoria_id ? parseInt(categoria_id) : null,
+        unidade || null,
+        parseInt(id)
+      ]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ erro: 'Material não encontrado.' });
+    }
+
+    res.json({ material: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // PATCH /materiais/:id/estoque — Somente operador/admin
 export async function atualizarEstoque(req, res, next) {
   try {
