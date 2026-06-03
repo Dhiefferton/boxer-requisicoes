@@ -19,7 +19,7 @@ const PROXIMOS_STATUS = {
   cancelado:    [],
 };
 
-const CANCELAR_DE = ['solicitado', 'em_separacao'];
+const CANCELAR_DE = ['solicitado', 'em_separacao', 'separado'];
 
 export default function RequisicaoCard({ requisicao, onMudarStatus }) {
   const [expandido,   setExpandido]   = useState(false);
