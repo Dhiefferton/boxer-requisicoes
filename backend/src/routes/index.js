@@ -13,6 +13,9 @@ import {
   listarUsuarios, criarUsuario,
   atualizarUsuario, listarDepartamentos
 } from '../controllers/usuariosController.js';
+import {
+  listarEntradas, registrarEntrada
+} from '../controllers/entradasController.js';
 import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 
 const router = Router();
@@ -34,6 +37,10 @@ router.post('/requisicoes',             autenticar, criarRequisicao);
 router.get('/requisicoes',              autenticar, listarRequisicoes);
 router.get('/requisicoes/:id',          autenticar, detalharRequisicao);
 router.patch('/requisicoes/:id/status', autenticar, exigirPerfil('operador', 'admin'), mudarStatus);
+
+// ── Entradas de Estoque
+router.get('/entradas',  autenticar, exigirPerfil('operador', 'admin'), listarEntradas);
+router.post('/entradas', autenticar, exigirPerfil('operador', 'admin'), registrarEntrada);
 
 // ── Admin
 router.get('/admin/usuarios',       autenticar, exigirPerfil('admin'), listarUsuarios);
