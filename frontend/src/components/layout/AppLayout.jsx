@@ -3,7 +3,7 @@
 // ============================================================
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, LayoutDashboard, ShieldCheck } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, LayoutDashboard, ShieldCheck, PackagePlus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
@@ -17,12 +17,12 @@ export default function AppLayout({ children }) {
 
   function handleLogout() { logout(); navigate('/login'); }
 
-  // Navegação adaptada ao perfil do usuário
   const navItems = [
-    { to: '/catalogo',  icon: Package,        label: 'Catálogo',  perfis: ['colaborador', 'operador', 'admin'] },
-    { to: '/historico', icon: ClipboardList,   label: 'Histórico', perfis: ['colaborador', 'operador', 'admin'] },
-    { to: '/operador',  icon: LayoutDashboard, label: 'Operador',  perfis: ['operador', 'admin'] },
-    { to: '/admin',     icon: ShieldCheck,     label: 'Admin',     perfis: ['admin'] },
+    { to: '/catalogo',  icon: Package,        label: 'Catálogo',   perfis: ['colaborador', 'operador', 'admin'] },
+    { to: '/historico', icon: ClipboardList,   label: 'Histórico',  perfis: ['colaborador', 'operador', 'admin'] },
+    { to: '/operador',  icon: LayoutDashboard, label: 'Operador',   perfis: ['operador', 'admin'] },
+    { to: '/entradas',  icon: PackagePlus,     label: 'Entradas',   perfis: ['operador', 'admin'] },
+    { to: '/admin',     icon: ShieldCheck,     label: 'Admin',      perfis: ['admin'] },
   ].filter(item => item.perfis.includes(usuario?.perfil));
 
   return (
