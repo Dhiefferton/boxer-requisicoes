@@ -4,10 +4,10 @@
 
 import { query, transaction } from '../config/db.js';
 
-// GET /entradas — Lista histórico de entradas
+// GET /entradas
 export async function listarEntradas(req, res, next) {
   try {
-    const { pagina = 1, limite = 50, busca } = req.query;
+    const { pagina = 1, limite = 100, busca } = req.query;
     const offset = (parseInt(pagina) - 1) * parseInt(limite);
 
     const condicoes = [];
@@ -25,7 +25,7 @@ export async function listarEntradas(req, res, next) {
     const sql = `
       SELECT
         e.id, e.quantidade, e.observacao, e.created_at,
-        m.codigo, m.descricao, m.unidade,
+        m.id AS material_id, m.codigo, m.descricao, m.unidade,
         u.nome AS usuario_nome
       FROM entradas_estoque e
       JOIN materiais m ON m.id = e.material_id
@@ -70,21 +70,21 @@ export async function registrarEntrada(req, res, next) {
       return res.status(400).json({ erro: 'Campos obrigatórios: material_id e quantidade (> 0)' });
     }
 
-    // Verifica se material existe
-    const mat = await query(`SELECT id, codigo, descricao FROM materiais WHERE id = $1 AND ativo = TRUE`, [parseInt(material_id)]);
+    const mat = await query(
+      `SELECT id, codigo, descricao FROM materiais WHERE id = $1 AND ativo = TRUE`,
+      [parseInt(material_id)]
+    );
     if (!mat.rows[0]) {
       return res.status(404).json({ erro: 'Material não encontrado.' });
     }
 
     await transaction(async (client) => {
-      // Registra a entrada
       await client.query(
         `INSERT INTO entradas_estoque (material_id, quantidade, usuario_id, observacao)
          VALUES ($1, $2, $3, $4)`,
         [parseInt(material_id), parseInt(quantidade), usuarioId, observacao || null]
       );
 
-      // Atualiza o estoque
       await client.query(
         `UPDATE estoques SET quantidade = quantidade + $1, updated_at = NOW()
          WHERE material_id = $2`,
@@ -92,18 +92,54 @@ export async function registrarEntrada(req, res, next) {
       );
     });
 
-    // Busca o estoque atualizado
     const estoque = await query(
       `SELECT quantidade FROM estoques WHERE material_id = $1`,
       [parseInt(material_id)]
     );
 
     res.status(201).json({
-      mensagem:  'Entrada registrada com sucesso!',
-      material:  mat.rows[0],
+      mensagem:   'Entrada registrada com sucesso!',
+      material:   mat.rows[0],
       quantidade: parseInt(quantidade),
       novo_saldo: estoque.rows[0]?.quantidade,
     });
+
+  } catch (err) {
+    next(err);
+  }
+}
+
+// DELETE /entradas/:id — Exclui entrada e subtrai do estoque
+export async function excluirEntrada(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    // Busca a entrada
+    const entrada = await query(
+      `SELECT e.id, e.material_id, e.quantidade FROM entradas_estoque e WHERE e.id = $1`,
+      [parseInt(id)]
+    );
+
+    if (!entrada.rows[0]) {
+      return res.status(404).json({ erro: 'Registro não encontrado.' });
+    }
+
+    const { material_id, quantidade } = entrada.rows[0];
+
+    await transaction(async (client) => {
+      // Subtrai a quantidade do estoque (não deixa negativo)
+      await client.query(
+        `UPDATE estoques
+         SET quantidade = GREATEST(0, quantidade - $1), updated_at = NOW()
+         WHERE material_id = $2`,
+        [quantidade, material_id]
+      );
+
+      // Exclui o registro
+      await client.query(`DELETE FROM entradas_estoque WHERE id = $1`, [parseInt(id)]);
+    });
+
+    res.json({ mensagem: 'Registro excluído e estoque atualizado.' });
 
   } catch (err) {
     next(err);
