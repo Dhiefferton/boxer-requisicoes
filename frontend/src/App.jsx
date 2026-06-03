@@ -5,15 +5,15 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import AppLayout from './components/layout/AppLayout';
-import Login         from './pages/Login';
-import Catalogo      from './pages/Catalogo';
-import Revisao       from './pages/Revisao';
-import Historico     from './pages/Historico';
-import PainelOperador from './pages/operador/PainelOperador';
-import PainelAdmin    from './pages/operador/PainelAdmin';
+import Login            from './pages/Login';
+import Catalogo         from './pages/Catalogo';
+import Revisao          from './pages/Revisao';
+import Historico        from './pages/Historico';
+import PainelOperador   from './pages/operador/PainelOperador';
+import PainelAdmin      from './pages/operador/PainelAdmin';
+import RegistroEntradas from './pages/operador/RegistroEntradas';
 import { Spinner } from './components/ui';
 
-// Rota que exige login
 function RotaProtegida({ children }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
@@ -25,7 +25,6 @@ function RotaProtegida({ children }) {
   return <AppLayout>{children}</AppLayout>;
 }
 
-// Rota que exige perfil específico
 function RotaPerfil({ perfis, children }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
@@ -45,7 +44,6 @@ export default function App() {
         <CartProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
-
             <Route path="/catalogo" element={
               <RotaProtegida><Catalogo /></RotaProtegida>
             } />
@@ -55,15 +53,15 @@ export default function App() {
             <Route path="/historico" element={
               <RotaProtegida><Historico /></RotaProtegida>
             } />
-
-            {/* Rotas do operador e admin */}
             <Route path="/operador" element={
               <RotaPerfil perfis={['operador', 'admin']}><PainelOperador /></RotaPerfil>
+            } />
+            <Route path="/entradas" element={
+              <RotaPerfil perfis={['operador', 'admin']}><RegistroEntradas /></RotaPerfil>
             } />
             <Route path="/admin" element={
               <RotaPerfil perfis={['admin']}><PainelAdmin /></RotaPerfil>
             } />
-
             <Route path="/"  element={<Navigate to="/catalogo" replace />} />
             <Route path="*"  element={<Navigate to="/catalogo" replace />} />
           </Routes>
