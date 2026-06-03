@@ -14,7 +14,7 @@ import {
   atualizarUsuario, listarDepartamentos
 } from '../controllers/usuariosController.js';
 import {
-  listarEntradas, registrarEntrada
+  listarEntradas, registrarEntrada, excluirEntrada
 } from '../controllers/entradasController.js';
 import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 
@@ -39,8 +39,9 @@ router.get('/requisicoes/:id',          autenticar, detalharRequisicao);
 router.patch('/requisicoes/:id/status', autenticar, exigirPerfil('operador', 'admin'), mudarStatus);
 
 // ── Entradas de Estoque
-router.get('/entradas',  autenticar, exigirPerfil('operador', 'admin'), listarEntradas);
-router.post('/entradas', autenticar, exigirPerfil('operador', 'admin'), registrarEntrada);
+router.get('/entradas',       autenticar, exigirPerfil('operador', 'admin'), listarEntradas);
+router.post('/entradas',      autenticar, exigirPerfil('operador', 'admin'), registrarEntrada);
+router.delete('/entradas/:id',autenticar, exigirPerfil('operador', 'admin'), excluirEntrada);
 
 // ── Admin
 router.get('/admin/usuarios',       autenticar, exigirPerfil('admin'), listarUsuarios);
@@ -48,7 +49,6 @@ router.post('/admin/usuarios',      autenticar, exigirPerfil('admin'), criarUsua
 router.patch('/admin/usuarios/:id', autenticar, exigirPerfil('admin'), atualizarUsuario);
 router.get('/admin/departamentos',  autenticar, listarDepartamentos);
 
-// Rota para gerar hash
 router.get('/gerar-hash/:senha', async (req, res) => {
   const hash = await bcrypt.hash(req.params.senha, 10);
   res.json({ hash });
