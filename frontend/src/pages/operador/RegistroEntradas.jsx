@@ -1,8 +1,9 @@
 // ============================================================
 // pages/operador/RegistroEntradas.jsx
 // ============================================================
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, Search, X, RefreshCw, PackagePlus, Calendar, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Search, X, RefreshCw, PackagePlus, Calendar, User, Trash2, FileDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import api, { materiaisService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -16,18 +17,16 @@ export default function RegistroEntradas() {
   const [sugestoes,  setSugestoes]  = useState([]);
   const [erro,       setErro]       = useState('');
   const [sucesso,    setSucesso]    = useState('');
+  const [excluindo,  setExcluindo]  = useState(null);
 
   const [form, setForm] = useState({
-    material_id:  '',
-    material_nome: '',
-    quantidade:   '',
-    observacao:   '',
+    material_id: '', quantidade: '', observacao: '',
   });
 
   async function carregarEntradas() {
     setLoading(true);
     try {
-      const params = { limite: 100 };
+      const params = { limite: 500 };
       if (busca) params.busca = busca;
       const { data } = await api.get('/entradas', { params });
       setEntradas(data.entradas);
@@ -47,10 +46,9 @@ export default function RegistroEntradas() {
     return () => clearTimeout(t);
   }, [busca]);
 
-  // Busca de produto com sugestões
   function handleBuscaProd(valor) {
     setBuscaProd(valor);
-    setForm(f => ({ ...f, material_id: '', material_nome: '' }));
+    setForm(f => ({ ...f, material_id: '' }));
     if (valor.length < 2) { setSugestoes([]); return; }
     const filtrados = materiais.filter(m =>
       m.codigo.toLowerCase().includes(valor.toLowerCase()) ||
@@ -60,7 +58,7 @@ export default function RegistroEntradas() {
   }
 
   function selecionarMaterial(m) {
-    setForm(f => ({ ...f, material_id: m.id, material_nome: `${m.codigo} — ${m.descricao}` }));
+    setForm(f => ({ ...f, material_id: m.id }));
     setBuscaProd(`${m.codigo} — ${m.descricao}`);
     setSugestoes([]);
   }
@@ -69,7 +67,6 @@ export default function RegistroEntradas() {
     e.preventDefault();
     setErro('');
     setSucesso('');
-
     if (!form.material_id) { setErro('Selecione um produto da lista.'); return; }
     if (!form.quantidade || parseInt(form.quantidade) <= 0) { setErro('Informe uma quantidade válida.'); return; }
 
@@ -80,14 +77,46 @@ export default function RegistroEntradas() {
         quantidade:  parseInt(form.quantidade),
         observacao:  form.observacao || null,
       });
-
       setSucesso(`✓ Entrada registrada! ${data.material.descricao} — Novo saldo: ${data.novo_saldo}`);
-      setForm({ material_id: '', material_nome: '', quantidade: '', observacao: '' });
+      setForm({ material_id: '', quantidade: '', observacao: '' });
       setBuscaProd('');
       carregarEntradas();
     } catch (err) {
       setErro(err.response?.data?.erro || 'Erro ao registrar entrada.');
     } finally { setSalvando(false); }
+  }
+
+  async function handleExcluir(id) {
+    if (!confirm('Excluir este registro? O estoque será atualizado.')) return;
+    setExcluindo(id);
+    try {
+      await api.delete(`/entradas/${id}`);
+      setEntradas(prev => prev.filter(e => e.id !== id));
+    } catch (err) {
+      alert(err.response?.data?.erro || 'Erro ao excluir.');
+    } finally { setExcluindo(null); }
+  }
+
+  function gerarRelatorio() {
+    const linhas = entradas.map(e => ({
+      'Data':        formatarData(e.created_at),
+      'Código':      e.codigo,
+      'Descrição':   e.descricao,
+      'Quantidade':  e.quantidade,
+      'Unidade':     e.unidade,
+      'Observação':  e.observacao || '',
+      'Registrado por': e.usuario_nome || '',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(linhas);
+    ws['!cols'] = [
+      { wch: 18 }, { wch: 15 }, { wch: 45 },
+      { wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 25 }
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Entradas');
+    const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    XLSX.writeFile(wb, `entradas-estoque-${dataHoje}.xlsx`);
   }
 
   function formatarData(iso) {
@@ -107,15 +136,13 @@ export default function RegistroEntradas() {
         <p className="text-sm text-[#8b91a8] mt-0.5">Registre entradas de produtos e atualize o estoque</p>
       </div>
 
-      {/* Formulário de entrada */}
+      {/* Formulário */}
       <div className="bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-5 space-y-4">
         <h2 className="text-sm font-semibold text-[#e8eaf0] flex items-center gap-2">
           <PackagePlus size={16} className="text-[#4f6ef7]" />
           Nova Entrada
         </h2>
-
         <form onSubmit={handleSubmit} className="space-y-3">
-          {/* Busca de produto */}
           <div className="relative">
             <label className="text-xs text-[#8b91a8] mb-1 block">Produto (código ou descrição)</label>
             <input
@@ -126,14 +153,10 @@ export default function RegistroEntradas() {
               autoComplete="off"
             />
             {sugestoes.length > 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-[#21253a] border border-[#2e3347] rounded-xl overflow-hidden shadow-xl">
+              <div className="absolute z-10 w-full mt-1 bg-[#21253a] border border-[#2e3347] rounded-xl overflow-hidden shadow-xl max-h-64 overflow-y-auto">
                 {sugestoes.map(m => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => selecionarMaterial(m)}
-                    className="w-full text-left px-4 py-2.5 hover:bg-[#2e3347] transition-colors"
-                  >
+                  <button key={m.id} type="button" onClick={() => selecionarMaterial(m)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-[#2e3347] transition-colors">
                     <span className="text-xs font-mono text-[#4f6ef7]">{m.codigo}</span>
                     <p className="text-sm text-[#e8eaf0] truncate">{m.descricao}</p>
                     <p className="text-xs text-[#8b91a8]">Estoque atual: {m.quantidade ?? 0}</p>
@@ -146,62 +169,47 @@ export default function RegistroEntradas() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-[#8b91a8] mb-1 block">Quantidade</label>
-              <input
-                type="number"
-                min="1"
-                value={form.quantidade}
-                onChange={e => setForm(f => ({...f, quantidade: e.target.value}))}
-                placeholder="0"
-                className={inputClass}
-                required
-              />
+              <input type="number" min="1" value={form.quantidade} onChange={e => setForm(f => ({...f, quantidade: e.target.value}))} placeholder="0" className={inputClass} required />
             </div>
             <div>
               <label className="text-xs text-[#8b91a8] mb-1 block">Observação (opcional)</label>
-              <input
-                value={form.observacao}
-                onChange={e => setForm(f => ({...f, observacao: e.target.value}))}
-                placeholder="Ex: NF 12345, fornecedor..."
-                className={inputClass}
-              />
+              <input value={form.observacao} onChange={e => setForm(f => ({...f, observacao: e.target.value}))} placeholder="Ex: NF 12345, fornecedor..." className={inputClass} />
             </div>
           </div>
 
-          {erro && <p className="text-xs text-red-400 bg-red-500/10 px-3 py-2 rounded-xl">{erro}</p>}
+          {erro    && <p className="text-xs text-red-400 bg-red-500/10 px-3 py-2 rounded-xl">{erro}</p>}
           {sucesso && <p className="text-xs text-green-400 bg-green-500/10 px-3 py-2 rounded-xl">{sucesso}</p>}
 
-          <button
-            type="submit"
-            disabled={salvando}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold
-              bg-[#4f6ef7] text-white hover:bg-[#3d5ce5] transition-colors disabled:opacity-40"
-          >
-            {salvando
-              ? <><RefreshCw size={15} className="animate-spin" /> Registrando...</>
-              : <><Plus size={15} /> Registrar Entrada</>
-            }
+          <button type="submit" disabled={salvando}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-[#4f6ef7] text-white hover:bg-[#3d5ce5] transition-colors disabled:opacity-40">
+            {salvando ? <><RefreshCw size={15} className="animate-spin" /> Registrando...</> : <><Plus size={15} /> Registrar Entrada</>}
           </button>
         </form>
       </div>
 
-      {/* Histórico de entradas */}
+      {/* Histórico */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold text-[#e8eaf0]">Histórico de Entradas</h2>
-          <div className="relative flex-1 max-w-xs">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
-            <input
-              type="search"
-              placeholder="Buscar no histórico..."
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              className="w-full bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl pl-8 pr-4 py-2 text-xs placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] transition-colors"
-            />
-            {busca && <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b91a8]"><X size={13} /></button>}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <h2 className="text-sm font-semibold text-[#e8eaf0]">
+            Histórico {entradas.length > 0 && <span className="text-[#8b91a8] font-normal">({entradas.length})</span>}
+          </h2>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
+              <input type="search" placeholder="Buscar..." value={busca} onChange={e => setBusca(e.target.value)}
+                className="w-48 bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl pl-8 pr-4 py-2 text-xs placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] transition-colors" />
+              {busca && <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b91a8]"><X size={13} /></button>}
+            </div>
+            {entradas.length > 0 && (
+              <button onClick={gerarRelatorio}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500/15 text-green-400 hover:bg-green-500/25 transition-colors">
+                <FileDown size={13} /> Exportar Excel
+              </button>
+            )}
+            <button onClick={carregarEntradas} className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors">
+              <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            </button>
           </div>
-          <button onClick={carregarEntradas} className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors">
-            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-          </button>
         </div>
 
         {loading ? (
@@ -223,18 +231,25 @@ export default function RegistroEntradas() {
                   <p className="text-sm text-[#e8eaf0] truncate">{e.descricao}</p>
                   {e.observacao && <p className="text-xs text-[#8b91a8] mt-0.5">{e.observacao}</p>}
                 </div>
-                <div className="text-right shrink-0">
+                <div className="text-right shrink-0 space-y-0.5">
                   <div className="flex items-center gap-1 text-xs text-[#8b91a8] justify-end">
-                    <Calendar size={11} />
-                    {formatarData(e.created_at)}
+                    <Calendar size={11} />{formatarData(e.created_at)}
                   </div>
                   {e.usuario_nome && (
-                    <div className="flex items-center gap-1 text-xs text-[#8b91a8] justify-end mt-0.5">
-                      <User size={11} />
-                      {e.usuario_nome}
+                    <div className="flex items-center gap-1 text-xs text-[#8b91a8] justify-end">
+                      <User size={11} />{e.usuario_nome}
                     </div>
                   )}
                 </div>
+                {/* Botão excluir */}
+                <button
+                  onClick={() => handleExcluir(e.id)}
+                  disabled={excluindo === e.id}
+                  className="shrink-0 p-2 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                  title="Excluir registro"
+                >
+                  {excluindo === e.id ? <RefreshCw size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                </button>
               </div>
             ))}
           </div>
