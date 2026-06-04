@@ -10,8 +10,8 @@ import {
   detalharRequisicao, mudarStatus
 } from '../controllers/requisicoesController.js';
 import {
-  listarUsuarios, criarUsuario,
-  atualizarUsuario, excluirUsuario, listarDepartamentos
+  listarUsuarios, criarUsuario, atualizarUsuario, excluirUsuario,
+  listarDepartamentos, criarDepartamento, atualizarDepartamento
 } from '../controllers/usuariosController.js';
 import {
   listarEntradas, registrarEntrada, excluirEntrada
@@ -21,8 +21,8 @@ import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 const router = Router();
 
 // ── Autenticação
-router.post('/auth/login',        login);
-router.get('/auth/me',            autenticar, me);
+router.post('/auth/login',         login);
+router.get('/auth/me',             autenticar, me);
 router.patch('/auth/trocar-senha', autenticar, trocarSenha);
 
 // ── Catálogo
@@ -44,12 +44,16 @@ router.get('/entradas',        autenticar, exigirPerfil('operador', 'admin'), li
 router.post('/entradas',       autenticar, exigirPerfil('operador', 'admin'), registrarEntrada);
 router.delete('/entradas/:id', autenticar, exigirPerfil('operador', 'admin'), excluirEntrada);
 
-// ── Admin
+// ── Admin — Usuários
 router.get('/admin/usuarios',        autenticar, exigirPerfil('admin'), listarUsuarios);
 router.post('/admin/usuarios',       autenticar, exigirPerfil('admin'), criarUsuario);
 router.patch('/admin/usuarios/:id',  autenticar, exigirPerfil('admin'), atualizarUsuario);
 router.delete('/admin/usuarios/:id', autenticar, exigirPerfil('admin'), excluirUsuario);
-router.get('/admin/departamentos',   autenticar, listarDepartamentos);
+
+// ── Admin — Departamentos
+router.get('/admin/departamentos',       autenticar, listarDepartamentos);
+router.post('/admin/departamentos',      autenticar, exigirPerfil('admin'), criarDepartamento);
+router.patch('/admin/departamentos/:id', autenticar, exigirPerfil('admin'), atualizarDepartamento);
 
 router.get('/gerar-hash/:senha', async (req, res) => {
   const hash = await bcrypt.hash(req.params.senha, 10);
