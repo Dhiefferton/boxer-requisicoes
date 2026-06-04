@@ -9,38 +9,36 @@ import { useCart } from '../context/CartContext';
 import { requisicoesService } from '../services/api';
 import { Button, Textarea, Empty } from '../components/ui';
 
-export default function Revisao() {
-  const { usuario }           = useAuth();
-  const { itens, limpar, totalItens } = useCart();
-  const navigate              = useNavigate();
+// Retorna a data de hoje no formato YYYY-MM-DD
+function hoje() {
+  return new Date().toISOString().split('T')[0];
+}
 
-  const [dataNecessidade, setDataNecessidade] = useState('');
+export default function Revisao() {
+  const { usuario }                   = useAuth();
+  const { itens, limpar, totalItens } = useCart();
+  const navigate                      = useNavigate();
+
+  // Data preenchida automaticamente com hoje
+  const [dataNecessidade, setDataNecessidade] = useState(hoje());
   const [observacoes,     setObservacoes]     = useState('');
   const [enviando,        setEnviando]        = useState(false);
   const [erro,            setErro]            = useState('');
   const [sucesso,         setSucesso]         = useState(false);
   const [requisicaoId,    setRequisicaoId]    = useState(null);
 
-  // Carrinho vazio → não tem o que revisar
   if (itens.length === 0 && !sucesso) {
     return (
       <div className="max-w-lg mx-auto space-y-4">
         <button onClick={() => navigate('/catalogo')} className="flex items-center gap-2 text-sm text-[#8b91a8] hover:text-[#e8eaf0] transition-colors">
           <ArrowLeft size={16} /> Voltar ao catálogo
         </button>
-        <Empty
-          icon={ShoppingCart}
-          titulo="Carrinho vazio"
-          descricao="Adicione itens ao carrinho antes de revisar"
-        />
-        <Button onClick={() => navigate('/catalogo')} className="w-full">
-          Ir para o catálogo
-        </Button>
+        <Empty icon={ShoppingCart} titulo="Carrinho vazio" descricao="Adicione itens ao carrinho antes de revisar" />
+        <Button onClick={() => navigate('/catalogo')} className="w-full">Ir para o catálogo</Button>
       </div>
     );
   }
 
-  // Tela de sucesso após envio
   if (sucesso) {
     return (
       <div className="max-w-sm mx-auto flex flex-col items-center justify-center py-16 gap-5 text-center">
@@ -54,12 +52,8 @@ export default function Revisao() {
           </p>
         </div>
         <div className="flex flex-col gap-2 w-full">
-          <Button onClick={() => navigate('/historico')} size="lg" className="w-full">
-            Ver no histórico
-          </Button>
-          <Button onClick={() => navigate('/catalogo')} variant="secondary" size="lg" className="w-full">
-            Nova requisição
-          </Button>
+          <Button onClick={() => navigate('/historico')} size="lg" className="w-full">Ver no histórico</Button>
+          <Button onClick={() => navigate('/catalogo')} variant="secondary" size="lg" className="w-full">Nova requisição</Button>
         </div>
       </div>
     );
@@ -67,11 +61,18 @@ export default function Revisao() {
 
   async function handleEnviar() {
     setErro('');
+
+    // Valida data obrigatória
+    if (!dataNecessidade) {
+      setErro('A data de necessidade é obrigatória.');
+      return;
+    }
+
     setEnviando(true);
     try {
       const payload = {
-        data_necessidade: dataNecessidade || null,
-        observacoes:      observacoes     || null,
+        data_necessidade: dataNecessidade,
+        observacoes:      observacoes || null,
         itens: itens.map(i => ({
           material_id: i.material.id,
           quantidade:  i.quantidade,
@@ -91,11 +92,7 @@ export default function Revisao() {
   return (
     <div className="max-w-2xl mx-auto space-y-5">
 
-      {/* Voltar */}
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-sm text-[#8b91a8] hover:text-[#e8eaf0] transition-colors"
-      >
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-[#8b91a8] hover:text-[#e8eaf0] transition-colors">
         <ArrowLeft size={16} /> Voltar
       </button>
 
@@ -119,24 +116,26 @@ export default function Revisao() {
         </div>
       </div>
 
-      {/* Data de necessidade */}
+      {/* Data de necessidade — obrigatória e preenchida automaticamente */}
       <div className="bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-5 space-y-3">
         <div className="flex items-center gap-2">
           <Calendar size={16} className="text-[#4f6ef7]" />
           <h3 className="text-sm font-semibold text-[#e8eaf0]">Data de necessidade</h3>
-          <span className="text-xs text-[#8b91a8]">(opcional)</span>
+          <span className="text-xs text-red-400 font-medium">obrigatório</span>
         </div>
         <input
           type="date"
           value={dataNecessidade}
           onChange={e => setDataNecessidade(e.target.value)}
-          min={new Date().toISOString().split('T')[0]}
+          min={hoje()}
+          required
           className="
             bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-4 py-2.5
             text-sm w-full focus:outline-none focus:border-[#4f6ef7] focus:ring-1
             focus:ring-[#4f6ef7]/30 transition-colors
           "
         />
+        <p className="text-xs text-[#8b91a8]">Preenchido com a data de hoje. Altere se necessário.</p>
       </div>
 
       {/* Itens do carrinho */}
@@ -160,10 +159,7 @@ export default function Revisao() {
             </div>
           ))}
         </div>
-        <button
-          onClick={() => navigate('/catalogo')}
-          className="text-xs text-[#4f6ef7] hover:underline"
-        >
+        <button onClick={() => navigate('/catalogo')} className="text-xs text-[#4f6ef7] hover:underline">
           Editar itens no catálogo
         </button>
       </div>
@@ -183,14 +179,12 @@ export default function Revisao() {
         />
       </div>
 
-      {/* Erro */}
       {erro && (
         <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl">
           {erro}
         </div>
       )}
 
-      {/* Botões de ação */}
       <div className="flex gap-3 pb-6">
         <Button variant="secondary" onClick={() => navigate(-1)} className="flex-1">
           <ArrowLeft size={16} /> Voltar
