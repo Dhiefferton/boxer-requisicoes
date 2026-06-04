@@ -2,11 +2,13 @@
 // pages/TrocarSenha.jsx — Tela obrigatória de troca de senha
 // ============================================================
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Package, Eye, EyeOff, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function TrocarSenha() {
   const { trocarSenha, logout } = useAuth();
+  const navigate = useNavigate();
   const [senha,      setSenha]      = useState('');
   const [confirmar,  setConfirmar]  = useState('');
   const [verSenha,   setVerSenha]   = useState(false);
@@ -23,6 +25,7 @@ export default function TrocarSenha() {
     setLoading(true);
     try {
       await trocarSenha(senha);
+      navigate('/catalogo', { replace: true });
     } catch (err) {
       setErro(err.response?.data?.erro || 'Erro ao trocar a senha. Tente novamente.');
     } finally {
