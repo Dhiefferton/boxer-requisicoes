@@ -2,7 +2,7 @@
 // pages/operador/PainelAdmin.jsx
 // ============================================================
 import { useState, useEffect, useRef } from 'react';
-import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Search } from 'lucide-react';
+import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Trash2, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api, { adminService, materiaisService } from '../../services/api';
 import { Button, Spinner } from '../../components/ui';
@@ -14,12 +14,14 @@ function AbaUsuarios() {
   const [loading,       setLoading]       = useState(true);
   const [criando,       setCriando]       = useState(false);
   const [editando,      setEditando]      = useState(null);
+  const [busca,         setBusca]         = useState('');
   const [form,          setForm]          = useState({ nome: '', email: '', senha: '', perfil: 'colaborador', departamento_id: '' });
   const [formEdit,      setFormEdit]      = useState({ email: '', senha: '', perfil: 'colaborador' });
   const [erro,          setErro]          = useState('');
   const [erroEdit,      setErroEdit]      = useState('');
   const [salvando,      setSalvando]      = useState(false);
   const [salvandoEdit,  setSalvandoEdit]  = useState(false);
+  const [excluindo,     setExcluindo]     = useState(null);
 
   async function carregar() {
     setLoading(true);
@@ -66,6 +68,17 @@ function AbaUsuarios() {
     } finally { setSalvandoEdit(false); }
   }
 
+  async function handleExcluir(u) {
+    if (!confirm(`Excluir o usuário "${u.nome}"? As requisições serão mantidas.`)) return;
+    setExcluindo(u.id);
+    try {
+      await api.delete(`/admin/usuarios/${u.id}`);
+      setUsuarios(prev => prev.filter(x => x.id !== u.id));
+    } catch (err) {
+      alert(err.response?.data?.erro || 'Erro ao excluir usuário.');
+    } finally { setExcluindo(null); }
+  }
+
   function abrirEdicao(u) {
     setEditando(u);
     setFormEdit({ email: u.email, senha: '', perfil: u.perfil });
@@ -77,12 +90,23 @@ function AbaUsuarios() {
     setUsuarios(prev => prev.map(u => u.id === usuario.id ? { ...u, ativo: !u.ativo } : u));
   }
 
+  // Filtra por nome ou departamento
+  const usuariosFiltrados = usuarios.filter(u => {
+    if (!busca) return true;
+    const b = busca.toLowerCase();
+    return (
+      u.nome.toLowerCase().includes(b) ||
+      (u.departamento_nome || '').toLowerCase().includes(b) ||
+      u.email.toLowerCase().includes(b)
+    );
+  });
+
   const inputClass = `w-full bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-3 py-2 text-sm placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]/30`;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-[#8b91a8]">{usuarios.length} usuário(s) cadastrado(s)</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="text-sm text-[#8b91a8]">{usuariosFiltrados.length} de {usuarios.length} usuário(s)</p>
         <div className="flex gap-2">
           <button onClick={carregar} className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors"><RefreshCw size={15} /></button>
           <Button size="sm" onClick={() => setCriando(!criando)}>
@@ -91,6 +115,20 @@ function AbaUsuarios() {
         </div>
       </div>
 
+      {/* Campo de busca */}
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
+        <input
+          type="search"
+          placeholder="Buscar por nome, e-mail ou departamento..."
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          className="w-full bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl pl-9 pr-4 py-2.5 text-sm placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] transition-colors"
+        />
+        {busca && <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b91a8]"><X size={14} /></button>}
+      </div>
+
+      {/* Formulário de criação */}
       {criando && (
         <div className="bg-[#21253a] border border-[#2e3347] rounded-2xl p-4 space-y-3">
           <h3 className="text-sm font-semibold text-[#e8eaf0]">Novo usuário</h3>
@@ -115,6 +153,7 @@ function AbaUsuarios() {
         </div>
       )}
 
+      {/* Modal de edição */}
       {editando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-sm bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-5 space-y-4">
@@ -151,9 +190,10 @@ function AbaUsuarios() {
         </div>
       )}
 
+      {/* Lista de usuários */}
       {loading ? <div className="flex justify-center py-8"><Spinner className="text-[#4f6ef7]" /></div> : (
         <div className="space-y-2">
-          {usuarios.map(u => (
+          {usuariosFiltrados.map(u => (
             <div key={u.id} className={`flex items-center gap-3 bg-[#1a1d27] border border-[#2e3347] rounded-xl px-4 py-3 ${!u.ativo ? 'opacity-50' : ''}`}>
               <div className="w-8 h-8 rounded-full bg-[#4f6ef7]/20 flex items-center justify-center shrink-0">
                 <span className="text-xs font-bold text-[#4f6ef7]">{u.nome.charAt(0).toUpperCase()}</span>
@@ -166,8 +206,12 @@ function AbaUsuarios() {
                 <button onClick={() => abrirEdicao(u)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#4f6ef7]/10 text-[#4f6ef7] hover:bg-[#4f6ef7]/20 transition-colors">
                   <Pencil size={12} /> Editar
                 </button>
-                <button onClick={() => toggleAtivo(u)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${u.ativo ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-green-500/10 text-green-400 hover:bg-green-500/20'}`}>
-                  {u.ativo ? <><X size={12} /> Desativar</> : <><Check size={12} /> Ativar</>}
+                <button onClick={() => toggleAtivo(u)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${u.ativo ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-green-500/10 text-green-400 hover:bg-green-500/20'}`}>
+                  {u.ativo ? 'Desativar' : 'Ativar'}
+                </button>
+                <button onClick={() => handleExcluir(u)} disabled={excluindo === u.id}
+                  className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-40" title="Excluir usuário">
+                  {excluindo === u.id ? <RefreshCw size={13} className="animate-spin" /> : <Trash2 size={13} />}
                 </button>
               </div>
             </div>
@@ -313,18 +357,22 @@ function AbaEstoque() {
   }
 
   const inputClass = `w-full bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-3 py-2 text-sm placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]/30`;
-
   const statusColor = {
     disponivel:    'bg-green-500/15 text-green-400',
     baixo_estoque: 'bg-amber-500/15 text-amber-400',
     sem_estoque:   'bg-red-500/15 text-red-400',
   };
 
+  const materiaisFiltrados = materiais.filter(m =>
+    !busca ||
+    m.codigo.toLowerCase().includes(busca.toLowerCase()) ||
+    m.descricao.toLowerCase().includes(busca.toLowerCase())
+  );
+
   return (
     <div className="space-y-4">
-      {/* Barra de ações */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-sm text-[#8b91a8]">{materiais.length} produto(s) cadastrado(s)</p>
+        <p className="text-sm text-[#8b91a8]">{materiaisFiltrados.length} de {materiais.length} produto(s)</p>
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={baixarModelo} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0] transition-colors">
             <FileDown size={13} /> Baixar modelo
@@ -341,13 +389,20 @@ function AbaEstoque() {
         </div>
       </div>
 
-      {/* Formulário novo produto */}
+      {/* Campo de busca */}
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
+        <input type="search" placeholder="Buscar por código ou descrição..." value={busca} onChange={e => setBusca(e.target.value)}
+          className="w-full bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl pl-9 pr-4 py-2.5 text-sm placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] transition-colors" />
+        {busca && <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b91a8]"><X size={14} /></button>}
+      </div>
+
       {criando && (
         <div className="bg-[#21253a] border border-[#2e3347] rounded-2xl p-4 space-y-3">
           <h3 className="text-sm font-semibold text-[#e8eaf0]">Novo produto</h3>
           <form onSubmit={handleCriarProduto} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input value={formNovo.codigo} onChange={e => setFormNovo(f => ({...f, codigo: e.target.value}))} placeholder="Código" className={inputClass} required />
-            <input value={formNovo.descricao} onChange={e => setFormNovo(f => ({...f, descricao: e.target.value}))} placeholder="Descrição do produto" className={inputClass} required />
+            <input value={formNovo.descricao} onChange={e => setFormNovo(f => ({...f, descricao: e.target.value}))} placeholder="Descrição" className={inputClass} required />
             <select value={formNovo.categoria_id} onChange={e => setFormNovo(f => ({...f, categoria_id: e.target.value}))} className={inputClass} required>
               <option value="">— Categoria —</option>
               {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -374,47 +429,29 @@ function AbaEstoque() {
         </div>
       )}
 
-      {/* Modal edição completa do produto */}
       {editandoProd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-md bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-5 space-y-4">
-            <div>
-              <h3 className="font-semibold text-[#e8eaf0]">Editar produto</h3>
-              <p className="text-xs text-[#8b91a8] mt-0.5">Código: {editandoProd.codigo}</p>
-            </div>
+            <h3 className="font-semibold text-[#e8eaf0]">Editar produto</h3>
             <form onSubmit={salvarProduto} className="space-y-3">
-              <div>
-                <label className="text-xs text-[#8b91a8] mb-1 block">Código</label>
-                <input value={editandoProd.codigo} onChange={e => setEditandoProd(p => ({...p, codigo: e.target.value}))} className={inputClass} required />
-              </div>
-              <div>
-                <label className="text-xs text-[#8b91a8] mb-1 block">Descrição</label>
-                <input value={editandoProd.descricao} onChange={e => setEditandoProd(p => ({...p, descricao: e.target.value}))} className={inputClass} required />
-              </div>
-              <div>
-                <label className="text-xs text-[#8b91a8] mb-1 block">Categoria</label>
+              <div><label className="text-xs text-[#8b91a8] mb-1 block">Código</label>
+                <input value={editandoProd.codigo} onChange={e => setEditandoProd(p => ({...p, codigo: e.target.value}))} className={inputClass} required /></div>
+              <div><label className="text-xs text-[#8b91a8] mb-1 block">Descrição</label>
+                <input value={editandoProd.descricao} onChange={e => setEditandoProd(p => ({...p, descricao: e.target.value}))} className={inputClass} required /></div>
+              <div><label className="text-xs text-[#8b91a8] mb-1 block">Categoria</label>
                 <select value={editandoProd.categoria_id} onChange={e => setEditandoProd(p => ({...p, categoria_id: e.target.value}))} className={inputClass} required>
                   {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-[#8b91a8] mb-1 block">Unidade</label>
+                </select></div>
+              <div><label className="text-xs text-[#8b91a8] mb-1 block">Unidade</label>
                 <select value={editandoProd.unidade} onChange={e => setEditandoProd(p => ({...p, unidade: e.target.value}))} className={inputClass}>
-                  <option value="UN">UN — Unidade</option>
-                  <option value="CX">CX — Caixa</option>
-                  <option value="PCT">PCT — Pacote</option>
-                  <option value="RL">RL — Rolo</option>
-                  <option value="KG">KG — Quilograma</option>
-                  <option value="L">L — Litro</option>
-                  <option value="PR">PR — Par</option>
-                  <option value="KT">KT — Kit</option>
-                  <option value="RS">RS — Resma</option>
-                </select>
-              </div>
+                  <option value="UN">UN</option><option value="CX">CX</option><option value="PCT">PCT</option>
+                  <option value="RL">RL</option><option value="KG">KG</option><option value="L">L</option>
+                  <option value="PR">PR</option><option value="KT">KT</option><option value="RS">RS</option>
+                </select></div>
               {erroProd && <p className="text-xs text-red-400">{erroProd}</p>}
               <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setEditandoProd(null)} className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0]">Cancelar</button>
-                <button type="submit" disabled={salvandoProd} className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-[#4f6ef7] text-white hover:bg-[#3d5ce5] disabled:opacity-40">
+                <button type="button" onClick={() => setEditandoProd(null)} className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[#2e3347] text-[#8b91a8]">Cancelar</button>
+                <button type="submit" disabled={salvandoProd} className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-[#4f6ef7] text-white disabled:opacity-40">
                   {salvandoProd ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
@@ -423,37 +460,17 @@ function AbaEstoque() {
         </div>
       )}
 
-      {/* Resultado importação */}
       {resultado && (
         <div className={`rounded-xl px-4 py-3 text-sm border ${resultado.erros.length > 0 ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
-          <p className="font-medium">✓ {resultado.atualizados} produto(s) atualizado(s) com sucesso!</p>
-          {resultado.erros.length > 0 && <div className="mt-1 space-y-0.5">{resultado.erros.map((e, i) => <p key={i} className="text-xs text-red-400">{e}</p>)}</div>}
+          <p className="font-medium">✓ {resultado.atualizados} produto(s) atualizado(s)!</p>
+          {resultado.erros.length > 0 && <div className="mt-1">{resultado.erros.map((e, i) => <p key={i} className="text-xs text-red-400">{e}</p>)}</div>}
           <button onClick={() => setResultado(null)} className="mt-1 text-xs underline opacity-60">Fechar</button>
         </div>
       )}
 
-      {/* Campo de busca */}
-      <div className="relative">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
-        <input
-          type="search"
-          placeholder="Buscar por código ou descrição..."
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          className="w-full bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl pl-9 pr-4 py-2.5 text-sm placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] transition-colors"
-        />
-        {busca && (
-          <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b91a8] hover:text-[#e8eaf0]">
-            <X size={14} />
-          </button>
-        )}
-      </div>
-
-      {/* Lista de materiais */}
       {loading ? <div className="flex justify-center py-8"><Spinner className="text-[#4f6ef7]" /></div> : (
         <div className="space-y-1.5">
-          {busca && <p className="text-xs text-[#8b91a8]">{materiais.filter(m => m.codigo.toLowerCase().includes(busca.toLowerCase()) || m.descricao.toLowerCase().includes(busca.toLowerCase())).length} resultado(s)</p>}
-          {materiais.filter(m => !busca || m.codigo.toLowerCase().includes(busca.toLowerCase()) || m.descricao.toLowerCase().includes(busca.toLowerCase())).map(m => (
+          {materiaisFiltrados.map(m => (
             <div key={m.id} className="flex items-center gap-3 bg-[#1a1d27] border border-[#2e3347] rounded-xl px-4 py-3">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
@@ -464,31 +481,24 @@ function AbaEstoque() {
                 </div>
                 <p className="text-sm text-[#e8eaf0] truncate">{m.descricao}</p>
               </div>
-
               <div className="flex items-center gap-2 shrink-0">
-                {/* Botão editar produto */}
-                <button
-                  onClick={() => setEditandoProd({ id: m.id, codigo: m.codigo, descricao: m.descricao, categoria_id: m.categoria_id, unidade: m.unidade })}
-                  className="p-1.5 rounded-lg bg-[#4f6ef7]/10 text-[#4f6ef7] hover:bg-[#4f6ef7]/20 transition-colors"
-                  title="Editar produto"
-                >
+                <button onClick={() => setEditandoProd({ id: m.id, codigo: m.codigo, descricao: m.descricao, categoria_id: m.categoria_id, unidade: m.unidade })}
+                  className="p-1.5 rounded-lg bg-[#4f6ef7]/10 text-[#4f6ef7] hover:bg-[#4f6ef7]/20 transition-colors" title="Editar produto">
                   <Pencil size={13} />
                 </button>
-
-                {/* Editar quantidade */}
                 {editandoQtd?.id === m.id ? (
                   <div className="flex items-center gap-2">
                     <div className="flex flex-col gap-1">
-                      <input type="number" min="0" value={editandoQtd.quantidade} onChange={e => setEditandoQtd(v => ({...v, quantidade: e.target.value}))} className="w-20 bg-[#2e3347] border border-[#4f6ef7] text-[#e8eaf0] rounded-lg px-2 py-1 text-xs text-center" placeholder="Qtd" />
-                      <input type="number" min="0" value={editandoQtd.nivel_minimo} onChange={e => setEditandoQtd(v => ({...v, nivel_minimo: e.target.value}))} className="w-20 bg-[#2e3347] border border-[#2e3347] text-[#8b91a8] rounded-lg px-2 py-1 text-xs text-center" placeholder="Mínimo" />
+                      <input type="number" min="0" value={editandoQtd.quantidade} onChange={e => setEditandoQtd(v => ({...v, quantidade: e.target.value}))} className="w-20 bg-[#2e3347] border border-[#4f6ef7] text-[#e8eaf0] rounded-lg px-2 py-1 text-xs text-center" />
+                      <input type="number" min="0" value={editandoQtd.nivel_minimo} onChange={e => setEditandoQtd(v => ({...v, nivel_minimo: e.target.value}))} className="w-20 bg-[#2e3347] border border-[#2e3347] text-[#8b91a8] rounded-lg px-2 py-1 text-xs text-center" />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <button onClick={salvarEstoque} disabled={salvando} className="p-1.5 rounded-lg bg-green-500/15 text-green-400 hover:bg-green-500/25"><Check size={13} /></button>
-                      <button onClick={() => setEditandoQtd(null)} className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20"><X size={13} /></button>
+                      <button onClick={salvarEstoque} disabled={salvando} className="p-1.5 rounded-lg bg-green-500/15 text-green-400"><Check size={13} /></button>
+                      <button onClick={() => setEditandoQtd(null)} className="p-1.5 rounded-lg bg-red-500/10 text-red-400"><X size={13} /></button>
                     </div>
                   </div>
                 ) : (
-                  <button onClick={() => setEditandoQtd({ id: m.id, quantidade: m.quantidade ?? 0, nivel_minimo: m.nivel_minimo ?? 5 })} className="text-right hover:opacity-70 transition-opacity">
+                  <button onClick={() => setEditandoQtd({ id: m.id, quantidade: m.quantidade ?? 0, nivel_minimo: m.nivel_minimo ?? 5 })} className="text-right hover:opacity-70">
                     <p className="text-sm font-bold text-[#e8eaf0]">{m.quantidade ?? '—'}</p>
                     <p className="text-[10px] text-[#8b91a8]">{m.unidade}</p>
                   </button>
@@ -502,7 +512,6 @@ function AbaEstoque() {
   );
 }
 
-// ── Painel Admin principal ────────────────────────────────────
 export default function PainelAdmin() {
   const [aba, setAba] = useState('usuarios');
   return (
