@@ -94,22 +94,18 @@ export async function atualizarUsuario(req, res, next) {
 export async function excluirUsuario(req, res, next) {
   try {
     const { id } = req.params;
-
     if (parseInt(id) === req.usuario.id) {
       return res.status(400).json({ erro: 'Você não pode excluir seu próprio usuário.' });
     }
-
     const existe = await query(`SELECT id, nome FROM usuarios WHERE id = $1`, [parseInt(id)]);
     if (!existe.rows[0]) {
       return res.status(404).json({ erro: 'Usuário não encontrado.' });
     }
-
     await query(`UPDATE requisicoes SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
     await query(`UPDATE historico_status SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
     await query(`UPDATE entradas_estoque SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
     await query(`UPDATE logs SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
     await query(`DELETE FROM usuarios WHERE id = $1`, [parseInt(id)]);
-
     res.json({ mensagem: `Usuário "${existe.rows[0].nome}" excluído com sucesso.` });
   } catch (err) {
     next(err);
@@ -120,9 +116,51 @@ export async function excluirUsuario(req, res, next) {
 export async function listarDepartamentos(req, res, next) {
   try {
     const result = await query(
-      `SELECT id, nome, codigo FROM departamentos WHERE ativo = TRUE ORDER BY nome`
+      `SELECT id, nome, codigo, ativo FROM departamentos ORDER BY nome`
     );
     res.json({ departamentos: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /admin/departamentos
+export async function criarDepartamento(req, res, next) {
+  try {
+    const { nome, codigo } = req.body;
+    if (!nome || !codigo) {
+      return res.status(400).json({ erro: 'Campos obrigatórios: nome e codigo' });
+    }
+    const result = await query(
+      `INSERT INTO departamentos (nome, codigo, ativo)
+       VALUES ($1, $2, true)
+       RETURNING id, nome, codigo, ativo`,
+      [nome.trim(), codigo.trim().toUpperCase()]
+    );
+    res.status(201).json({ departamento: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// PATCH /admin/departamentos/:id
+export async function atualizarDepartamento(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { nome, codigo, ativo } = req.body;
+    const result = await query(
+      `UPDATE departamentos
+       SET nome   = COALESCE($1, nome),
+           codigo = COALESCE($2, codigo),
+           ativo  = COALESCE($3, ativo)
+       WHERE id = $4
+       RETURNING id, nome, codigo, ativo`,
+      [nome || null, codigo ? codigo.toUpperCase() : null, ativo ?? null, parseInt(id)]
+    );
+    if (!result.rows[0]) {
+      return res.status(404).json({ erro: 'Departamento não encontrado.' });
+    }
+    res.json({ departamento: result.rows[0] });
   } catch (err) {
     next(err);
   }
