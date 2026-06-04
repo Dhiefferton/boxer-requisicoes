@@ -46,13 +46,12 @@ export async function criarUsuario(req, res, next) {
   }
 }
 
-// PATCH /admin/usuarios/:id — Atualiza email, senha, perfil, ativo, departamento
+// PATCH /admin/usuarios/:id
 export async function atualizarUsuario(req, res, next) {
   try {
     const { id } = req.params;
     const { ativo, perfil, departamento_id, email, senha } = req.body;
 
-    // Se enviou nova senha, gera o hash
     let senha_hash = null;
     if (senha && senha.length >= 6) {
       senha_hash = await bcrypt.hash(senha, 10);
@@ -83,6 +82,37 @@ export async function atualizarUsuario(req, res, next) {
     }
 
     res.json({ usuario: result.rows[0] });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// DELETE /admin/usuarios/:id
+export async function excluirUsuario(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    // Não permite excluir o próprio usuário logado
+    if (parseInt(id) === req.usuario.id) {
+      return res.status(400).json({ erro: 'Você não pode excluir seu próprio usuário.' });
+    }
+
+    // Verifica se existe
+    const existe = await query(`SELECT id, nome FROM usuarios WHERE id = $1`, [parseInt(id)]);
+    if (!existe.rows[0]) {
+      return res.status(404).json({ erro: 'Usuário não encontrado.' });
+    }
+
+    // Remove o vínculo das requisições (mantém histórico com usuario_id = NULL)
+    await query(`UPDATE requisicoes SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
+    await query(`UPDATE historico_status SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
+    await query(`UPDATE entradas_estoque SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
+    await query(`UPDATE logs SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
+
+    // Exclui o usuário
+    await query(`DELETE FROM usuarios WHERE id = $1`, [parseInt(id)]);
+
+    res.json({ mensagem: `Usuário "${existe.rows[0].nome}" excluído com sucesso.` });
   } catch (err) {
     next(err);
   }
