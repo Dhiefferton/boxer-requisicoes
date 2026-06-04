@@ -7,10 +7,9 @@ import { authService } from '../services/api';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [usuario, setUsuario]   = useState(null);
+  const [usuario,    setUsuario]    = useState(null);
   const [carregando, setCarregando] = useState(true);
 
-  // Ao abrir o app, verifica se há sessão salva
   useEffect(() => {
     const token = localStorage.getItem('boxer_token');
     const salvo = localStorage.getItem('boxer_usuario');
@@ -32,6 +31,14 @@ export function AuthProvider({ children }) {
     return data.usuario;
   }
 
+  async function trocarSenha(senha_nova) {
+    await authService.trocarSenha(senha_nova);
+    // Atualiza o usuário local removendo a flag
+    const atualizado = { ...usuario, trocar_senha: false };
+    localStorage.setItem('boxer_usuario', JSON.stringify(atualizado));
+    setUsuario(atualizado);
+  }
+
   function logout() {
     localStorage.removeItem('boxer_token');
     localStorage.removeItem('boxer_usuario');
@@ -39,7 +46,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, login, logout, carregando }}>
+    <AuthContext.Provider value={{ usuario, login, logout, trocarSenha, carregando }}>
       {children}
     </AuthContext.Provider>
   );
