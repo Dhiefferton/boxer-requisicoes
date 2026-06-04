@@ -16,7 +16,7 @@ function AbaUsuarios() {
   const [editando,      setEditando]      = useState(null);
   const [busca,         setBusca]         = useState('');
   const [form,          setForm]          = useState({ nome: '', email: '', senha: '', perfil: 'colaborador', departamento_id: '' });
-  const [formEdit,      setFormEdit]      = useState({ email: '', senha: '', perfil: 'colaborador' });
+  const [formEdit,      setFormEdit]      = useState({ email: '', senha: '', perfil: 'colaborador', departamento_id: '' });
   const [erro,          setErro]          = useState('');
   const [erroEdit,      setErroEdit]      = useState('');
   const [salvando,      setSalvando]      = useState(false);
@@ -60,6 +60,7 @@ function AbaUsuarios() {
       if (formEdit.email)  payload.email  = formEdit.email;
       if (formEdit.senha)  payload.senha  = formEdit.senha;
       if (formEdit.perfil) payload.perfil = formEdit.perfil;
+      if (formEdit.departamento_id !== undefined) payload.departamento_id = formEdit.departamento_id ? parseInt(formEdit.departamento_id) : null;
       await adminService.atualizarUsuario(editando.id, payload);
       setEditando(null);
       carregar();
@@ -81,7 +82,7 @@ function AbaUsuarios() {
 
   function abrirEdicao(u) {
     setEditando(u);
-    setFormEdit({ email: u.email, senha: '', perfil: u.perfil });
+    setFormEdit({ email: u.email, senha: '', perfil: u.perfil, departamento_id: u.departamento_id || '' });
     setErroEdit('');
   }
 
@@ -176,6 +177,13 @@ function AbaUsuarios() {
                   <option value="colaborador">Colaborador</option>
                   <option value="operador">Operador</option>
                   <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-[#8b91a8] mb-1 block">Departamento</label>
+                <select value={formEdit.departamento_id} onChange={e => setFormEdit(f => ({...f, departamento_id: e.target.value}))} className={inputClass}>
+                  <option value="">— Sem departamento —</option>
+                  {departamentos.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
                 </select>
               </div>
               {erroEdit && <p className="text-xs text-red-400">{erroEdit}</p>}
