@@ -2,7 +2,7 @@
 // pages/operador/PainelAdmin.jsx
 // ============================================================
 import { useState, useEffect, useRef } from 'react';
-import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Trash2, Search } from 'lucide-react';
+import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Trash2, Search, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api, { adminService, materiaisService } from '../../services/api';
 import { Button, Spinner } from '../../components/ui';
@@ -230,7 +230,165 @@ function AbaUsuarios() {
   );
 }
 
-// ── Aba Estoque ──────────────────────────────────────────────
+// ── Aba Departamentos ────────────────────────────────────────
+function AbaDepartamentos() {
+  const [departamentos, setDepartamentos] = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [criando,       setCriando]       = useState(false);
+  const [editando,      setEditando]      = useState(null);
+  const [form,          setForm]          = useState({ nome: '', codigo: '' });
+  const [formEdit,      setFormEdit]      = useState({ nome: '', codigo: '' });
+  const [erro,          setErro]          = useState('');
+  const [erroEdit,      setErroEdit]      = useState('');
+  const [salvando,      setSalvando]      = useState(false);
+  const [salvandoEdit,  setSalvandoEdit]  = useState(false);
+  const [busca,         setBusca]         = useState('');
+
+  async function carregar() {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/admin/departamentos');
+      setDepartamentos(data.departamentos);
+    } finally { setLoading(false); }
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  async function handleCriar(e) {
+    e.preventDefault();
+    setErro('');
+    setSalvando(true);
+    try {
+      await api.post('/admin/departamentos', form);
+      setCriando(false);
+      setForm({ nome: '', codigo: '' });
+      carregar();
+    } catch (err) {
+      setErro(err.response?.data?.erro || 'Erro ao criar departamento.');
+    } finally { setSalvando(false); }
+  }
+
+  async function handleEditar(e) {
+    e.preventDefault();
+    setErroEdit('');
+    setSalvandoEdit(true);
+    try {
+      await api.patch(`/admin/departamentos/${editando.id}`, formEdit);
+      setEditando(null);
+      carregar();
+    } catch (err) {
+      setErroEdit(err.response?.data?.erro || 'Erro ao atualizar.');
+    } finally { setSalvandoEdit(false); }
+  }
+
+  async function toggleAtivo(d) {
+    await api.patch(`/admin/departamentos/${d.id}`, { ativo: !d.ativo });
+    setDepartamentos(prev => prev.map(x => x.id === d.id ? { ...x, ativo: !x.ativo } : x));
+  }
+
+  const filtrados = departamentos.filter(d =>
+    !busca ||
+    d.nome.toLowerCase().includes(busca.toLowerCase()) ||
+    d.codigo.toLowerCase().includes(busca.toLowerCase())
+  );
+
+  const inputClass = `w-full bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-3 py-2 text-sm placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]/30`;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-[#8b91a8]">{filtrados.length} de {departamentos.length} departamento(s)</p>
+        <div className="flex gap-2">
+          <button onClick={carregar} className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors"><RefreshCw size={15} /></button>
+          <button onClick={() => setCriando(!criando)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 transition-colors">
+            <Plus size={13} /> {criando ? 'Cancelar' : 'Novo departamento'}
+          </button>
+        </div>
+      </div>
+
+      {/* Busca */}
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
+        <input type="search" placeholder="Buscar por nome ou código..." value={busca} onChange={e => setBusca(e.target.value)}
+          className="w-full bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl pl-9 pr-4 py-2.5 text-sm placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] transition-colors" />
+        {busca && <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b91a8]"><X size={14} /></button>}
+      </div>
+
+      {/* Formulário criar */}
+      {criando && (
+        <div className="bg-[#21253a] border border-[#2e3347] rounded-2xl p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-[#e8eaf0]">Novo departamento</h3>
+          <form onSubmit={handleCriar} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input value={form.nome} onChange={e => setForm(f => ({...f, nome: e.target.value}))} placeholder="Nome do departamento" className={inputClass} required />
+            <input value={form.codigo} onChange={e => setForm(f => ({...f, codigo: e.target.value}))} placeholder="Código (ex: TI, RH)" className={inputClass} required />
+            <div className="sm:col-span-2 flex gap-2 items-center">
+              {erro && <p className="text-xs text-red-400 flex-1">{erro}</p>}
+              <button type="submit" disabled={salvando} className="ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold bg-[#4f6ef7] text-white hover:bg-[#3d5ce5] disabled:opacity-40">
+                {salvando ? 'Criando...' : 'Criar'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal editar */}
+      {editando && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-sm bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-5 space-y-4">
+            <h3 className="font-semibold text-[#e8eaf0]">Editar departamento</h3>
+            <form onSubmit={handleEditar} className="space-y-3">
+              <div>
+                <label className="text-xs text-[#8b91a8] mb-1 block">Nome</label>
+                <input value={formEdit.nome} onChange={e => setFormEdit(f => ({...f, nome: e.target.value}))} className={inputClass} required />
+              </div>
+              <div>
+                <label className="text-xs text-[#8b91a8] mb-1 block">Código</label>
+                <input value={formEdit.codigo} onChange={e => setFormEdit(f => ({...f, codigo: e.target.value}))} className={inputClass} required />
+              </div>
+              {erroEdit && <p className="text-xs text-red-400">{erroEdit}</p>}
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setEditando(null)} className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[#2e3347] text-[#8b91a8]">Cancelar</button>
+                <button type="submit" disabled={salvandoEdit} className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-[#4f6ef7] text-white disabled:opacity-40">
+                  {salvandoEdit ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Lista */}
+      {loading ? <div className="flex justify-center py-8"><Spinner className="text-[#4f6ef7]" /></div> : (
+        <div className="space-y-2">
+          {filtrados.map(d => (
+            <div key={d.id} className={`flex items-center gap-3 bg-[#1a1d27] border border-[#2e3347] rounded-xl px-4 py-3 ${!d.ativo ? 'opacity-50' : ''}`}>
+              <div className="w-8 h-8 rounded-full bg-[#4f6ef7]/20 flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-[#4f6ef7]">{d.codigo}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[#e8eaf0]">{d.nome}</p>
+                <p className="text-xs text-[#8b91a8]">{d.codigo} · {d.ativo ? 'Ativo' : 'Inativo'}</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => { setEditando(d); setFormEdit({ nome: d.nome, codigo: d.codigo }); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#4f6ef7]/10 text-[#4f6ef7] hover:bg-[#4f6ef7]/20 transition-colors">
+                  <Pencil size={12} /> Editar
+                </button>
+                <button onClick={() => toggleAtivo(d)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${d.ativo ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20' : 'bg-green-500/10 text-green-400 hover:bg-green-500/20'}`}>
+                  {d.ativo ? 'Desativar' : 'Ativar'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function AbaEstoque() {
   const [materiais,    setMateriais]    = useState([]);
   const [categorias,   setCategorias]   = useState([]);
@@ -526,18 +684,22 @@ export default function PainelAdmin() {
     <div className="space-y-5">
       <div>
         <h1 className="text-lg font-bold text-[#e8eaf0]">Painel Administrativo</h1>
-        <p className="text-sm text-[#8b91a8] mt-0.5">Gestão de usuários e estoque</p>
+        <p className="text-sm text-[#8b91a8] mt-0.5">Gestão de usuários, departamentos e estoque</p>
       </div>
-      <div className="flex bg-[#1a1d27] border border-[#2e3347] rounded-xl p-1 w-fit gap-1">
+      <div className="flex bg-[#1a1d27] border border-[#2e3347] rounded-xl p-1 w-fit gap-1 flex-wrap">
         <button onClick={() => setAba('usuarios')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'usuarios' ? 'bg-[#4f6ef7] text-white' : 'text-[#8b91a8] hover:text-[#e8eaf0]'}`}>
           <Users size={15} /> Usuários
+        </button>
+        <button onClick={() => setAba('departamentos')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'departamentos' ? 'bg-[#4f6ef7] text-white' : 'text-[#8b91a8] hover:text-[#e8eaf0]'}`}>
+          <Building2 size={15} /> Departamentos
         </button>
         <button onClick={() => setAba('estoque')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'estoque' ? 'bg-[#4f6ef7] text-white' : 'text-[#8b91a8] hover:text-[#e8eaf0]'}`}>
           <Package size={15} /> Estoque
         </button>
       </div>
-      {aba === 'usuarios' && <AbaUsuarios />}
-      {aba === 'estoque'  && <AbaEstoque />}
+      {aba === 'usuarios'      && <AbaUsuarios />}
+      {aba === 'departamentos' && <AbaDepartamentos />}
+      {aba === 'estoque'       && <AbaEstoque />}
     </div>
   );
 }
