@@ -11,14 +11,15 @@ const criarUsuarioSchema = z.object({
   senha:           z.string().min(6, 'Senha deve ter ao menos 6 caracteres'),
   perfil:          z.enum(['colaborador', 'operador', 'admin']).default('colaborador'),
   departamento_id: z.number().int().positive().optional().nullable(),
+  trocar_senha:    z.boolean().optional().default(true),
 });
 
 // GET /admin/usuarios
 export async function listarUsuarios(req, res, next) {
   try {
     const result = await query(
-      `SELECT u.id, u.nome, u.email, u.perfil, u.ativo, u.ultimo_acesso, u.created_at,
-              d.nome AS departamento_nome, d.codigo AS departamento_codigo
+      `SELECT u.id, u.nome, u.email, u.perfil, u.ativo, u.trocar_senha, u.ultimo_acesso, u.created_at,
+              d.id AS departamento_id, d.nome AS departamento_nome, d.codigo AS departamento_codigo
        FROM usuarios u
        LEFT JOIN departamentos d ON d.id = u.departamento_id
        ORDER BY u.nome`
@@ -35,10 +36,10 @@ export async function criarUsuario(req, res, next) {
     const dados = criarUsuarioSchema.parse(req.body);
     const senha_hash = await bcrypt.hash(dados.senha, 10);
     const result = await query(
-      `INSERT INTO usuarios (nome, email, senha_hash, perfil, departamento_id)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, nome, email, perfil, departamento_id, ativo, created_at`,
-      [dados.nome, dados.email.toLowerCase(), senha_hash, dados.perfil, dados.departamento_id || null]
+      `INSERT INTO usuarios (nome, email, senha_hash, perfil, departamento_id, trocar_senha)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, nome, email, perfil, departamento_id, ativo, trocar_senha, created_at`,
+      [dados.nome, dados.email.toLowerCase(), senha_hash, dados.perfil, dados.departamento_id || null, dados.trocar_senha ?? true]
     );
     res.status(201).json({ usuario: result.rows[0] });
   } catch (err) {
@@ -50,7 +51,7 @@ export async function criarUsuario(req, res, next) {
 export async function atualizarUsuario(req, res, next) {
   try {
     const { id } = req.params;
-    const { ativo, perfil, departamento_id, email, senha } = req.body;
+    const { ativo, perfil, departamento_id, email, senha, trocar_senha } = req.body;
 
     let senha_hash = null;
     if (senha && senha.length >= 6) {
@@ -64,15 +65,17 @@ export async function atualizarUsuario(req, res, next) {
            departamento_id = COALESCE($3, departamento_id),
            email           = COALESCE($4, email),
            senha_hash      = COALESCE($5, senha_hash),
+           trocar_senha    = COALESCE($6, trocar_senha),
            updated_at      = NOW()
-       WHERE id = $6
-       RETURNING id, nome, email, perfil, ativo, departamento_id`,
+       WHERE id = $7
+       RETURNING id, nome, email, perfil, ativo, departamento_id, trocar_senha`,
       [
         ativo ?? null,
         perfil || null,
-        departamento_id || null,
+        departamento_id !== undefined ? (departamento_id || null) : null,
         email ? email.toLowerCase() : null,
         senha_hash,
+        trocar_senha !== undefined ? trocar_senha : null,
         parseInt(id)
       ]
     );
@@ -92,24 +95,19 @@ export async function excluirUsuario(req, res, next) {
   try {
     const { id } = req.params;
 
-    // Não permite excluir o próprio usuário logado
     if (parseInt(id) === req.usuario.id) {
       return res.status(400).json({ erro: 'Você não pode excluir seu próprio usuário.' });
     }
 
-    // Verifica se existe
     const existe = await query(`SELECT id, nome FROM usuarios WHERE id = $1`, [parseInt(id)]);
     if (!existe.rows[0]) {
       return res.status(404).json({ erro: 'Usuário não encontrado.' });
     }
 
-    // Remove o vínculo das requisições (mantém histórico com usuario_id = NULL)
     await query(`UPDATE requisicoes SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
     await query(`UPDATE historico_status SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
     await query(`UPDATE entradas_estoque SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
     await query(`UPDATE logs SET usuario_id = NULL WHERE usuario_id = $1`, [parseInt(id)]);
-
-    // Exclui o usuário
     await query(`DELETE FROM usuarios WHERE id = $1`, [parseInt(id)]);
 
     res.json({ mensagem: `Usuário "${existe.rows[0].nome}" excluído com sucesso.` });
