@@ -13,27 +13,34 @@ const PHASES = {
   entregue:     process.env.PIPEFY_PHASE_ENTREGUE,
 };
 
-async function pipefyQuery(query) {
+async function pipefyQuery(queryStr) {
+  console.log('🔄 Pipefy request iniciado...');
+  console.log('TOKEN presente:', !!TOKEN);
+  console.log('PIPE_ID:', PIPE_ID);
+
   const response = await fetch(PIPEFY_API, {
     method:  'POST',
     headers: {
       'Content-Type':  'application/json',
       'Authorization': `Bearer ${TOKEN}`,
     },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query: queryStr }),
   });
 
-  const data = await response.json();
+  console.log('🔄 Pipefy HTTP status:', response.status);
+  const text = await response.text();
+  console.log('🔄 Pipefy response raw:', text.substring(0, 300));
+
+  const data = JSON.parse(text);
 
   if (data.errors) {
-    console.error('Pipefy API errors:', JSON.stringify(data.errors));
+    console.error('❌ Pipefy errors:', JSON.stringify(data.errors));
     throw new Error(data.errors[0].message);
   }
 
   return data.data;
 }
 
-// Cria um card no Pipefy quando uma requisição é criada
 export async function criarCardPipefy({ requisicaoId, solicitante, departamento, itens, dataNecessidade }) {
   try {
     const itensTexto = itens.map(i =>
@@ -41,8 +48,8 @@ export async function criarCardPipefy({ requisicaoId, solicitante, departamento,
     ).join('\\n');
 
     const titulo = `Req #${requisicaoId} - ${solicitante}`;
-    const deptSafe = (departamento || 'N/A').replace(/"/g, '');
-    const solicitanteSafe = solicitante.replace(/"/g, '');
+    const deptSafe = (departamento || 'N/A').replace(/"/g, '').replace(/\n/g, ' ');
+    const solicitanteSafe = solicitante.replace(/"/g, '').replace(/\n/g, ' ');
 
     const mutation = `mutation {
       createCard(input: {
@@ -66,7 +73,7 @@ export async function criarCardPipefy({ requisicaoId, solicitante, departamento,
     if (cardId) {
       console.log(`✅ Card Pipefy criado: ${cardId} para Req #${requisicaoId}`);
     } else {
-      console.error(`❌ Card não criado - resultado inesperado:`, JSON.stringify(result));
+      console.error(`❌ Card não criado - resultado:`, JSON.stringify(result));
     }
 
     return cardId || null;
@@ -76,7 +83,6 @@ export async function criarCardPipefy({ requisicaoId, solicitante, departamento,
   }
 }
 
-// Move o card para a fase correspondente ao novo status
 export async function moverCardPipefy(cardId, novoStatus) {
   const phaseId = PHASES[novoStatus];
   if (!phaseId || !cardId) return;
@@ -98,7 +104,6 @@ export async function moverCardPipefy(cardId, novoStatus) {
   }
 }
 
-// Exclui o card do Pipefy quando a requisição é cancelada
 export async function excluirCardPipefy(cardId) {
   if (!cardId) return;
 
