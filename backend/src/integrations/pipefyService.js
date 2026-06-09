@@ -26,7 +26,7 @@ async function pipefyQuery(query) {
   const data = await response.json();
 
   if (data.errors) {
-    console.error('Pipefy API error:', JSON.stringify(data.errors));
+    console.error('Pipefy API errors:', JSON.stringify(data.errors));
     throw new Error(data.errors[0].message);
   }
 
@@ -36,33 +36,40 @@ async function pipefyQuery(query) {
 // Cria um card no Pipefy quando uma requisição é criada
 export async function criarCardPipefy({ requisicaoId, solicitante, departamento, itens, dataNecessidade }) {
   try {
-    // Formata os itens para exibição
     const itensTexto = itens.map(i =>
-      `• ${i.codigo_snapshot} — ${i.descricao_snapshot} (${i.quantidade} ${i.unidade_snapshot})`
-    ).join('\n');
+      `- ${i.codigo_snapshot} - ${i.descricao_snapshot} (${i.quantidade} ${i.unidade_snapshot})`
+    ).join('\\n');
 
-    const query = `
-      mutation {
-        createCard(input: {
-          pipe_id: ${PIPE_ID}
-          title: "Req #${requisicaoId} — ${solicitante}"
-          phase_id: ${PHASES.solicitado}
-          fields_attributes: [
-            { field_id: "solicitante", field_value: "${solicitante}" }
-            { field_id: "departamento", field_value: "${departamento || 'N/A'}" }
-            { field_id: "itens", field_value: "${itensTexto.replace(/"/g, '\\"').replace(/\n/g, '\\n')}" }
-            { field_id: "data_necessidade", field_value: "${dataNecessidade || ''}" }
-          ]
-        }) {
-          card { id title }
-        }
+    const titulo = `Req #${requisicaoId} - ${solicitante}`;
+    const deptSafe = (departamento || 'N/A').replace(/"/g, '');
+    const solicitanteSafe = solicitante.replace(/"/g, '');
+
+    const mutation = `mutation {
+      createCard(input: {
+        pipe_id: ${PIPE_ID}
+        title: "${titulo}"
+        phase_id: ${PHASES.solicitado}
+        fields_attributes: [
+          { field_id: "solicitante", field_value: "${solicitanteSafe}" }
+          { field_id: "departamento", field_value: "${deptSafe}" }
+          { field_id: "itens", field_value: "${itensTexto}" }
+          { field_id: "data_necessidade", field_value: "${dataNecessidade || ''}" }
+        ]
+      }) {
+        card { id title }
       }
-    `;
+    }`;
 
-    const result = await pipefyQuery(query);
-    const cardId = result.createCard.card.id;
-    console.log(`✅ Card Pipefy criado: ${cardId} para Req #${requisicaoId}`);
-    return cardId;
+    const result = await pipefyQuery(mutation);
+    const cardId = result?.createCard?.card?.id;
+
+    if (cardId) {
+      console.log(`✅ Card Pipefy criado: ${cardId} para Req #${requisicaoId}`);
+    } else {
+      console.error(`❌ Card não criado - resultado inesperado:`, JSON.stringify(result));
+    }
+
+    return cardId || null;
   } catch (err) {
     console.error(`❌ Erro ao criar card Pipefy para Req #${requisicaoId}:`, err.message);
     return null;
@@ -75,18 +82,16 @@ export async function moverCardPipefy(cardId, novoStatus) {
   if (!phaseId || !cardId) return;
 
   try {
-    const query = `
-      mutation {
-        moveCardToPhase(input: {
-          card_id: ${cardId}
-          destination_phase_id: ${phaseId}
-        }) {
-          card { id current_phase { name } }
-        }
+    const mutation = `mutation {
+      moveCardToPhase(input: {
+        card_id: ${cardId}
+        destination_phase_id: ${phaseId}
+      }) {
+        card { id current_phase { name } }
       }
-    `;
+    }`;
 
-    await pipefyQuery(query);
+    await pipefyQuery(mutation);
     console.log(`✅ Card ${cardId} movido para "${novoStatus}" no Pipefy`);
   } catch (err) {
     console.error(`❌ Erro ao mover card ${cardId} no Pipefy:`, err.message);
@@ -98,15 +103,13 @@ export async function excluirCardPipefy(cardId) {
   if (!cardId) return;
 
   try {
-    const query = `
-      mutation {
-        deleteCard(input: { id: ${cardId} }) {
-          success
-        }
+    const mutation = `mutation {
+      deleteCard(input: { id: ${cardId} }) {
+        success
       }
-    `;
+    }`;
 
-    await pipefyQuery(query);
+    await pipefyQuery(mutation);
     console.log(`✅ Card ${cardId} excluído do Pipefy`);
   } catch (err) {
     console.error(`❌ Erro ao excluir card ${cardId} do Pipefy:`, err.message);
