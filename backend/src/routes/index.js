@@ -11,7 +11,8 @@ import {
 } from '../controllers/requisicoesController.js';
 import {
   listarUsuarios, criarUsuario, atualizarUsuario, excluirUsuario,
-  listarDepartamentos, criarDepartamento, atualizarDepartamento
+  listarDepartamentos, criarDepartamento, atualizarDepartamento,
+  buscarUsuarios
 } from '../controllers/usuariosController.js';
 import {
   listarEntradas, registrarEntrada, excluirEntrada
@@ -19,6 +20,9 @@ import {
 import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 
 const router = Router();
+
+// ── Busca pública para autocomplete no login
+router.get('/usuarios/buscar', buscarUsuarios);
 
 // ── Autenticação
 router.post('/auth/login',         login);
