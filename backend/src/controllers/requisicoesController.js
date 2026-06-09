@@ -78,6 +78,16 @@ export async function criarRequisicao(req, res, next) {
         [req_.id, usuarioId]
       );
 
+      // Subtrai o estoque de cada item
+      for (const item of dados.itens) {
+        await client.query(
+          `UPDATE estoques
+           SET quantidade = GREATEST(0, quantidade - $1), updated_at = NOW()
+           WHERE material_id = $2`,
+          [item.quantidade, item.material_id]
+        );
+      }
+
       return req_;
     });
 
