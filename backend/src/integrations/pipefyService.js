@@ -1,0 +1,114 @@
+// ============================================================
+// integrations/pipefyService.js — Integração com Pipefy
+// ============================================================
+
+const PIPEFY_API = 'https://api.pipefy.com/graphql';
+const TOKEN      = process.env.PIPEFY_TOKEN;
+const PIPE_ID    = process.env.PIPEFY_PIPE_ID;
+
+const PHASES = {
+  solicitado:   process.env.PIPEFY_PHASE_SOLICITADO,
+  em_separacao: process.env.PIPEFY_PHASE_EM_SEPARACAO,
+  separado:     process.env.PIPEFY_PHASE_SEPARADO,
+  entregue:     process.env.PIPEFY_PHASE_ENTREGUE,
+};
+
+async function pipefyQuery(query) {
+  const response = await fetch(PIPEFY_API, {
+    method:  'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${TOKEN}`,
+    },
+    body: JSON.stringify({ query }),
+  });
+
+  const data = await response.json();
+
+  if (data.errors) {
+    console.error('Pipefy API error:', JSON.stringify(data.errors));
+    throw new Error(data.errors[0].message);
+  }
+
+  return data.data;
+}
+
+// Cria um card no Pipefy quando uma requisição é criada
+export async function criarCardPipefy({ requisicaoId, solicitante, departamento, itens, dataNecessidade }) {
+  try {
+    // Formata os itens para exibição
+    const itensTexto = itens.map(i =>
+      `• ${i.codigo_snapshot} — ${i.descricao_snapshot} (${i.quantidade} ${i.unidade_snapshot})`
+    ).join('\n');
+
+    const query = `
+      mutation {
+        createCard(input: {
+          pipe_id: ${PIPE_ID}
+          title: "Req #${requisicaoId} — ${solicitante}"
+          phase_id: ${PHASES.solicitado}
+          fields_attributes: [
+            { field_id: "solicitante", field_value: "${solicitante}" }
+            { field_id: "departamento", field_value: "${departamento || 'N/A'}" }
+            { field_id: "itens", field_value: "${itensTexto.replace(/"/g, '\\"').replace(/\n/g, '\\n')}" }
+            { field_id: "data_necessidade", field_value: "${dataNecessidade || ''}" }
+          ]
+        }) {
+          card { id title }
+        }
+      }
+    `;
+
+    const result = await pipefyQuery(query);
+    const cardId = result.createCard.card.id;
+    console.log(`✅ Card Pipefy criado: ${cardId} para Req #${requisicaoId}`);
+    return cardId;
+  } catch (err) {
+    console.error(`❌ Erro ao criar card Pipefy para Req #${requisicaoId}:`, err.message);
+    return null;
+  }
+}
+
+// Move o card para a fase correspondente ao novo status
+export async function moverCardPipefy(cardId, novoStatus) {
+  const phaseId = PHASES[novoStatus];
+  if (!phaseId || !cardId) return;
+
+  try {
+    const query = `
+      mutation {
+        moveCardToPhase(input: {
+          card_id: ${cardId}
+          destination_phase_id: ${phaseId}
+        }) {
+          card { id current_phase { name } }
+        }
+      }
+    `;
+
+    await pipefyQuery(query);
+    console.log(`✅ Card ${cardId} movido para "${novoStatus}" no Pipefy`);
+  } catch (err) {
+    console.error(`❌ Erro ao mover card ${cardId} no Pipefy:`, err.message);
+  }
+}
+
+// Exclui o card do Pipefy quando a requisição é cancelada
+export async function excluirCardPipefy(cardId) {
+  if (!cardId) return;
+
+  try {
+    const query = `
+      mutation {
+        deleteCard(input: { id: ${cardId} }) {
+          success
+        }
+      }
+    `;
+
+    await pipefyQuery(query);
+    console.log(`✅ Card ${cardId} excluído do Pipefy`);
+  } catch (err) {
+    console.error(`❌ Erro ao excluir card ${cardId} do Pipefy:`, err.message);
+  }
+}
