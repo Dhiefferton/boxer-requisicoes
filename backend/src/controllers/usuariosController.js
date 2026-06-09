@@ -165,3 +165,28 @@ export async function atualizarDepartamento(req, res, next) {
     next(err);
   }
 }
+
+// GET /usuarios/buscar?q=nome — Rota pública para autocomplete no login
+export async function buscarUsuarios(req, res, next) {
+  try {
+    const { q } = req.query;
+    if (!q || q.trim().length < 2) {
+      return res.json({ usuarios: [] });
+    }
+
+    const result = await query(
+      `SELECT u.nome, u.email, d.nome AS departamento_nome
+       FROM usuarios u
+       LEFT JOIN departamentos d ON d.id = u.departamento_id
+       WHERE u.ativo = TRUE
+         AND u.nome ILIKE $1
+       ORDER BY u.nome
+       LIMIT 8`,
+      [`%${q.trim()}%`]
+    );
+
+    res.json({ usuarios: result.rows });
+  } catch (err) {
+    next(err);
+  }
+}
