@@ -13,6 +13,7 @@ import Historico        from './pages/Historico';
 import PainelOperador   from './pages/operador/PainelOperador';
 import PainelAdmin      from './pages/operador/PainelAdmin';
 import RegistroEntradas from './pages/operador/RegistroEntradas';
+import MRP             from './pages/operador/MRP';
 import { Spinner } from './components/ui';
 
 function RotaProtegida({ children }) {
@@ -66,6 +67,9 @@ export default function App() {
             } />
             <Route path="/admin" element={
               <RotaPerfil perfis={['admin']}><PainelAdmin /></RotaPerfil>
+            } />
+            <Route path="/mrp" element={
+              <RotaPerfil perfis={['admin']}><MRP /></RotaPerfil>
             } />
             <Route path="/"  element={<Navigate to="/catalogo" replace />} />
             <Route path="*"  element={<Navigate to="/catalogo" replace />} />
