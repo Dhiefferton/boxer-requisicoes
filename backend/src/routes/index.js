@@ -17,6 +17,7 @@ import {
 import {
   listarEntradas, registrarEntrada, excluirEntrada
 } from '../controllers/entradasController.js';
+import { calcularMRP } from '../controllers/mrpController.js';
 import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 
 const router = Router();
@@ -58,6 +59,9 @@ router.delete('/admin/usuarios/:id', autenticar, exigirPerfil('admin'), excluirU
 router.get('/admin/departamentos',       autenticar, listarDepartamentos);
 router.post('/admin/departamentos',      autenticar, exigirPerfil('admin'), criarDepartamento);
 router.patch('/admin/departamentos/:id', autenticar, exigirPerfil('admin'), atualizarDepartamento);
+
+// ── MRP
+router.get('/mrp', autenticar, exigirPerfil('admin'), calcularMRP);
 
 router.get('/gerar-hash/:senha', async (req, res) => {
   const hash = await bcrypt.hash(req.params.senha, 10);
