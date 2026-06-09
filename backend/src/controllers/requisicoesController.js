@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import { query, transaction } from '../config/db.js';
+import { criarCardPipefy, moverCardPipefy, excluirCardPipefy } from '../integrations/pipefyService.js';
 
 const criarRequisicaoSchema = z.object({
   data_necessidade: z.string().optional().nullable(),
@@ -85,6 +86,29 @@ export async function criarRequisicao(req, res, next) {
        VALUES ($1, 'CRIAR_REQUISICAO', 'requisicoes', $2, $3)`,
       [usuarioId, requisicao.id, req.ip]
     );
+
+    // Busca itens para criar card no Pipefy
+    const itensResult = await query(
+      `SELECT codigo_snapshot, descricao_snapshot, quantidade, unidade_snapshot
+       FROM itens_requisicao WHERE requisicao_id = $1`,
+      [requisicao.id]
+    );
+
+    // Cria card no Pipefy (assíncrono, não bloqueia a resposta)
+    criarCardPipefy({
+      requisicaoId:    requisicao.id,
+      solicitante:     req.usuario.nome,
+      departamento:    req.usuario.departamento_nome || '',
+      itens:           itensResult.rows,
+      dataNecessidade: dados.data_necessidade || '',
+    }).then(cardId => {
+      if (cardId) {
+        query(
+          `UPDATE requisicoes SET pipefy_card_id = $1 WHERE id = $2`,
+          [cardId, requisicao.id]
+        ).catch(console.error);
+      }
+    });
 
     res.status(201).json({
       mensagem: 'Requisição criada com sucesso!',
@@ -211,7 +235,7 @@ export async function mudarStatus(req, res, next) {
     const usuarioId = req.usuario.id;
 
     const atual = await query(
-      `SELECT id, status FROM requisicoes WHERE id = $1`,
+      `SELECT id, status, pipefy_card_id FROM requisicoes WHERE id = $1`,
       [parseInt(id)]
     );
 
@@ -219,7 +243,8 @@ export async function mudarStatus(req, res, next) {
       return res.status(404).json({ erro: 'Requisição não encontrada.' });
     }
 
-    const statusAnterior = atual.rows[0].status;
+    const statusAnterior  = atual.rows[0].status;
+    const pipefyCardId    = atual.rows[0].pipefy_card_id;
 
     if (statusAnterior === status) {
       return res.status(400).json({ erro: `A requisição já está com status "${status}".` });
@@ -228,13 +253,11 @@ export async function mudarStatus(req, res, next) {
     // ── CANCELAMENTO: devolve estoque e exclui a requisição ──
     if (status === 'cancelado') {
       await transaction(async (client) => {
-        // Busca os itens para devolver ao estoque
         const itens = await client.query(
           `SELECT material_id, quantidade FROM itens_requisicao WHERE requisicao_id = $1`,
           [parseInt(id)]
         );
 
-        // Devolve o saldo ao estoque de cada item
         for (const item of itens.rows) {
           await client.query(
             `UPDATE estoques
@@ -244,11 +267,13 @@ export async function mudarStatus(req, res, next) {
           );
         }
 
-        // Exclui itens, histórico e a requisição
         await client.query(`DELETE FROM historico_status WHERE requisicao_id = $1`, [parseInt(id)]);
         await client.query(`DELETE FROM itens_requisicao WHERE requisicao_id = $1`, [parseInt(id)]);
         await client.query(`DELETE FROM requisicoes WHERE id = $1`, [parseInt(id)]);
       });
+
+      // Exclui card no Pipefy
+      if (pipefyCardId) excluirCardPipefy(pipefyCardId);
 
       await query(
         `INSERT INTO logs (usuario_id, acao, tabela, registro_id, payload_json, ip)
@@ -263,7 +288,7 @@ export async function mudarStatus(req, res, next) {
       return res.json({ mensagem: 'Requisição cancelada e estoque devolvido com sucesso.', excluida: true });
     }
 
-    // ── OUTROS STATUS: apenas atualiza ──
+    // ── OUTROS STATUS: atualiza e move card no Pipefy ──
     await transaction(async (client) => {
       await client.query(
         `UPDATE requisicoes SET status = $1, updated_at = NOW() WHERE id = $2`,
@@ -277,6 +302,9 @@ export async function mudarStatus(req, res, next) {
         [parseInt(id), statusAnterior, status, usuarioId, observacao || null]
       );
     });
+
+    // Move card no Pipefy
+    if (pipefyCardId) moverCardPipefy(pipefyCardId, status);
 
     await query(
       `INSERT INTO logs (usuario_id, acao, tabela, registro_id, payload_json, ip)
