@@ -2,7 +2,7 @@
 // pages/operador/MRP.jsx — Necessidade de Estoque
 // ============================================================
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCw, FileDown, AlertTriangle, AlertCircle, CheckCircle, XCircle, TrendingDown, Search, X, SlidersHorizontal } from 'lucide-react';
+import { RefreshCw, FileDown, Upload, AlertTriangle, AlertCircle, CheckCircle, XCircle, TrendingDown, Search, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api, { materiaisService } from '../../services/api';
 import { Spinner } from '../../components/ui';
@@ -24,6 +24,9 @@ export default function MRP() {
   const [busca,      setBusca]      = useState('');
   const [filtroStatus, setFiltroStatus] = useState('');
   const [periodo,    setPeriodo]    = useState(null);
+  const [importando, setImportando] = useState(false);
+  const [resultImport, setResultImport] = useState(null);
+  const inputImportRef = useRef(null);
 
   async function carregar() {
     setLoading(true);
@@ -42,33 +45,96 @@ export default function MRP() {
 
   useEffect(() => { carregar(); }, [meses, categoria]);
 
-  function exportarExcel() {
-    const linhas = itensFiltrados
-      .filter(i => i.quantidade_comprar > 0)
-      .map(i => ({
-        'Código':            i.codigo,
-        'Descrição':         i.descricao,
-        'Unidade':           i.unidade,
-        'Categoria':         i.categoria_nome,
-        'Estoque Atual':     i.estoque_atual,
-        'Saída Total':       i.total_saida,
-        'Entrada Total':     i.total_entrada,
-        'Média Mensal':      parseFloat(i.media_mensal),
-        'Necessidade Mensal':i.necessidade_mensal,
-        'Qtd a Comprar':     i.quantidade_comprar,
-        'Status':            STATUS_CONFIG[i.status_mrp]?.label,
-      }));
-
-    const ws = XLSX.utils.json_to_sheet(linhas);
-    ws['!cols'] = [
-      { wch: 12 }, { wch: 45 }, { wch: 8 }, { wch: 18 },
-      { wch: 12 }, { wch: 12 }, { wch: 13 }, { wch: 14 },
-      { wch: 17 }, { wch: 14 }, { wch: 10 }
+  function baixarModelo() {
+    const modelo = [
+      { 'Codigo': 'EX001', 'Tipo': 'saida',   'Quantidade': 10 },
+      { 'Codigo': 'EX002', 'Tipo': 'entrada',  'Quantidade': 5  },
     ];
+    const ws = XLSX.utils.json_to_sheet(modelo);
+    ws['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 12 }];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Lista de Compras');
-    const data = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
-    XLSX.writeFile(wb, `lista-compras-${data}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, 'Movimentacoes');
+    XLSX.writeFile(wb, 'modelo-mrp.xlsx');
+  }
+
+  async function handleImportar(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImportando(true);
+    setResultImport(null);
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const linhas = XLSX.utils.sheet_to_json(ws);
+
+      const movimentacoes = linhas.map(l => ({
+        codigo:     String(l['Codigo'] || l['codigo'] || l['CODIGO'] || '').trim(),
+        tipo:       String(l['Tipo'] || l['tipo'] || l['TIPO'] || '').toLowerCase().trim(),
+        quantidade: parseInt(l['Quantidade'] || l['quantidade'] || l['QUANTIDADE'] || 0),
+      })).filter(l => l.codigo && l.tipo && l.quantidade > 0);
+
+      if (movimentacoes.length === 0) {
+        alert('Nenhuma linha válida encontrada na planilha.');
+        return;
+      }
+
+      const { data } = await api.post('/mrp/importar', { movimentacoes });
+      setResultImport(data);
+      carregar();
+    } catch (err) {
+      alert(err.response?.data?.erro || 'Erro ao importar planilha.');
+    } finally {
+      setImportando(false);
+      e.target.value = '';
+    }
+  }
+
+  function exportarExcel() {
+    const itenCompra = itens.filter(i => i.quantidade_comprar > 0);
+    if (itenCompra.length === 0) return;
+
+    const wb = XLSX.utils.book_new();
+    const colWidths = [
+      { wch: 12 }, { wch: 45 }, { wch: 8 },
+      { wch: 12 }, { wch: 12 }, { wch: 13 },
+      { wch: 14 }, { wch: 14 }, { wch: 10 }
+    ];
+
+    const toRow = i => ({
+      'Código':            i.codigo,
+      'Descrição':         i.descricao,
+      'Unidade':           i.unidade,
+      'Estoque Atual':     i.estoque_atual,
+      'Saída Total':       i.total_saida,
+      'Entrada Total':     i.total_entrada,
+      'Média Mensal':      parseFloat(i.media_mensal),
+      'Qtd a Comprar':     i.quantidade_comprar,
+      'Status':            STATUS_CONFIG[i.status_mrp]?.label,
+    });
+
+    // Aba geral com todos os itens
+    const wsGeral = XLSX.utils.json_to_sheet(itenCompra.map(toRow));
+    wsGeral['!cols'] = colWidths;
+    XLSX.utils.book_append_sheet(wb, wsGeral, 'Geral');
+
+    // Uma aba por categoria
+    const porCategoria = {};
+    itenCompra.forEach(i => {
+      if (!porCategoria[i.categoria_nome]) porCategoria[i.categoria_nome] = [];
+      porCategoria[i.categoria_nome].push(i);
+    });
+
+    Object.entries(porCategoria).sort(([a], [b]) => a.localeCompare(b)).forEach(([cat, itenscat]) => {
+      // Nome da aba limitado a 31 chars (limite do Excel)
+      const nomAba = cat.substring(0, 31);
+      const ws = XLSX.utils.json_to_sheet(itenscat.map(toRow));
+      ws['!cols'] = colWidths;
+      XLSX.utils.book_append_sheet(wb, ws, nomAba);
+    });
+
+    const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+    XLSX.writeFile(wb, `lista-compras-${dataHoje}.xlsx`);
   }
 
   const itensFiltrados = itens.filter(i => {
@@ -106,6 +172,14 @@ export default function MRP() {
             <option value="">Todas categorias</option>
             {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
+          <button onClick={baixarModelo} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0] transition-colors">
+            <FileDown size={13} /> Baixar modelo
+          </button>
+          <button onClick={() => inputImportRef.current?.click()} disabled={importando}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 transition-colors disabled:opacity-40">
+            {importando ? <><RefreshCw size={13} className="animate-spin" /> Importando...</> : <><Upload size={13} /> Importar planilha</>}
+          </button>
+          <input ref={inputImportRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportar} className="hidden" />
           <button onClick={carregar} className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -139,6 +213,15 @@ export default function MRP() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Resultado importação */}
+      {resultImport && (
+        <div className={`rounded-xl px-4 py-3 text-sm border ${resultImport.erros?.length > 0 ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
+          <p className="font-medium">✓ {resultImport.inseridos} movimentação(ões) importada(s)!</p>
+          {resultImport.erros?.length > 0 && <div className="mt-1">{resultImport.erros.map((e, i) => <p key={i} className="text-xs text-red-400">{e}</p>)}</div>}
+          <button onClick={() => setResultImport(null)} className="mt-1 text-xs underline opacity-60">Fechar</button>
         </div>
       )}
 
