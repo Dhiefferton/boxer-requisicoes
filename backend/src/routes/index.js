@@ -17,7 +17,7 @@ import {
 import {
   listarEntradas, registrarEntrada, excluirEntrada
 } from '../controllers/entradasController.js';
-import { calcularMRP } from '../controllers/mrpController.js';
+import { calcularMRP, importarMovimentacoes } from '../controllers/mrpController.js';
 import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 
 const router = Router();
@@ -61,7 +61,8 @@ router.post('/admin/departamentos',      autenticar, exigirPerfil('admin'), cria
 router.patch('/admin/departamentos/:id', autenticar, exigirPerfil('admin'), atualizarDepartamento);
 
 // ── MRP
-router.get('/mrp', autenticar, exigirPerfil('admin'), calcularMRP);
+router.get('/mrp',             autenticar, exigirPerfil('admin'), calcularMRP);
+router.post('/mrp/importar',    autenticar, exigirPerfil('admin'), importarMovimentacoes);
 
 router.get('/gerar-hash/:senha', async (req, res) => {
   const hash = await bcrypt.hash(req.params.senha, 10);
