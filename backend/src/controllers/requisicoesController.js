@@ -6,6 +6,19 @@ import { z } from 'zod';
 import { query, transaction } from '../config/db.js';
 import { criarCardPipefy, moverCardPipefy, excluirCardPipefy } from '../integrations/pipefyService.js';
 
+
+const BASE_REQUISICOES = `
+  SELECT
+    r.id, r.status, r.data_necessidade, r.observacoes, r.created_at, r.updated_at,
+    r.usuario_id, r.pipefy_card_id,
+    u.nome AS solicitante_nome, u.email AS solicitante_email,
+    d.nome AS departamento_nome, d.codigo AS departamento_codigo,
+    (SELECT COUNT(*) FROM itens_requisicao ir WHERE ir.requisicao_id = r.id) AS total_itens
+  FROM requisicoes r
+  JOIN usuarios u ON u.id = r.usuario_id
+  LEFT JOIN departamentos d ON d.id = r.departamento_id
+`;
+
 const criarRequisicaoSchema = z.object({
   data_necessidade: z.string().optional().nullable(),
   observacoes:      z.string().max(1000).optional().nullable(),
@@ -142,29 +155,32 @@ export async function listarRequisicoes(req, res, next) {
     let idx = 1;
 
     if (perfil === 'colaborador') {
-      condicoes.push(`usuario_id = $${idx++}`);
+      condicoes.push(`r.usuario_id = $${idx++}`);
       params.push(usuarioId);
     }
 
     if (status) {
-      condicoes.push(`status = $${idx++}`);
+      condicoes.push(`r.status = $${idx++}`);
       params.push(status);
     }
 
     const where = condicoes.length ? `WHERE ${condicoes.join(' AND ')}` : '';
 
     const sql = `
-      SELECT id, status, data_necessidade, observacoes, created_at, updated_at,
-             solicitante_nome, solicitante_email, departamento_nome, total_itens
-      FROM vw_requisicoes
+      ${BASE_REQUISICOES}
       ${where}
-      ORDER BY created_at DESC
+      ORDER BY r.created_at DESC
       LIMIT $${idx} OFFSET $${idx + 1}
     `;
 
     params.push(parseInt(limite), offset);
 
-    const countSql = `SELECT COUNT(*) FROM vw_requisicoes ${where}`;
+    const countSql = `
+      SELECT COUNT(*) FROM requisicoes r
+      JOIN usuarios u ON u.id = r.usuario_id
+      LEFT JOIN departamentos d ON d.id = r.departamento_id
+      ${where}
+    `;
     const countParams = params.slice(0, -2);
 
     const [result, countResult] = await Promise.all([
@@ -191,7 +207,7 @@ export async function detalharRequisicao(req, res, next) {
     const { id: usuarioId, perfil } = req.usuario;
 
     const result = await query(
-      `SELECT * FROM vw_requisicoes WHERE id = $1`,
+      `${BASE_REQUISICOES} WHERE r.id = $1`,
       [parseInt(id)]
     );
 
