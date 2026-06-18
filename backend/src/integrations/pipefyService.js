@@ -13,10 +13,19 @@ const PHASES = {
   entregue:     process.env.PIPEFY_PHASE_ENTREGUE,
 };
 
-async function pipefyQuery(queryStr) {
+function escapePipefy(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, ' ')
+    .replace(/\r/g, '')
+    .replace(/[\u0000-\u001F]/g, '');
+}
+
+async function pipefyMutation(mutation, variables) {
   console.log('🔄 Pipefy request iniciado...');
   console.log('TOKEN presente:', !!TOKEN);
-  console.log('PIPE_ID:', PIPE_ID);
 
   const response = await fetch(PIPEFY_API, {
     method:  'POST',
@@ -24,7 +33,7 @@ async function pipefyQuery(queryStr) {
       'Content-Type':  'application/json',
       'Authorization': `Bearer ${TOKEN}`,
     },
-    body: JSON.stringify({ query: queryStr }),
+    body: JSON.stringify({ query: mutation, variables }),
   });
 
   console.log('🔄 Pipefy HTTP status:', response.status);
@@ -88,16 +97,18 @@ export async function moverCardPipefy(cardId, novoStatus) {
   if (!phaseId || !cardId) return;
 
   try {
-    const mutation = `mutation {
-      moveCardToPhase(input: {
-        card_id: ${cardId}
-        destination_phase_id: ${phaseId}
-      }) {
-        card { id current_phase { name } }
+    const mutation = `
+      mutation MoveCard($cardId: ID!, $phaseId: ID!) {
+        moveCardToPhase(input: {
+          card_id: $cardId
+          destination_phase_id: $phaseId
+        }) {
+          card { id current_phase { name } }
+        }
       }
-    }`;
+    `;
 
-    await pipefyQuery(mutation);
+    await pipefyMutation(mutation, { cardId: String(cardId), phaseId: String(phaseId) });
     console.log(`✅ Card ${cardId} movido para "${novoStatus}" no Pipefy`);
   } catch (err) {
     console.error(`❌ Erro ao mover card ${cardId} no Pipefy:`, err.message);
@@ -108,13 +119,15 @@ export async function excluirCardPipefy(cardId) {
   if (!cardId) return;
 
   try {
-    const mutation = `mutation {
-      deleteCard(input: { id: ${cardId} }) {
-        success
+    const mutation = `
+      mutation DeleteCard($cardId: ID!) {
+        deleteCard(input: { id: $cardId }) {
+          success
+        }
       }
-    }`;
+    `;
 
-    await pipefyQuery(mutation);
+    await pipefyMutation(mutation, { cardId: String(cardId) });
     console.log(`✅ Card ${cardId} excluído do Pipefy`);
   } catch (err) {
     console.error(`❌ Erro ao excluir card ${cardId} do Pipefy:`, err.message);
