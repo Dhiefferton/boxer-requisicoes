@@ -11,9 +11,18 @@ const BASE_SELECT = `
     e.quantidade, e.nivel_minimo,
     m.quantidade_erp, m.ultima_sync_erp,
     CASE
-      WHEN COALESCE(m.quantidade_erp, e.quantidade, 0) = 0 THEN 'sem_estoque'
-      WHEN COALESCE(m.quantidade_erp, e.quantidade, 0) <= e.nivel_minimo THEN 'baixo_estoque'
-      ELSE 'disponivel'
+      WHEN c.nome = 'Partes e Peças' THEN
+        CASE
+          WHEN COALESCE(m.quantidade_erp, 0) = 0 THEN 'sem_estoque'
+          WHEN COALESCE(m.quantidade_erp, 0) <= COALESCE(e.nivel_minimo, 0) THEN 'baixo_estoque'
+          ELSE 'disponivel'
+        END
+      ELSE
+        CASE
+          WHEN COALESCE(e.quantidade, 0) = 0 THEN 'sem_estoque'
+          WHEN e.quantidade <= e.nivel_minimo THEN 'baixo_estoque'
+          ELSE 'disponivel'
+        END
     END AS status_estoque
   FROM materiais m
   JOIN categorias c ON c.id = m.categoria_id
