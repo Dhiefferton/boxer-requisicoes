@@ -27,7 +27,7 @@ let _tokenCache = null; // { accessToken, expiresAt }
  * Faz login na API do ZenERP e retorna o accessToken.
  * Reutiliza o token em cache enquanto ainda for válido.
  */
-async function getToken() {
+export async function getToken() {
   const agora = Date.now();
 
   // Reutiliza token em cache se ainda válido (com 5 min de margem)
