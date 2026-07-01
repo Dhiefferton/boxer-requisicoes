@@ -1,7 +1,7 @@
+﻿// ============================================================
+// components/catalog/MaterialCard.jsx - Card do catalogo
 // ============================================================
-// components/catalog/MaterialCard.jsx — Card do catálogo
-// ============================================================
-import { Plus, Minus } from 'lucide-react';
+import { Plus, Minus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { useCart } from '../../context/CartContext';
 import { StockBadge } from '../ui';
@@ -12,6 +12,18 @@ export default function MaterialCard({ material }) {
 
   const noCarrinho = itens.find(i => i.material.id === material.id);
   const semEstoque = material.status_estoque === 'sem_estoque';
+
+  const qtdExibida = material.quantidade_erp ?? material.quantidade;
+  const temSyncErp = material.quantidade_erp !== null && material.quantidade_erp !== undefined;
+
+  const corQtd = semEstoque ? 'text-red-400' :
+    material.status_estoque === 'baixo_estoque' ? 'text-yellow-400' : 'text-green-400';
+
+  function formatSync(ts) {
+    if (!ts) return null;
+    const d = new Date(ts);
+    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
 
   function handleAdicionar() {
     if (semEstoque) return;
@@ -25,7 +37,7 @@ export default function MaterialCard({ material }) {
       transition-all duration-200
       ${noCarrinho ? 'border-[#4f6ef7]/40' : 'border-[#2e3347] hover:border-[#383d54]'}
     `}>
-      {/* Cabeçalho: código + badge de estoque */}
+      {/* Cabecalho: codigo + badge de estoque */}
       <div className="flex items-start justify-between gap-2">
         <span className="text-xs font-mono text-[#4f6ef7] bg-[#4f6ef7]/10 px-2 py-0.5 rounded-lg">
           {material.codigo}
@@ -33,7 +45,7 @@ export default function MaterialCard({ material }) {
         <StockBadge status={material.status_estoque} />
       </div>
 
-      {/* Descrição */}
+      {/* Descricao */}
       <div className="flex-1">
         <p className="text-sm font-medium text-[#e8eaf0] leading-snug line-clamp-2">
           {material.descricao}
@@ -41,29 +53,34 @@ export default function MaterialCard({ material }) {
         <p className="text-xs text-[#8b91a8] mt-1.5">
           {material.categoria_nome}
         </p>
-        {/* Saldo do estoque */}
-        {material.quantidade !== null && material.quantidade !== undefined && (
-          <p className="text-xs mt-0.5">
-            Estoque:{' '}
-            <span className={`font-medium ${
-              semEstoque ? 'text-red-400' :
-              material.quantidade <= material.nivel_minimo ? 'text-yellow-400' :
-              'text-green-400'
-            }`}>
-              {material.quantidade}
-            </span>
-          </p>
+
+        {/* Estoque ERP */}
+        {qtdExibida !== null && qtdExibida !== undefined && (
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <p className="text-xs">
+              Estoque:{' '}
+              <span className={`font-semibold ${corQtd}`}>
+                {qtdExibida} {material.unidade || 'un'}
+              </span>
+            </p>
+            {temSyncErp && (
+              <span className="flex items-center gap-0.5 text-[10px] text-[#8b91a8]">
+                <RefreshCw size={9} />
+                {formatSync(material.ultima_sync_erp)}
+              </span>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Quantidade no carrinho (se houver) */}
+      {/* Quantidade no carrinho */}
       {noCarrinho && (
         <div className="text-xs text-[#4f6ef7] font-medium">
-          {noCarrinho.quantidade}× no carrinho
+          {noCarrinho.quantidade}x no carrinho
         </div>
       )}
 
-      {/* Seletor de quantidade + botão adicionar */}
+      {/* Seletor de quantidade + botao adicionar */}
       {!semEstoque ? (
         <div className="flex items-center gap-2">
           <div className="flex items-center bg-[#12141d] border border-[#2e3347] rounded-xl overflow-hidden">

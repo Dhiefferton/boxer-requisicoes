@@ -1,5 +1,5 @@
-// ============================================================
-// controllers/materiaisController.js — Catálogo de Materiais
+﻿// ============================================================
+// controllers/materiaisController.js - Catalogo de Materiais
 // ============================================================
 
 import { query } from '../config/db.js';
@@ -9,9 +9,10 @@ const BASE_SELECT = `
     m.id, m.codigo, m.descricao, m.unidade, m.ativo,
     c.nome AS categoria_nome, c.icone AS categoria_icone, c.id AS categoria_id,
     e.quantidade, e.nivel_minimo,
+    m.quantidade_erp, m.ultima_sync_erp,
     CASE
-      WHEN e.quantidade = 0 THEN 'sem_estoque'
-      WHEN e.quantidade <= e.nivel_minimo THEN 'baixo_estoque'
+      WHEN COALESCE(m.quantidade_erp, e.quantidade, 0) = 0 THEN 'sem_estoque'
+      WHEN COALESCE(m.quantidade_erp, e.quantidade, 0) <= e.nivel_minimo THEN 'baixo_estoque'
       ELSE 'disponivel'
     END AS status_estoque
   FROM materiais m
@@ -99,7 +100,7 @@ export async function detalharMaterial(req, res, next) {
     );
 
     if (!result.rows[0]) {
-      return res.status(404).json({ erro: 'Material não encontrado.' });
+      return res.status(404).json({ erro: 'Material nao encontrado.' });
     }
 
     res.json({ material: result.rows[0] });
@@ -108,13 +109,13 @@ export async function detalharMaterial(req, res, next) {
   }
 }
 
-// POST /materiais — Somente admin
+// POST /materiais - Somente admin
 export async function criarMaterial(req, res, next) {
   try {
     const { codigo, descricao, categoria_id, unidade = 'UN' } = req.body;
 
     if (!codigo || !descricao || !categoria_id) {
-      return res.status(400).json({ erro: 'Campos obrigatórios: codigo, descricao, categoria_id' });
+      return res.status(400).json({ erro: 'Campos obrigatorios: codigo, descricao, categoria_id' });
     }
 
     const result = await query(
@@ -137,7 +138,7 @@ export async function criarMaterial(req, res, next) {
   }
 }
 
-// PATCH /materiais/:id — Editar informações do material — Somente admin
+// PATCH /materiais/:id - Editar informacoes do material - Somente admin
 export async function editarMaterial(req, res, next) {
   try {
     const { id } = req.params;
@@ -162,7 +163,7 @@ export async function editarMaterial(req, res, next) {
     );
 
     if (!result.rows[0]) {
-      return res.status(404).json({ erro: 'Material não encontrado.' });
+      return res.status(404).json({ erro: 'Material nao encontrado.' });
     }
 
     res.json({ material: result.rows[0] });
@@ -171,14 +172,14 @@ export async function editarMaterial(req, res, next) {
   }
 }
 
-// PATCH /materiais/:id/estoque — Somente operador/admin
+// PATCH /materiais/:id/estoque - Somente operador/admin
 export async function atualizarEstoque(req, res, next) {
   try {
     const { id } = req.params;
     const { quantidade, nivel_minimo } = req.body;
 
     if (quantidade === undefined) {
-      return res.status(400).json({ erro: 'Campo obrigatório: quantidade' });
+      return res.status(400).json({ erro: 'Campo obrigatorio: quantidade' });
     }
 
     const result = await query(
@@ -192,7 +193,7 @@ export async function atualizarEstoque(req, res, next) {
     );
 
     if (!result.rows[0]) {
-      return res.status(404).json({ erro: 'Material não encontrado.' });
+      return res.status(404).json({ erro: 'Material nao encontrado.' });
     }
 
     res.json({ estoque: result.rows[0] });
