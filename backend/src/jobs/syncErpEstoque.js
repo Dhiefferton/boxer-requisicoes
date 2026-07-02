@@ -36,7 +36,7 @@ async function executarSync(db) {
     const result = await db.query(
       `SELECT m.codigo FROM materiais m
        JOIN categorias c ON c.id = m.categoria_id
-       WHERE c.nome = 'Partes e Peças' AND m.ativo = TRUE`
+       WHERE c.id = 6 AND m.ativo = TRUE`
     );
     const codigos = result.rows.map(r => r.codigo);
     console.log(`[SyncERP] Buscando estoque de ${codigos.length} pecas...`);
