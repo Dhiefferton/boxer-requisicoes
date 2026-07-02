@@ -1,4 +1,4 @@
-﻿import { getToken } from '../integrations/erpZen.js';
+import { getToken } from '../integrations/erpZen.js';
 
 const ZEN_BASE_URL = 'https://api.zenerp.app.br';
 const ZEN_TENANT   = 'boxer';
@@ -22,7 +22,7 @@ async function buscarEstoquePorCodigo(token, codigo) {
   const items = await response.json();
   if (!Array.isArray(items)) return 0;
   return items
-    .filter(i => i.status === 'FREE')
+    .filter(i => i.status === 'FREE' && i.type === 'REGULAR')
     .reduce((sum, i) => sum + (i.quantity || 0), 0);
 }
 
@@ -36,7 +36,7 @@ async function executarSync(db) {
     const result = await db.query(
       `SELECT m.codigo FROM materiais m
        JOIN categorias c ON c.id = m.categoria_id
-       WHERE c.nome = 'Partes e Peças' AND m.ativo = TRUE`
+       WHERE c.nome = 'Partes e Pe�as' AND m.ativo = TRUE`
     );
     const codigos = result.rows.map(r => r.codigo);
     console.log(`[SyncERP] Buscando estoque de ${codigos.length} pecas...`);
