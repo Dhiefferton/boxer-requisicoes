@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // pages/operador/PainelOperador.jsx
 // ============================================================
 import { useState } from 'react';
@@ -47,23 +47,28 @@ export default function PainelOperador() {
   async function gerarRelatorio() {
     setGerando(true);
     try {
-      // Busca detalhes de todas as requisições
       const linhas = [];
-
       for (const req of requisicoes) {
-        const { data } = await requisicoesService.detalhar(req.id);
-        const detalhe = data.requisicao;
-
-        for (const item of detalhe.itens) {
-          linhas.push({
-            'Data Solicitada':       formatarData(req.created_at),
-            'Código do Produto':     item.codigo_snapshot,
-            'Descrição do Produto':  item.descricao_snapshot,
-            'Quantidade Solicitada': item.quantidade,
-            'Solicitante':           req.solicitante_nome || '—',
-            'Departamento':          req.departamento_nome || '—',
-            'Status':                req.status,
-          });
+        linhas.push({
+          'Requisicao':      `#${req.id}`,
+          'Data':            req.created_at ? new Date(req.created_at).toLocaleDateString('pt-BR') : '-',
+          'Solicitante':     req.solicitante_nome || '-',
+          'Departamento':    req.departamento_nome || '-',
+          'Status':          req.status,
+        });
+      }
+      const ws = XLSX.utils.json_to_sheet(linhas);
+      ws['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 25 }, { wch: 25 }, { wch: 15 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Requisicoes');
+      const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+      XLSX.writeFile(wb, `relatorio-requisicoes-${dataHoje}.xlsx`);
+    } catch (err) {
+      console.error('Erro ao gerar relatorio:', err);
+    } finally {
+      setGerando(false);
+    }
+  });
         }
       }
 
@@ -259,3 +264,4 @@ export default function PainelOperador() {
     </div>
   );
 }
+
