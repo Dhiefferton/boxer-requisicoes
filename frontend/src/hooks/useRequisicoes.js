@@ -13,7 +13,7 @@ export function useRequisicoes(statusFiltro = '') {
     setLoading(true);
     setErro('');
     try {
-      const params = { limite: 100 };
+      const params = { limite: 5000 };
       if (statusFiltro) params.status = statusFiltro;
       const { data } = await requisicoesService.listar(params);
       setRequisicoes(data.requisicoes);
