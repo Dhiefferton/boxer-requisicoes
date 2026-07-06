@@ -76,7 +76,7 @@ export async function criarCardPipefy({ requisicaoId, solicitante, departamento,
       }
     }`;
 
-    const result = await pipefyQuery(mutation);
+    const result = await pipefyMutation(mutation);
     const cardId = result?.createCard?.card?.id;
 
     if (cardId) {
