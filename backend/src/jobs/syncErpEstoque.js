@@ -60,19 +60,22 @@ async function executarSync(db) {
       console.log(`[SyncERP] Processados ${totalRegistros} registros PEC do ERP...`);
       if (pagina.length < TAMANHO_PAGINA) continua = false;
     }
-    let atualizados = 0;
-    for (const codigo of codigosSet) {
-      const quantidade = saldos[codigo] || 0;
-      await db.query(
-        `UPDATE materiais SET quantidade_erp = $1, ultima_sync_erp = NOW() WHERE codigo = $2`,
-        [quantidade, codigo]
-      );
-      atualizados++;
-    }
+
+    // Update em lote usando UNNEST - uma unica query em vez de 3334
+    const codigos = Array.from(codigosSet);
+    const quantidades = codigos.map(c => saldos[c] || 0);
+
+    await db.query(
+      `UPDATE materiais SET quantidade_erp = data.qtd, ultima_sync_erp = NOW()
+       FROM (SELECT UNNEST($1::text[]) AS cod, UNNEST($2::int[]) AS qtd) AS data
+       WHERE materiais.codigo = data.cod`,
+      [codigos, quantidades]
+    );
+
     const duracao = ((Date.now() - inicio) / 1000).toFixed(1);
     _ultimaSync = new Date();
-    _ultimoResultado = { atualizados, total: codigosSet.size, totalRegistrosERP: totalRegistros, duracao };
-    console.log(`[SyncERP] Concluido em ${duracao}s - ${atualizados} pecas atualizadas.`);
+    _ultimoResultado = { atualizados: codigos.length, total: codigosSet.size, totalRegistrosERP: totalRegistros, duracao };
+    console.log(`[SyncERP] Concluido em ${duracao}s - ${codigos.length} pecas atualizadas.`);
   } catch (err) {
     console.error('[SyncERP] Erro:', err.message);
   } finally {
