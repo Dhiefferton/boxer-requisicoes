@@ -1,16 +1,17 @@
-import { getToken } from '../integrations/erpZen.js';
+﻿import { getToken } from '../integrations/erpZen.js';
 
 const ZEN_BASE_URL = 'https://api.zenerp.app.br';
 const ZEN_TENANT   = 'boxer';
 const INTERVALO_MS = 5 * 60 * 1000;
+const TAMANHO_PAGINA = 500;
 
 let _jobAtivo = false;
 let _intervalId = null;
 let _ultimaSync = null;
 let _ultimoResultado = null;
 
-async function buscarEstoquePorCodigo(token, codigo) {
-  const url = `${ZEN_BASE_URL}/material/stock?q=productPacking.code%3D%3D%22${encodeURIComponent(codigo)}%22&max=500`;
+async function buscarPagina(token, offset) {
+  const url = `${ZEN_BASE_URL}/material/stock?first=${offset}&max=${TAMANHO_PAGINA}`;
   const response = await fetch(url, {
     headers: {
       'accept': 'application/json',
@@ -18,12 +19,9 @@ async function buscarEstoquePorCodigo(token, codigo) {
       'tenant': ZEN_TENANT,
     },
   });
-  if (!response.ok) return 0;
+  if (!response.ok) return [];
   const items = await response.json();
-  if (!Array.isArray(items)) return 0;
-  return items
-    .filter(i => i.status === 'FREE' && i.type === 'REGULAR')
-    .reduce((sum, i) => sum + (i.quantity || 0), 0);
+  return Array.isArray(items) ? items : [];
 }
 
 async function executarSync(db) {
@@ -38,11 +36,33 @@ async function executarSync(db) {
        JOIN categorias c ON c.id = m.categoria_id
        WHERE c.id = 6 AND m.ativo = TRUE`
     );
-    const codigos = result.rows.map(r => r.codigo);
-    console.log(`[SyncERP] Buscando estoque de ${codigos.length} pecas...`);
+    const codigosSet = new Set(result.rows.map(r => r.codigo));
+    console.log(`[SyncERP] Monitorando ${codigosSet.size} pecas...`);
+    const saldos = {};
+    let offset = 0;
+    let continua = true;
+    let totalRegistros = 0;
+    while (continua) {
+      const pagina = await buscarPagina(token, offset);
+      if (pagina.length === 0) { continua = false; break; }
+      for (const item of pagina) {
+        const produto = item.productPacking?.product;
+        if (!produto) continue;
+        if (produto.productProfile?.code !== 'PEC') continue;
+        if (item.status !== 'FREE') continue;
+        if (item.type !== 'REGULAR') continue;
+        const codigo = produto.code;
+        if (!codigosSet.has(codigo)) continue;
+        saldos[codigo] = (saldos[codigo] || 0) + (item.quantity || 0);
+      }
+      totalRegistros += pagina.length;
+      offset += pagina.length;
+      console.log(`[SyncERP] Processados ${totalRegistros} registros do ERP...`);
+      if (pagina.length < TAMANHO_PAGINA) continua = false;
+    }
     let atualizados = 0;
-    for (const codigo of codigos) {
-      const quantidade = await buscarEstoquePorCodigo(token, codigo);
+    for (const codigo of codigosSet) {
+      const quantidade = saldos[codigo] || 0;
       await db.query(
         `UPDATE materiais SET quantidade_erp = $1, ultima_sync_erp = NOW() WHERE codigo = $2`,
         [quantidade, codigo]
@@ -51,7 +71,7 @@ async function executarSync(db) {
     }
     const duracao = ((Date.now() - inicio) / 1000).toFixed(1);
     _ultimaSync = new Date();
-    _ultimoResultado = { atualizados, total: codigos.length, duracao };
+    _ultimoResultado = { atualizados, total: codigosSet.size, totalRegistrosERP: totalRegistros, duracao };
     console.log(`[SyncERP] Concluido em ${duracao}s - ${atualizados} pecas atualizadas.`);
   } catch (err) {
     console.error('[SyncERP] Erro:', err.message);
