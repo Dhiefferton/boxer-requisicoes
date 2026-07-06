@@ -4,6 +4,7 @@ const ZEN_BASE_URL = 'https://api.zenerp.app.br';
 const ZEN_TENANT   = 'boxer';
 const INTERVALO_MS = 5 * 60 * 1000;
 const TAMANHO_PAGINA = 500;
+const FILTRO_PEC = 'productPacking.product.productProfile.code%3D%3D%22PEC%22';
 
 let _jobAtivo = false;
 let _intervalId = null;
@@ -11,7 +12,7 @@ let _ultimaSync = null;
 let _ultimoResultado = null;
 
 async function buscarPagina(token, offset) {
-  const url = `${ZEN_BASE_URL}/material/stock?first=${offset}&max=${TAMANHO_PAGINA}`;
+  const url = `${ZEN_BASE_URL}/material/stock?q=${FILTRO_PEC}&first=${offset}&max=${TAMANHO_PAGINA}`;
   const response = await fetch(url, {
     headers: {
       'accept': 'application/json',
@@ -48,7 +49,6 @@ async function executarSync(db) {
       for (const item of pagina) {
         const produto = item.productPacking?.product;
         if (!produto) continue;
-        if (produto.productProfile?.code !== 'PEC') continue;
         if (item.status !== 'FREE') continue;
         if (item.type !== 'REGULAR') continue;
         const codigo = produto.code;
@@ -57,7 +57,7 @@ async function executarSync(db) {
       }
       totalRegistros += pagina.length;
       offset += pagina.length;
-      console.log(`[SyncERP] Processados ${totalRegistros} registros do ERP...`);
+      console.log(`[SyncERP] Processados ${totalRegistros} registros PEC do ERP...`);
       if (pagina.length < TAMANHO_PAGINA) continua = false;
     }
     let atualizados = 0;
