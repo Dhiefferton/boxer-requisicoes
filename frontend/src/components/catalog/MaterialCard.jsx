@@ -1,4 +1,4 @@
-// ============================================================
+ï»¿// ============================================================
 // components/catalog/MaterialCard.jsx - Card do catalogo
 // ============================================================
 import { Plus, Minus, RefreshCw } from 'lucide-react';
@@ -13,8 +13,8 @@ export default function MaterialCard({ material }) {
   const noCarrinho = itens.find(i => i.material.id === material.id);
   const semEstoque = material.status_estoque === 'sem_estoque';
 
-  const qtdExibida = material.categoria_nome === "Partes e Peças" ? (material.quantidade_erp ?? material.quantidade) : material.quantidade;
-  const temSyncErp = material.categoria_nome === "Partes e Peças" && material.quantidade_erp !== null && material.quantidade_erp !== undefined;
+  const qtdExibida = material.categoria_id === 6 ? (material.quantidade_erp ?? material.quantidade) : material.quantidade;
+  const temSyncErp = material.categoria_id === 6 && material.quantidade_erp !== null && material.quantidade_erp !== undefined;
 
   const corQtd = semEstoque ? 'text-red-400' :
     material.status_estoque === 'baixo_estoque' ? 'text-yellow-400' : 'text-green-400';
