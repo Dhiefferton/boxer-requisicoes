@@ -68,35 +68,6 @@ export default function PainelOperador() {
     } finally {
       setGerando(false);
     }
-  });
-        }
-      }
-
-      // Gera o arquivo Excel
-      const ws = XLSX.utils.json_to_sheet(linhas);
-
-      // Ajusta largura das colunas
-      ws['!cols'] = [
-        { wch: 16 }, // Data
-        { wch: 18 }, // Código
-        { wch: 45 }, // Descrição
-        { wch: 22 }, // Quantidade
-        { wch: 25 }, // Solicitante
-        { wch: 25 }, // Departamento
-        { wch: 15 }, // Status
-      ];
-
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Requisições');
-
-      const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
-      XLSX.writeFile(wb, `relatorio-requisicoes-${dataHoje}.xlsx`);
-
-    } catch (err) {
-      console.error('Erro ao gerar relatório:', err);
-    } finally {
-      setGerando(false);
-    }
   }
 
   return (
