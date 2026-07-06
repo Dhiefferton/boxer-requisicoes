@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { login, me, trocarSenha } from '../controllers/authController.js';
 import {
@@ -6,7 +6,7 @@ import {
   criarMaterial, editarMaterial, atualizarEstoque
 } from '../controllers/materiaisController.js';
 import {
-  criarRequisicao, listarRequisicoes,
+  criarRequisicao, listarRequisicoes, relatorioRequisicoes,
   detalharRequisicao, mudarStatus
 } from '../controllers/requisicoesController.js';
 import {
@@ -40,6 +40,7 @@ router.patch('/materiais/:id/estoque', autenticar, exigirPerfil('operador', 'adm
 
 // ── Requisições
 router.post('/requisicoes',             autenticar, criarRequisicao);
+router.get('/requisicoes/relatorio', autenticar, relatorioRequisicoes);
 router.get('/requisicoes',              autenticar, listarRequisicoes);
 router.get('/requisicoes/:id',          autenticar, detalharRequisicao);
 router.patch('/requisicoes/:id/status', autenticar, exigirPerfil('operador', 'admin'), mudarStatus);

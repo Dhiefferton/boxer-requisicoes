@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // controllers/requisicoesController.js — Requisições
 // ============================================================
 
@@ -344,6 +344,26 @@ export async function mudarStatus(req, res, next) {
 
     res.json({ mensagem: `Status atualizado para "${status}" com sucesso.` });
 
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function relatorioRequisicoes(req, res, next) {
+  try {
+    const result = await query(`
+      SELECT
+        r.id, r.status, r.created_at,
+        u.nome AS solicitante_nome,
+        d.nome AS departamento_nome,
+        i.codigo_snapshot, i.descricao_snapshot, i.quantidade
+      FROM requisicoes r
+      JOIN usuarios u ON u.id = r.usuario_id
+      LEFT JOIN departamentos d ON d.id = u.departamento_id
+      JOIN itens_requisicao i ON i.requisicao_id = r.id
+      ORDER BY r.id DESC
+    `);
+    res.json({ itens: result.rows });
   } catch (err) {
     next(err);
   }

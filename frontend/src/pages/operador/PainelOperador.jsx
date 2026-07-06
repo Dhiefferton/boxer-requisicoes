@@ -47,18 +47,19 @@ export default function PainelOperador() {
   async function gerarRelatorio() {
     setGerando(true);
     try {
-      const linhas = [];
-      for (const req of requisicoes) {
-        linhas.push({
-          'Requisicao':      `#${req.id}`,
-          'Data':            req.created_at ? new Date(req.created_at).toLocaleDateString('pt-BR') : '-',
-          'Solicitante':     req.solicitante_nome || '-',
-          'Departamento':    req.departamento_nome || '-',
-          'Status':          req.status,
-        });
-      }
+      const { data } = await requisicoesService.relatorio();
+      const linhas = data.itens.map(i => ({
+        'Requisicao':   `#${i.id}`,
+        'Data':         i.created_at ? new Date(i.created_at).toLocaleDateString('pt-BR') : '-',
+        'Solicitante':  i.solicitante_nome || '-',
+        'Departamento': i.departamento_nome || '-',
+        'Status':       i.status,
+        'Codigo':       i.codigo_snapshot,
+        'Descricao':    i.descricao_snapshot,
+        'Quantidade':   i.quantidade,
+      }));
       const ws = XLSX.utils.json_to_sheet(linhas);
-      ws['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 25 }, { wch: 25 }, { wch: 15 }];
+      ws['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 18 }, { wch: 45 }, { wch: 12 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Requisicoes');
       const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');

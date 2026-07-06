@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // services/api.js — Cliente HTTP centralizado
 // ============================================================
 import axios from 'axios';
@@ -48,6 +48,7 @@ export const requisicoesService = {
   criar:       (dados)           => api.post('/requisicoes', dados),
   listar:      (params)          => api.get('/requisicoes', { params }),
   detalhar:    (id)              => api.get(`/requisicoes/${id}`),
+  relatorio:    () => api.get('/requisicoes/relatorio'),
   mudarStatus: (id, status, obs) => api.patch(`/requisicoes/${id}/status`, { status, observacao: obs }),
 };
 
