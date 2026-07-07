@@ -409,7 +409,7 @@ function AbaEstoque() {
   const [fornsProd,     setFornsProd]    = useState([]);
   const [todosForns,    setTodosForns]   = useState([]);
   const [fornSelecionado, setFornSelecionado] = useState('');
-  const [precоForn,     setPrecoForn]    = useState('');
+  const [precoForn,     setPrecoForn]    = useState('');
 
   async function carregarFornsProd(materialId) {
     const [f, t] = await Promise.all([
