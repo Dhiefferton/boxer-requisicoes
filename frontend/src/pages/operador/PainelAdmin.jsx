@@ -697,7 +697,7 @@ function AbaEstoque() {
                 <p className="text-sm text-[#e8eaf0] truncate">{m.descricao}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <button onClick={() => setEditandoProd({ id: m.id, codigo: m.codigo, descricao: m.descricao, categoria_id: m.categoria_id, unidade: m.unidade }); carregarFornsProd(m.id)}
+                <button onClick={() => { setEditandoProd({ id: m.id, codigo: m.codigo, descricao: m.descricao, categoria_id: m.categoria_id, unidade: m.unidade }); carregarFornsProd(m.id); }}
                   className="p-1.5 rounded-lg bg-[#4f6ef7]/10 text-[#4f6ef7] hover:bg-[#4f6ef7]/20 transition-colors" title="Editar produto">
                   <Pencil size={13} />
                 </button>
