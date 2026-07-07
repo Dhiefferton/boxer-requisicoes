@@ -1,10 +1,10 @@
-// ============================================================
+﻿// ============================================================
 // pages/operador/PainelAdmin.jsx
 // ============================================================
 import { useState, useEffect, useRef } from 'react';
 import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Trash2, Search, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import api, { adminService, materiaisService } from '../../services/api';
+import api, { adminService, materiaisService, fornecedoresService } from '../../services/api';
 import { Button, Spinner } from '../../components/ui';
 
 // ── Aba Usuários ─────────────────────────────────────────────
@@ -678,6 +678,116 @@ function AbaEstoque() {
   );
 }
 
+
+function AbaFornecedores() {
+  const [fornecedores, setFornecedores] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [criando, setCriando] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [form, setForm] = useState({ empresa: '', representante: '', telefone: '', email: '', observacoes: '' });
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const inputClass = "w-full bg-[#12141d] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#4f6ef7]";
+
+  async function carregar() {
+    setLoading(true);
+    try {
+      const { data } = await fornecedoresService.listar();
+      setFornecedores(data.fornecedores);
+    } finally { setLoading(false); }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  async function handleCriar(e) {
+    e.preventDefault();
+    setErro(''); setSalvando(true);
+    try {
+      await fornecedoresService.criar(form);
+      setCriando(false);
+      setForm({ empresa: '', representante: '', telefone: '', email: '', observacoes: '' });
+      carregar();
+    } catch (err) {
+      setErro(err.response?.data?.erro || 'Erro ao criar fornecedor.');
+    } finally { setSalvando(false); }
+  }
+
+  async function handleEditar(e) {
+    e.preventDefault();
+    setErro(''); setSalvando(true);
+    try {
+      await fornecedoresService.editar(editando.id, editando);
+      setEditando(null);
+      carregar();
+    } catch (err) {
+      setErro(err.response?.data?.erro || 'Erro ao editar fornecedor.');
+    } finally { setSalvando(false); }
+  }
+
+  async function handleExcluir(id) {
+    if (!confirm('Excluir este fornecedor?')) return;
+    await fornecedoresService.excluir(id);
+    carregar();
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-[#e8eaf0]">Fornecedores ({fornecedores.length})</h2>
+        <button onClick={() => { setCriando(true); setEditando(null); }} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25">
+          <Plus size={13} /> Novo Fornecedor
+        </button>
+      </div>
+
+      {(criando || editando) && (
+        <div className="bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-4 space-y-3">
+          <h3 className="font-semibold text-[#e8eaf0] text-sm">{criando ? 'Novo Fornecedor' : 'Editar Fornecedor'}</h3>
+          <form onSubmit={criando ? handleCriar : handleEditar} className="space-y-3">
+            <div><label className="text-xs text-[#8b91a8] mb-1 block">Empresa *</label>
+              <input value={criando ? form.empresa : editando.empresa} onChange={e => criando ? setForm(f => ({...f, empresa: e.target.value})) : setEditando(f => ({...f, empresa: e.target.value}))} className={inputClass} required /></div>
+            <div><label className="text-xs text-[#8b91a8] mb-1 block">Representante</label>
+              <input value={criando ? form.representante : editando.representante || ''} onChange={e => criando ? setForm(f => ({...f, representante: e.target.value})) : setEditando(f => ({...f, representante: e.target.value}))} className={inputClass} /></div>
+            <div><label className="text-xs text-[#8b91a8] mb-1 block">Telefone</label>
+              <input value={criando ? form.telefone : editando.telefone || ''} onChange={e => criando ? setForm(f => ({...f, telefone: e.target.value})) : setEditando(f => ({...f, telefone: e.target.value}))} className={inputClass} /></div>
+            <div><label className="text-xs text-[#8b91a8] mb-1 block">Email</label>
+              <input type="email" value={criando ? form.email : editando.email || ''} onChange={e => criando ? setForm(f => ({...f, email: e.target.value})) : setEditando(f => ({...f, email: e.target.value}))} className={inputClass} /></div>
+            <div><label className="text-xs text-[#8b91a8] mb-1 block">Observacoes</label>
+              <textarea value={criando ? form.observacoes : editando.observacoes || ''} onChange={e => criando ? setForm(f => ({...f, observacoes: e.target.value})) : setEditando(f => ({...f, observacoes: e.target.value}))} className={inputClass} rows={2} /></div>
+            {erro && <p className="text-xs text-red-400">{erro}</p>}
+            <div className="flex gap-2 pt-1">
+              <button type="button" onClick={() => { setCriando(false); setEditando(null); }} className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[#2e3347] text-[#8b91a8]">Cancelar</button>
+              <button type="submit" disabled={salvando} className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-[#4f6ef7] text-white disabled:opacity-40">{salvando ? 'Salvando...' : 'Salvar'}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {loading ? <div className="flex justify-center py-8"><Spinner className="text-[#4f6ef7]" /></div> : (
+        <div className="space-y-2">
+          {fornecedores.length === 0 ? <p className="text-sm text-[#8b91a8] text-center py-8">Nenhum fornecedor cadastrado</p> : (
+            fornecedores.map(f => (
+              <div key={f.id} className="bg-[#1a1d27] border border-[#2e3347] rounded-xl px-4 py-3 flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[#e8eaf0]">{f.empresa}</p>
+                  {f.representante && <p className="text-xs text-[#8b91a8] mt-0.5">Rep: {f.representante}</p>}
+                  <div className="flex gap-3 mt-1">
+                    {f.telefone && <span className="text-xs text-[#8b91a8]">{f.telefone}</span>}
+                    {f.email && <span className="text-xs text-[#4f6ef7]">{f.email}</span>}
+                  </div>
+                  {f.observacoes && <p className="text-xs text-[#8b91a8] mt-1 italic">{f.observacoes}</p>}
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => { setEditando({...f}); setCriando(false); }} className="p-1.5 rounded-lg text-[#8b91a8] hover:text-[#4f6ef7] hover:bg-[#4f6ef7]/10"><Pencil size={13} /></button>
+                  <button onClick={() => handleExcluir(f.id)} className="p-1.5 rounded-lg text-[#8b91a8] hover:text-red-400 hover:bg-red-400/10"><Trash2 size={13} /></button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PainelAdmin() {
   const [aba, setAba] = useState('usuarios');
   return (
@@ -696,10 +806,15 @@ export default function PainelAdmin() {
         <button onClick={() => setAba('estoque')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'estoque' ? 'bg-[#4f6ef7] text-white' : 'text-[#8b91a8] hover:text-[#e8eaf0]'}`}>
           <Package size={15} /> Estoque
         </button>
+        <button onClick={() => setAba('fornecedores')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'fornecedores' ? 'bg-[#4f6ef7] text-white' : 'text-[#8b91a8] hover:text-[#e8eaf0]'}`}>
+          <Users size={15} /> Fornecedores
+        </button>
       </div>
       {aba === 'usuarios'      && <AbaUsuarios />}
       {aba === 'departamentos' && <AbaDepartamentos />}
-      {aba === 'estoque'       && <AbaEstoque />}
+      {aba === 'estoque' && <AbaEstoque />}
+      {aba === 'fornecedores' && <AbaFornecedores />}
     </div>
   );
 }
+

@@ -60,4 +60,11 @@ export const adminService = {
   departamentos:    ()       => api.get('/admin/departamentos'),
 };
 
+export const fornecedoresService = {
+  listar:  () => api.get('/fornecedores'),
+  criar:   (d) => api.post('/fornecedores', d),
+  editar:  (id, d) => api.patch('/fornecedores/'+id, d),
+  excluir: (id) => api.delete('/fornecedores/'+id),
+};
+
 export default api;
