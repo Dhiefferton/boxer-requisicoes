@@ -1,10 +1,10 @@
-// ============================================================
+﻿// ============================================================
 // pages/operador/MRP.jsx — Necessidade de Estoque
 // ============================================================
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, FileDown, Upload, AlertTriangle, AlertCircle, CheckCircle, XCircle, TrendingDown, Search, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import api, { materiaisService } from '../../services/api';
+import api, { materialFornecedoresService, materiaisService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
 const STATUS_CONFIG = {
@@ -90,15 +90,25 @@ export default function MRP() {
     }
   }
 
-  function exportarExcel() {
+  async function exportarExcel() {
     const itenCompra = itens.filter(i => i.quantidade_comprar > 0);
+    if (itenCompra.length === 0) return;
+    // Busca fornecedores de cada item
+    const fornMap = {};
+    await Promise.all(itenCompra.map(async i => {
+      try {
+        const { data } = await materialFornecedoresService.listar(i.id);
+        fornMap[i.id] = data.fornecedores;
+      } catch { fornMap[i.id] = []; }
+    }));
+    const dummy = null; if (dummy) return;
     if (itenCompra.length === 0) return;
 
     const wb = XLSX.utils.book_new();
     const colWidths = [
       { wch: 12 }, { wch: 45 }, { wch: 8 },
       { wch: 12 }, { wch: 12 }, { wch: 13 },
-      { wch: 14 }, { wch: 14 }, { wch: 10 }
+      { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 30 }, { wch: 25 }, { wch: 18 }
     ];
 
     const toRow = i => ({
@@ -111,6 +121,9 @@ export default function MRP() {
       'Média Mensal':      parseFloat(i.media_mensal),
       'Qtd a Comprar':     i.quantidade_comprar,
       'Status':            STATUS_CONFIG[i.status_mrp]?.label,
+      'Fornecedor':        (fornMap[i.id]?.[0]?.empresa || '-'),
+      'Representante':     (fornMap[i.id]?.[0]?.representante || '-'),
+      'Telefone':          (fornMap[i.id]?.[0]?.telefone || '-'),
     });
 
     // Aba geral com todos os itens
@@ -346,3 +359,4 @@ export default function MRP() {
     </div>
   );
 }
+
