@@ -93,7 +93,6 @@ export default function MRP() {
   async function exportarExcel() {
     const itenCompra = itens.filter(i => i.quantidade_comprar > 0);
     if (itenCompra.length === 0) return;
-    // Busca fornecedores de cada item
     const fornMap = {};
     await Promise.all(itenCompra.map(async i => {
       try {
@@ -101,51 +100,29 @@ export default function MRP() {
         fornMap[i.id] = data.fornecedores;
       } catch { fornMap[i.id] = []; }
     }));
-    const dummy = null; if (dummy) return;
-    if (itenCompra.length === 0) return;
-
     const wb = XLSX.utils.book_new();
-    const colWidths = [
-      { wch: 12 }, { wch: 45 }, { wch: 8 },
-      { wch: 12 }, { wch: 12 }, { wch: 13 },
-      { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 30 }, { wch: 25 }, { wch: 18 }
-    ];
-
+    const colWidths = [{ wch: 12 }, { wch: 45 }, { wch: 14 }, { wch: 30 }, { wch: 20 }];
     const toRow = i => ({
-      'Código':            i.codigo,
-      'Descrição':         i.descricao,
-      'Unidade':           i.unidade,
-      'Estoque Atual':     i.estoque_atual,
-      'Saída Total':       i.total_saida,
-      'Entrada Total':     i.total_entrada,
-      'Média Mensal':      parseFloat(i.media_mensal),
-      'Qtd a Comprar':     i.quantidade_comprar,
-      'Status':            STATUS_CONFIG[i.status_mrp]?.label,
-      'Fornecedor':        (fornMap[i.id]?.[0]?.empresa || '-'),
-      'Representante':     (fornMap[i.id]?.[0]?.representante || '-'),
-      'Telefone':          (fornMap[i.id]?.[0]?.telefone || '-'),
+      'Codigo':        i.codigo,
+      'Descricao':     i.descricao,
+      'Qtd a Comprar': i.quantidade_comprar,
+      'Fornecedor':    (fornMap[i.id]?.[0]?.empresa || '-'),
+      'Categoria':     i.categoria_nome,
     });
-
-    // Aba geral com todos os itens
     const wsGeral = XLSX.utils.json_to_sheet(itenCompra.map(toRow));
     wsGeral['!cols'] = colWidths;
     XLSX.utils.book_append_sheet(wb, wsGeral, 'Geral');
-
-    // Uma aba por categoria
     const porCategoria = {};
     itenCompra.forEach(i => {
       if (!porCategoria[i.categoria_nome]) porCategoria[i.categoria_nome] = [];
       porCategoria[i.categoria_nome].push(i);
     });
-
     Object.entries(porCategoria).sort(([a], [b]) => a.localeCompare(b)).forEach(([cat, itenscat]) => {
-      // Nome da aba limitado a 31 chars (limite do Excel)
       const nomAba = cat.substring(0, 31);
       const ws = XLSX.utils.json_to_sheet(itenscat.map(toRow));
       ws['!cols'] = colWidths;
       XLSX.utils.book_append_sheet(wb, ws, nomAba);
     });
-
     const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
     XLSX.writeFile(wb, `lista-compras-${dataHoje}.xlsx`);
   }
