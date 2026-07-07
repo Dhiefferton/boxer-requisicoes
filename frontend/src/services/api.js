@@ -60,6 +60,12 @@ export const adminService = {
   departamentos:    ()       => api.get('/admin/departamentos'),
 };
 
+export const materialFornecedoresService = {
+  listar:     (materialId) => api.get('/materiais/'+materialId+'/fornecedores'),
+  vincular:   (materialId, d) => api.post('/materiais/'+materialId+'/fornecedores', d),
+  desvincular:(materialId, fornecedorId) => api.delete('/materiais/'+materialId+'/fornecedores/'+fornecedorId),
+};
+
 export const fornecedoresService = {
   listar:  () => api.get('/fornecedores'),
   criar:   (d) => api.post('/fornecedores', d),

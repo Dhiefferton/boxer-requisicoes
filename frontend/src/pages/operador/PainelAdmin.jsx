@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Trash2, Search, Building2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import api, { adminService, materiaisService, fornecedoresService } from '../../services/api';
+import api, { adminService, materiaisService, fornecedoresService, materialFornecedoresService } from '../../services/api';
 import { Button, Spinner } from '../../components/ui';
 
 // ── Aba Usuários ─────────────────────────────────────────────
@@ -406,6 +406,32 @@ function AbaEstoque() {
   const [erroNovo,     setErroNovo]     = useState('');
   const [formNovo,     setFormNovo]     = useState({ codigo: '', descricao: '', categoria_id: '', unidade: 'UN', quantidade: 0 });
   const inputFileRef = useRef(null);
+  const [fornsProd,     setFornsProd]    = useState([]);
+  const [todosForns,    setTodosForns]   = useState([]);
+  const [fornSelecionado, setFornSelecionado] = useState('');
+  const [precоForn,     setPrecoForn]    = useState('');
+
+  async function carregarFornsProd(materialId) {
+    const [f, t] = await Promise.all([
+      materialFornecedoresService.listar(materialId),
+      fornecedoresService.listar(),
+    ]);
+    setFornsProd(f.data.fornecedores);
+    setTodosForns(t.data.fornecedores);
+    setFornSelecionado('');
+    setPrecoForn('');
+  }
+
+  async function handleVincularForn() {
+    if (!fornSelecionado) return;
+    await materialFornecedoresService.vincular(editandoProd.id, { fornecedor_id: parseInt(fornSelecionado), preco_unitario: precoForn || null });
+    carregarFornsProd(editandoProd.id);
+  }
+
+  async function handleDesvincularForn(fornId) {
+    await materialFornecedoresService.desvincular(editandoProd.id, fornId);
+    carregarFornsProd(editandoProd.id);
+  }
 
   async function carregar() {
     setLoading(true);
@@ -615,6 +641,29 @@ function AbaEstoque() {
                   <option value="PR">PR</option><option value="KT">KT</option><option value="RS">RS</option>
                 </select></div>
               {erroProd && <p className="text-xs text-red-400">{erroProd}</p>}
+              <div className="border-t border-[#2e3347] pt-3 mt-1">
+                <p className="text-xs font-semibold text-[#8b91a8] mb-2">Fornecedores</p>
+                <div className="space-y-1.5 mb-2">
+                  {fornsProd.map(f => (
+                    <div key={f.id} className="flex items-center justify-between bg-[#12141d] rounded-lg px-3 py-2">
+                      <div>
+                        <span className="text-xs text-[#e8eaf0]">{f.empresa}</span>
+                        {f.preco_unitario && <span className="text-xs text-[#4f6ef7] ml-2">R$ {f.preco_unitario}</span>}
+                      </div>
+                      <button type="button" onClick={() => handleDesvincularForn(f.id)} className="text-red-400 hover:text-red-300 text-xs">Remover</button>
+                    </div>
+                  ))}
+                  {fornsProd.length === 0 && <p className="text-xs text-[#8b91a8]">Nenhum fornecedor vinculado</p>}
+                </div>
+                <div className="flex gap-2">
+                  <select value={fornSelecionado} onChange={e => setFornSelecionado(e.target.value)} className="flex-1 bg-[#12141d] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-3 py-2 text-xs">
+                    <option value="">Selecionar fornecedor...</option>
+                    {todosForns.filter(f => !fornsProd.find(fp => fp.id === f.id)).map(f => <option key={f.id} value={f.id}>{f.empresa}</option>)}
+                  </select>
+                  <input type="number" placeholder="Preco" value={precoForn} onChange={e => setPrecoForn(e.target.value)} className="w-24 bg-[#12141d] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-3 py-2 text-xs" />
+                  <button type="button" onClick={handleVincularForn} disabled={!fornSelecionado} className="px-3 py-2 rounded-xl text-xs font-medium bg-[#4f6ef7]/15 text-[#4f6ef7] disabled:opacity-40">+ Add</button>
+                </div>
+              </div>
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setEditandoProd(null)} className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[#2e3347] text-[#8b91a8]">Cancelar</button>
                 <button type="submit" disabled={salvandoProd} className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-[#4f6ef7] text-white disabled:opacity-40">
@@ -648,7 +697,7 @@ function AbaEstoque() {
                 <p className="text-sm text-[#e8eaf0] truncate">{m.descricao}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <button onClick={() => setEditandoProd({ id: m.id, codigo: m.codigo, descricao: m.descricao, categoria_id: m.categoria_id, unidade: m.unidade })}
+                <button onClick={() => setEditandoProd({ id: m.id, codigo: m.codigo, descricao: m.descricao, categoria_id: m.categoria_id, unidade: m.unidade }); carregarFornsProd(m.id)}
                   className="p-1.5 rounded-lg bg-[#4f6ef7]/10 text-[#4f6ef7] hover:bg-[#4f6ef7]/20 transition-colors" title="Editar produto">
                   <Pencil size={13} />
                 </button>
@@ -817,4 +866,5 @@ export default function PainelAdmin() {
     </div>
   );
 }
+
 
