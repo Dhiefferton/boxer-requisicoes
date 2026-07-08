@@ -101,15 +101,23 @@ export default function MRP() {
       } catch { fornMap[i.id] = []; }
     }));
     const wb = XLSX.utils.book_new();
-    const colWidths = [{ wch: 12 }, { wch: 45 }, { wch: 14 }, { wch: 30 }, { wch: 20 }];
-    const toRow = i => ({
-      'Codigo':        i.codigo,
-      'Descricao':     i.descricao,
-      'Qtd a Comprar': i.quantidade_comprar,
-      'Fornecedor':    (fornMap[i.id]?.[0]?.empresa || '-'),
-      'Categoria':     i.categoria_nome,
-    });
-    const wsGeral = XLSX.utils.json_to_sheet(itenCompra.map(toRow));
+    const colWidths = [{ wch: 12 }, { wch: 45 }, { wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 20 }];
+    const toRows = i => {
+      const forns = fornMap[i.id] || [];
+      if (forns.length === 0) return [{
+        'Codigo': i.codigo, 'Descricao': i.descricao,
+        'Qtd a Comprar': i.quantidade_comprar,
+        'Fornecedor': '-', 'Preco Unit': '-', 'Categoria': i.categoria_nome,
+      }];
+      return forns.map(f => ({
+        'Codigo': i.codigo, 'Descricao': i.descricao,
+        'Qtd a Comprar': i.quantidade_comprar,
+        'Fornecedor': f.empresa,
+        'Preco Unit': f.preco_unitario ? parseFloat(f.preco_unitario) : '-',
+        'Categoria': i.categoria_nome,
+      }));
+    };
+    const wsGeral = XLSX.utils.json_to_sheet(itenCompra.flatMap(toRows));
     wsGeral['!cols'] = colWidths;
     XLSX.utils.book_append_sheet(wb, wsGeral, 'Geral');
     const porCategoria = {};
@@ -119,7 +127,7 @@ export default function MRP() {
     });
     Object.entries(porCategoria).sort(([a], [b]) => a.localeCompare(b)).forEach(([cat, itenscat]) => {
       const nomAba = cat.substring(0, 31);
-      const ws = XLSX.utils.json_to_sheet(itenscat.map(toRow));
+      const ws = XLSX.utils.json_to_sheet(itenscat.flatMap(toRows));
       ws['!cols'] = colWidths;
       XLSX.utils.book_append_sheet(wb, ws, nomAba);
     });
