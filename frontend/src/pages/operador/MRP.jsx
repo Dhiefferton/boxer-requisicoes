@@ -101,17 +101,19 @@ export default function MRP() {
       } catch { fornMap[i.id] = []; }
     }));
     const wb = XLSX.utils.book_new();
-    const colWidths = [{ wch: 12 }, { wch: 45 }, { wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 20 }];
+    const colWidths = [{ wch: 12 }, { wch: 45 }, { wch: 14 }, { wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 20 }];
     const toRows = i => {
       const forns = fornMap[i.id] || [];
       if (forns.length === 0) return [{
         'Codigo': i.codigo, 'Descricao': i.descricao,
         'Qtd a Comprar': i.quantidade_comprar,
+        'Estoque Atual': i.estoque_atual,
         'Fornecedor': '-', 'Preco Unit': '-', 'Categoria': i.categoria_nome,
       }];
       return forns.map(f => ({
         'Codigo': i.codigo, 'Descricao': i.descricao,
         'Qtd a Comprar': i.quantidade_comprar,
+        'Estoque Atual': i.estoque_atual,
         'Fornecedor': f.empresa,
         'Preco Unit': f.preco_unitario ? parseFloat(f.preco_unitario) : '-',
         'Categoria': i.categoria_nome,
