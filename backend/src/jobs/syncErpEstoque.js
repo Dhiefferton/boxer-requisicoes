@@ -11,7 +11,7 @@ let _ultimaSync = null;
 let _ultimoResultado = null;
 
 async function buscarPagina(token, offset) {
-  const filtro = 'productPacking.product.productProfile.code=="PEC"';
+  const filtro = 'productPacking.product.productProfile.code=="PEC" or productPacking.product.productProfile.code=="PEC/S"';
   const url = `${ZEN_BASE_URL}/material/stock?q=${encodeURIComponent(filtro)}&first=${offset}&max=${TAMANHO_PAGINA}`;
   const response = await fetch(url, {
     headers: {
