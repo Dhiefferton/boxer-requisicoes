@@ -507,11 +507,31 @@ function AbaEstoque() {
   }
 
   function baixarModelo() {
-    const modelo = materiais.slice(0, 5).map(m => ({ 'Codigo': m.codigo, 'Descricao': m.descricao, 'Quantidade': m.quantidade ?? 0 }));
+    const modelo = materiais.slice(0, 5).map(m => ({
+      'Codigo':     m.codigo,
+      'Descricao':  m.descricao,
+      'Categoria':  categorias.find(c => c.id === m.categoria_id)?.nome || '',
+      'Unidade':    m.unidade || 'UN',
+      'Quantidade': m.quantidade ?? 0,
+    }));
     const ws = XLSX.utils.json_to_sheet(modelo);
-    ws['!cols'] = [{ wch: 15 }, { wch: 45 }, { wch: 15 }];
+    ws['!cols'] = [{ wch: 15 }, { wch: 45 }, { wch: 20 }, { wch: 12 }, { wch: 15 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Estoque');
+
+    // Aba de instrucoes explicando o novo formato
+    const instrucoes = [
+      { 'Instrucoes': 'Codigo: obrigatorio. Se ja existir, o estoque do produto e atualizado.' },
+      { 'Instrucoes': 'Se o Codigo nao existir na base, um produto novo e criado automaticamente.' },
+      { 'Instrucoes': 'Para produtos NOVOS, Descricao e Categoria sao obrigatorias.' },
+      { 'Instrucoes': `Categorias validas: ${categorias.map(c => c.nome).join(', ')}` },
+      { 'Instrucoes': 'Unidade e opcional para produtos novos (padrao: UN).' },
+      { 'Instrucoes': 'Quantidade e opcional (padrao: 0).' },
+    ];
+    const wsInfo = XLSX.utils.json_to_sheet(instrucoes);
+    wsInfo['!cols'] = [{ wch: 80 }];
+    XLSX.utils.book_append_sheet(wb, wsInfo, 'Instrucoes');
+
     XLSX.writeFile(wb, 'modelo-estoque.xlsx');
   }
 
@@ -526,20 +546,57 @@ function AbaEstoque() {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const linhas = XLSX.utils.sheet_to_json(ws);
       let atualizados = 0;
+      let criados = 0;
       const erros = [];
+
       for (const linha of linhas) {
-        const codigo = String(linha['Codigo'] || linha['codigo'] || linha['CODIGO'] || '').trim();
-        const qtd    = parseInt(linha['Quantidade'] || linha['quantidade'] || linha['QUANTIDADE'] || 0);
+        const codigo    = String(linha['Codigo'] || linha['codigo'] || linha['CODIGO'] || '').trim();
+        const descricao = String(linha['Descricao'] || linha['descricao'] || linha['DESCRICAO'] || '').trim();
+        const categoriaNome = String(linha['Categoria'] || linha['categoria'] || linha['CATEGORIA'] || '').trim();
+        const unidade   = String(linha['Unidade'] || linha['unidade'] || linha['UNIDADE'] || 'UN').trim() || 'UN';
+        const qtd       = parseInt(linha['Quantidade'] || linha['quantidade'] || linha['QUANTIDADE'] || 0) || 0;
+
         if (!codigo) continue;
+
         const material = materiais.find(m => m.codigo === codigo);
-        if (!material) { erros.push(`Código não encontrado: ${codigo}`); continue; }
+
+        if (material) {
+          // Produto ja existe: apenas atualiza o estoque, como antes.
+          try {
+            await api.patch(`/materiais/${material.id}/estoque`, { quantidade: qtd });
+            atualizados++;
+          } catch { erros.push(`Erro ao atualizar: ${codigo}`); }
+          continue;
+        }
+
+        // Produto novo: Categoria e Descricao sao obrigatorias.
+        if (!descricao) { erros.push(`Produto novo ${codigo}: Descricao obrigatoria (nao criado).`); continue; }
+        if (!categoriaNome) { erros.push(`Produto novo ${codigo}: Categoria obrigatoria (nao criado).`); continue; }
+
+        const categoria = categorias.find(c => c.nome.toLowerCase() === categoriaNome.toLowerCase());
+        if (!categoria) {
+          erros.push(`Produto novo ${codigo}: categoria "${categoriaNome}" nao encontrada (nao criado).`);
+          continue;
+        }
+
         try {
-          await api.patch(`/materiais/${material.id}/estoque`, { quantidade: qtd });
-          atualizados++;
-        } catch { erros.push(`Erro ao atualizar: ${codigo}`); }
+          const { data } = await api.post('/materiais', {
+            codigo: codigo.toUpperCase(),
+            descricao,
+            categoria_id: categoria.id,
+            unidade,
+          });
+          criados++;
+          if (qtd > 0) {
+            await api.patch(`/materiais/${data.material.id}/estoque`, { quantidade: qtd });
+          }
+        } catch (err) {
+          erros.push(`Erro ao criar ${codigo}: ${err.response?.data?.erro || 'falha desconhecida'}`);
+        }
       }
+
       await carregar();
-      setResultado({ atualizados, erros });
+      setResultado({ atualizados, criados, erros });
     } catch {
       alert('Erro ao ler a planilha.');
     } finally {
@@ -677,7 +734,7 @@ function AbaEstoque() {
 
       {resultado && (
         <div className={`rounded-xl px-4 py-3 text-sm border ${resultado.erros.length > 0 ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
-          <p className="font-medium">✓ {resultado.atualizados} produto(s) atualizado(s)!</p>
+          <p className="font-medium">✓ {resultado.atualizados} produto(s) atualizado(s), {resultado.criados} produto(s) novo(s) criado(s)!</p>
           {resultado.erros.length > 0 && <div className="mt-1">{resultado.erros.map((e, i) => <p key={i} className="text-xs text-red-400">{e}</p>)}</div>}
           <button onClick={() => setResultado(null)} className="mt-1 text-xs underline opacity-60">Fechar</button>
         </div>
