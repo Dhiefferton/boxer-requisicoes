@@ -36,7 +36,7 @@ export default function MRP() {
     try {
       await comprasService.criarProcesso({
         material_id: item.id,
-        quantidade_necessaria: item.quantidade_comprar,
+        quantidade_necessaria: parseInt(item.quantidade_comprar, 10),
       });
       navigate('/compras');
     } catch (err) {
