@@ -30,24 +30,51 @@ export default function MRP() {
   const inputImportRef = useRef(null);
   const navigate = useNavigate();
   const [solicitando, setSolicitando] = useState(null);
+  const [selecionados, setSelecionados] = useState(new Set());
+  const [enviandoLote, setEnviandoLote] = useState(false);
+
+  function alternarSelecao(id) {
+    setSelecionados(prev => {
+      const novo = new Set(prev);
+      novo.has(id) ? novo.delete(id) : novo.add(id);
+      return novo;
+    });
+  }
 
   async function solicitarCotacao(item) {
     setSolicitando(item.id);
     try {
-      await comprasService.criarProcesso({
+      await comprasService.criarProcesso([{
         material_id: item.id,
         quantidade_necessaria: parseInt(item.quantidade_comprar, 10),
-      });
+      }]);
       navigate('/compras');
     } catch (err) {
       if (err.response?.status === 409) {
-        alert('Já existe um processo de cotação em aberto para este item. Veja em Compras.');
+        alert(err.response.data?.erro || 'Já existe uma solicitação em aberto para este item.');
         navigate('/compras');
       } else {
         alert('Erro ao solicitar cotação.');
       }
     } finally {
       setSolicitando(null);
+    }
+  }
+
+  async function solicitarCotacaoEmLote() {
+    const itensSelecionados = itens
+      .filter(i => selecionados.has(i.id))
+      .map(i => ({ material_id: i.id, quantidade_necessaria: parseInt(i.quantidade_comprar, 10) }));
+    if (itensSelecionados.length === 0) return;
+    setEnviandoLote(true);
+    try {
+      await comprasService.criarProcesso(itensSelecionados);
+      setSelecionados(new Set());
+      navigate('/compras');
+    } catch (err) {
+      alert(err.response?.data?.erro || 'Erro ao solicitar cotação em lote.');
+    } finally {
+      setEnviandoLote(false);
     }
   }
 
@@ -276,6 +303,20 @@ export default function MRP() {
         )}
       </div>
 
+      {/* Barra de seleção em lote */}
+      {selecionados.size > 0 && (
+        <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#4f6ef7]/10 border border-[#4f6ef7]/30">
+          <p className="text-xs text-[#e8eaf0]">{selecionados.size} item(ns) selecionado(s)</p>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelecionados(new Set())} className="text-xs text-[#8b91a8] hover:text-[#e8eaf0]">Limpar</button>
+            <button onClick={solicitarCotacaoEmLote} disabled={enviandoLote}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#4f6ef7] text-white hover:bg-[#3d5ce0] disabled:opacity-40">
+              {enviandoLote ? 'Enviando...' : `Solicitar cotação (${selecionados.size}) →`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Tabela */}
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
@@ -309,6 +350,11 @@ export default function MRP() {
                 {/* Produto */}
                 <div className="col-span-12 sm:col-span-4">
                   <div className="flex items-center gap-2">
+                    {item.quantidade_comprar > 0 && (
+                      <input type="checkbox" checked={selecionados.has(item.id)}
+                        onChange={() => alternarSelecao(item.id)}
+                        className="w-3.5 h-3.5 rounded accent-[#4f6ef7] shrink-0" />
+                    )}
                     <span className="text-[10px] font-mono text-[#4f6ef7]">{item.codigo}</span>
                     <span className="text-[10px] text-[#8b91a8]">{item.unidade}</span>
                   </div>

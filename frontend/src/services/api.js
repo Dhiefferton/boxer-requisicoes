@@ -74,14 +74,17 @@ export const fornecedoresService = {
 };
 
 export const comprasService = {
-  listarProcessos:  (params)        => api.get('/compras/processos', { params }),
-  detalharProcesso: (id)            => api.get(`/compras/processos/${id}`),
-  criarProcesso:    (dados)         => api.post('/compras/processos', dados),
-  adicionarCotacao: (id, dados)     => api.post(`/compras/processos/${id}/cotacoes`, dados),
-  aprovarCompra:    (id, cotacaoId) => api.post(`/compras/processos/${id}/aprovar`, { cotacao_id: cotacaoId }),
-  cancelarProcesso: (id)            => api.post(`/compras/processos/${id}/cancelar`),
-  historico:        (params)        => api.get('/compras/historico', { params }),
-  dashboard:        ()              => api.get('/compras/dashboard'),
+  listarProcessos:  ()                      => api.get('/compras/processos'),
+  detalharProcesso: (id)                    => api.get(`/compras/processos/${id}`),
+  criarProcesso:    (itens)                 => api.post('/compras/processos', { itens }),
+  cancelarProcesso: (id)                    => api.post(`/compras/processos/${id}/cancelar`),
+  excluirProcesso:  (id)                    => api.delete(`/compras/processos/${id}`),
+  detalharItem:     (processoId, itemId)    => api.get(`/compras/processos/${processoId}/itens/${itemId}`),
+  adicionarCotacao: (processoId, itemId, d) => api.post(`/compras/processos/${processoId}/itens/${itemId}/cotacoes`, d),
+  aprovarItem:      (processoId, itemId, cotacaoId) => api.post(`/compras/processos/${processoId}/itens/${itemId}/aprovar`, { cotacao_id: cotacaoId }),
+  cancelarItem:     (processoId, itemId)    => api.post(`/compras/processos/${processoId}/itens/${itemId}/cancelar`),
+  historico:        (params)                => api.get('/compras/historico', { params }),
+  dashboard:        ()                      => api.get('/compras/dashboard'),
 };
 
 export default api;
