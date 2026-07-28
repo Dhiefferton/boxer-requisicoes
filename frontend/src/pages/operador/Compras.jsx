@@ -74,20 +74,48 @@ function AbaCotacoes() {
       </div>
 
       <Secao titulo={`Prontas para aprovar (${prontas.length})`} vazio="Nenhum processo com cotações suficientes ainda.">
-        {prontas.map(p => (
-          <ProcessoCard key={p.id} processo={p} expandido={expandido === p.id}
-            onToggle={() => setExpandido(expandido === p.id ? null : p.id)}
-            onAtualizar={carregar} />
+        {agruparPorCategoria(prontas).map(([categoria, itensCategoria]) => (
+          <GrupoCategoria key={categoria} categoria={categoria}>
+            {itensCategoria.map(p => (
+              <ProcessoCard key={p.id} processo={p} expandido={expandido === p.id}
+                onToggle={() => setExpandido(expandido === p.id ? null : p.id)}
+                onAtualizar={carregar} />
+            ))}
+          </GrupoCategoria>
         ))}
       </Secao>
 
       <Secao titulo={`Aguardando cotação (${aguardando.length})`} vazio="Nenhum processo aguardando cotação. Solicite pela tela de MRP.">
-        {aguardando.map(p => (
-          <ProcessoCard key={p.id} processo={p} expandido={expandido === p.id}
-            onToggle={() => setExpandido(expandido === p.id ? null : p.id)}
-            onAtualizar={carregar} />
+        {agruparPorCategoria(aguardando).map(([categoria, itensCategoria]) => (
+          <GrupoCategoria key={categoria} categoria={categoria}>
+            {itensCategoria.map(p => (
+              <ProcessoCard key={p.id} processo={p} expandido={expandido === p.id}
+                onToggle={() => setExpandido(expandido === p.id ? null : p.id)}
+                onAtualizar={carregar} />
+            ))}
+          </GrupoCategoria>
         ))}
       </Secao>
+    </div>
+  );
+}
+
+// Agrupa uma lista de processos por categoria_nome, ordenado alfabeticamente
+function agruparPorCategoria(lista) {
+  const grupos = {};
+  lista.forEach(p => {
+    const cat = p.categoria_nome || 'Sem categoria';
+    if (!grupos[cat]) grupos[cat] = [];
+    grupos[cat].push(p);
+  });
+  return Object.entries(grupos).sort(([a], [b]) => a.localeCompare(b));
+}
+
+function GrupoCategoria({ categoria, children }) {
+  return (
+    <div className="mb-4 last:mb-0">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#8b91a8] mb-1.5">{categoria}</p>
+      <div className="space-y-2">{children}</div>
     </div>
   );
 }
@@ -206,6 +234,12 @@ function DetalheProcesso({ processoId, onAtualizar }) {
                 </p>
                 <p className="text-xl font-bold text-[#e8eaf0] mt-1">
                   R$ {parseFloat(c.preco_unitario).toFixed(2)} <span className="text-xs font-normal text-[#8b91a8]">/un</span>
+                </p>
+                <p className="text-[11px] text-[#8b91a8]">
+                  Total ({dados.processo.quantidade_necessaria} {dados.processo.unidade}): {' '}
+                  <span className="text-[#e8eaf0] font-medium">
+                    R$ {(parseFloat(c.preco_unitario) * dados.processo.quantidade_necessaria).toFixed(2)}
+                  </span>
                 </p>
                 {c.prazo_dias && <p className="text-[11px] text-[#8b91a8]">Prazo: {c.prazo_dias} dias úteis</p>}
                 {c.observacoes && <p className="text-[11px] text-[#8b91a8] mt-1">{c.observacoes}</p>}
