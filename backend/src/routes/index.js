@@ -19,6 +19,10 @@ import {
   listarEntradas, registrarEntrada, excluirEntrada
 } from '../controllers/entradasController.js';
 import { calcularMRP, importarMovimentacoes } from '../controllers/mrpController.js';
+import {
+  listarProcessos, detalharProcesso, criarProcesso, adicionarCotacao,
+  aprovarCompra, cancelarProcesso, historicoCompras, dashboardCompras
+} from '../controllers/comprasController.js';
 import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 
 const router = Router();
@@ -80,4 +84,15 @@ router.delete('/fornecedores/:id',autenticar, exigirPerfil('admin'), excluirForn
 router.get('/materiais/:id/fornecedores',              autenticar, exigirPerfil('admin'), fornecedoresPorMaterial);
 router.post('/materiais/:id/fornecedores',             autenticar, exigirPerfil('admin'), vincularFornecedor);
 router.delete('/materiais/:id/fornecedores/:fornecedor_id', autenticar, exigirPerfil('admin'), desvincularFornecedor);
+
+// ── Compras — Processos de compra e cotações
+router.get('/compras/processos',              autenticar, exigirPerfil('admin'), listarProcessos);
+router.post('/compras/processos',             autenticar, exigirPerfil('admin'), criarProcesso);
+router.get('/compras/processos/:id',          autenticar, exigirPerfil('admin'), detalharProcesso);
+router.post('/compras/processos/:id/cotacoes',autenticar, exigirPerfil('admin'), adicionarCotacao);
+router.post('/compras/processos/:id/aprovar', autenticar, exigirPerfil('admin'), aprovarCompra);
+router.post('/compras/processos/:id/cancelar',autenticar, exigirPerfil('admin'), cancelarProcesso);
+router.get('/compras/historico',              autenticar, exigirPerfil('admin'), historicoCompras);
+router.get('/compras/dashboard',               autenticar, exigirPerfil('admin'), dashboardCompras);
+
 export default router;

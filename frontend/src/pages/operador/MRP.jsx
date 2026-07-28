@@ -4,7 +4,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, FileDown, Upload, AlertTriangle, AlertCircle, CheckCircle, XCircle, TrendingDown, Search, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import api, { materialFornecedoresService, materiaisService } from '../../services/api';
+import api, { materialFornecedoresService, materiaisService, comprasService } from '../../services/api';
+import { useNavigate } from 'react-router-dom';
 import { Spinner } from '../../components/ui';
 
 const STATUS_CONFIG = {
@@ -27,6 +28,28 @@ export default function MRP() {
   const [importando, setImportando] = useState(false);
   const [resultImport, setResultImport] = useState(null);
   const inputImportRef = useRef(null);
+  const navigate = useNavigate();
+  const [solicitando, setSolicitando] = useState(null);
+
+  async function solicitarCotacao(item) {
+    setSolicitando(item.id);
+    try {
+      await comprasService.criarProcesso({
+        material_id: item.id,
+        quantidade_necessaria: item.quantidade_comprar,
+      });
+      navigate('/compras');
+    } catch (err) {
+      if (err.response?.status === 409) {
+        alert('Já existe um processo de cotação em aberto para este item. Veja em Compras.');
+        navigate('/compras');
+      } else {
+        alert('Erro ao solicitar cotação.');
+      }
+    } finally {
+      setSolicitando(null);
+    }
+  }
 
   async function carregar() {
     setLoading(true);
@@ -338,6 +361,18 @@ export default function MRP() {
                     <span className="hidden sm:block">{cfg.label}</span>
                   </div>
                 </div>
+
+                {/* Ação: solicitar cotação (só quando há necessidade de compra) */}
+                {item.quantidade_comprar > 0 && (
+                  <div className="col-span-12 pt-2 mt-1 border-t border-[#2e3347]/60 flex justify-end">
+                    <button
+                      onClick={() => solicitarCotacao(item)}
+                      disabled={solicitando === item.id}
+                      className="text-[11px] font-medium text-[#4f6ef7] hover:text-[#7c93fb] transition-colors disabled:opacity-40">
+                      {solicitando === item.id ? 'Solicitando...' : 'Solicitar cotação →'}
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

@@ -73,4 +73,15 @@ export const fornecedoresService = {
   excluir: (id) => api.delete('/fornecedores/'+id),
 };
 
+export const comprasService = {
+  listarProcessos:  (params)        => api.get('/compras/processos', { params }),
+  detalharProcesso: (id)            => api.get(`/compras/processos/${id}`),
+  criarProcesso:    (dados)         => api.post('/compras/processos', dados),
+  adicionarCotacao: (id, dados)     => api.post(`/compras/processos/${id}/cotacoes`, dados),
+  aprovarCompra:    (id, cotacaoId) => api.post(`/compras/processos/${id}/aprovar`, { cotacao_id: cotacaoId }),
+  cancelarProcesso: (id)            => api.post(`/compras/processos/${id}/cancelar`),
+  historico:        (params)        => api.get('/compras/historico', { params }),
+  dashboard:        ()              => api.get('/compras/dashboard'),
+};
+
 export default api;

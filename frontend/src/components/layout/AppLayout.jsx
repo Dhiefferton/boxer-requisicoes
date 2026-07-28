@@ -3,7 +3,7 @@
 // ============================================================
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2 } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
@@ -24,6 +24,7 @@ export default function AppLayout({ children }) {
     { to: '/entradas',  icon: PackagePlus,     label: 'Entradas',   perfis: ['operador', 'admin'] },
     { to: '/admin',     icon: ShieldCheck,     label: 'Admin',      perfis: ['admin'] },
     { to: '/mrp',       icon: BarChart2,       label: 'MRP',        perfis: ['admin'] },
+    { to: '/compras',   icon: FileText,        label: 'Compras',    perfis: ['admin'] },
   ].filter(item => item.perfis.includes(usuario?.perfil));
 
   return (
