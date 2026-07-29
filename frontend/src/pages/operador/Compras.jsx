@@ -4,15 +4,16 @@
 import { useState, useEffect } from 'react';
 import {
   RefreshCw, Plus, Check, ChevronDown, ChevronUp, Building2,
-  TrendingUp, Clock, CheckCircle2, DollarSign, Trash2, Ban
+  TrendingUp, Clock, CheckCircle2, DollarSign, Trash2, Ban, Truck
 } from 'lucide-react';
 import { comprasService, fornecedoresService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
 const ABAS = [
-  { id: 'cotacoes',  label: 'Cotações' },
-  { id: 'historico', label: 'Histórico de compras' },
-  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'cotacoes',       label: 'Cotações' },
+  { id: 'acompanhamento', label: 'Acompanhamento' },
+  { id: 'historico',      label: 'Histórico de compras' },
+  { id: 'dashboard',      label: 'Dashboard' },
 ];
 
 export default function Compras() {
@@ -34,9 +35,10 @@ export default function Compras() {
         ))}
       </div>
 
-      {aba === 'cotacoes'  && <AbaCotacoes />}
-      {aba === 'historico' && <AbaHistorico />}
-      {aba === 'dashboard' && <AbaDashboard />}
+      {aba === 'cotacoes'       && <AbaCotacoes />}
+      {aba === 'acompanhamento' && <AbaAcompanhamento />}
+      {aba === 'historico'      && <AbaHistorico />}
+      {aba === 'dashboard'      && <AbaDashboard />}
     </div>
   );
 }
@@ -369,6 +371,120 @@ function DetalheItem({ processoId, item, onAtualizar }) {
   );
 }
 
+// Calcula quantos dias faltam (ou de atraso) até a entrega planejada
+function statusEntrega(dataPrevistaEntrega) {
+  if (!dataPrevistaEntrega) return { texto: 'Sem prazo informado', cor: 'text-[#8b91a8]', bg: 'bg-[#2e3347]' };
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const prevista = new Date(dataPrevistaEntrega + 'T00:00:00');
+  const dias = Math.round((prevista - hoje) / (1000 * 60 * 60 * 24));
+
+  if (dias < 0) return { texto: `Atrasado ${Math.abs(dias)} dia(s)`, cor: 'text-red-400', bg: 'bg-red-500/15' };
+  if (dias === 0) return { texto: 'Entrega hoje', cor: 'text-green-400', bg: 'bg-green-500/15' };
+  return { texto: `${dias} Faltante(s)`, cor: 'text-green-400', bg: 'bg-green-500/15' };
+}
+
+// ============================================================
+// ABA: Acompanhamento — pedidos aprovados aguardando chegar
+// ============================================================
+function AbaAcompanhamento() {
+  const [itens, setItens] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [notaFiscal, setNotaFiscal] = useState({});
+  const [confirmando, setConfirmando] = useState(null);
+
+  async function carregar() {
+    setLoading(true);
+    try {
+      const { data } = await comprasService.acompanhamento();
+      setItens(data.itens);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  async function confirmarEntrega(item) {
+    const nf = notaFiscal[item.id];
+    if (!nf || !nf.trim()) { alert('Informe o número da nota fiscal antes de confirmar.'); return; }
+    if (!confirm(`Confirmar entrega de ${item.quantidade_necessaria} ${item.unidade} de ${item.material_descricao}? Isso vai gerar entrada de estoque automaticamente.`)) return;
+    setConfirmando(item.id);
+    try {
+      await comprasService.confirmarEntrega(item.processo_id, item.id, nf);
+      await carregar();
+    } catch (err) {
+      alert(err.response?.data?.erro || 'Erro ao confirmar entrega.');
+    } finally {
+      setConfirmando(null);
+    }
+  }
+
+  if (loading) return <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-[#8b91a8]">{itens.length} pedido(s) aprovado(s) aguardando chegar</p>
+        <button onClick={carregar} className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors">
+          <RefreshCw size={15} />
+        </button>
+      </div>
+
+      {itens.length === 0 ? (
+        <p className="text-xs text-[#8b91a8] py-10 text-center bg-[#1a1d27] rounded-xl border border-[#2e3347]">Nenhum pedido aguardando entrega.</p>
+      ) : (
+        <div className="space-y-2">
+          {itens.map(item => {
+            const st = statusEntrega(item.data_prevista_entrega);
+            return (
+              <div key={item.id} className="rounded-xl border border-[#2e3347] bg-[#1a1d27] p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-[#4f6ef7]">{item.material_codigo}</span>
+                      <span className="text-[10px] text-[#8b91a8]">{item.categoria_nome}</span>
+                    </div>
+                    <p className="text-sm text-[#e8eaf0]">{item.material_descricao}</p>
+                    <p className="text-[11px] text-[#8b91a8] flex items-center gap-1 mt-0.5">
+                      <Building2 size={11} /> {item.fornecedor_vencedor} · {item.quantidade_necessaria} {item.unidade}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 ${st.bg} ${st.cor}`}>
+                    <Truck size={11} /> {st.texto}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                  <div>
+                    <p className="text-[#8b91a8]">Data Solicitada</p>
+                    <p className="text-[#e8eaf0]">{new Date(item.aprovado_em).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#8b91a8]">Entrega Planejada</p>
+                    <p className="text-[#e8eaf0]">
+                      {item.data_prevista_entrega ? new Date(item.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 border-t border-[#2e3347] pt-3">
+                  <input type="text" placeholder="Número da nota fiscal"
+                    value={notaFiscal[item.id] || ''}
+                    onChange={e => setNotaFiscal(prev => ({ ...prev, [item.id]: e.target.value }))}
+                    className="flex-1 bg-[#0f1117] border border-[#2e3347] text-[#e8eaf0] rounded-lg px-3 py-1.5 text-xs" />
+                  <button onClick={() => confirmarEntrega(item)} disabled={confirmando === item.id}
+                    className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/15 text-green-400 hover:bg-green-500/25 disabled:opacity-40">
+                    <CheckCircle2 size={13} /> {confirmando === item.id ? 'Confirmando...' : 'Confirmar entrega'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ============================================================
 // ABA: Histórico de compras
 // ============================================================
@@ -409,7 +525,12 @@ function AbaHistorico() {
                   <span className="text-[10px] text-[#8b91a8]">{c.categoria_nome}</span>
                 </div>
                 <p className="text-sm text-[#e8eaf0]">{c.material_descricao}</p>
-                <p className="text-[11px] text-[#8b91a8]">{c.fornecedor_empresa} · {new Date(c.aprovado_em).toLocaleDateString('pt-BR')} · aprovado por {c.aprovado_por_nome || '—'}</p>
+                <p className="text-[11px] text-[#8b91a8]">{c.fornecedor_empresa} · aprovado {new Date(c.aprovado_em).toLocaleDateString('pt-BR')} · por {c.aprovado_por_nome || '—'}</p>
+                {c.numero_nota_fiscal && (
+                  <p className="text-[11px] text-[#8b91a8]">
+                    NF {c.numero_nota_fiscal} · recebido em {new Date(c.recebido_em).toLocaleDateString('pt-BR')}
+                  </p>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-sm font-bold text-[#e8eaf0]">R$ {parseFloat(c.total).toFixed(2)}</p>

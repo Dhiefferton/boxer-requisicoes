@@ -25,6 +25,7 @@ const ITEM_SELECT = `
   SELECT
     i.id, i.processo_id, i.material_id, i.quantidade_necessaria, i.status,
     i.cotacao_vencedora_id, i.aprovado_em, i.created_at,
+    i.data_prevista_entrega, i.numero_nota_fiscal, i.entrada_id, i.recebido_em,
     COALESCE(m.codigo, i.codigo_snapshot)       AS material_codigo,
     COALESCE(m.descricao, i.descricao_snapshot) AS material_descricao,
     COALESCE(m.unidade, i.unidade_snapshot)     AS unidade,
@@ -208,16 +209,19 @@ export async function aprovarItem(req, res, next) {
       }
 
       const cotacao = await client.query(
-        `SELECT id FROM cotacoes WHERE id = $1 AND item_processo_id = $2`,
+        `SELECT id, prazo_dias FROM cotacoes WHERE id = $1 AND item_processo_id = $2`,
         [parseInt(cotacao_id), itemProcessoId]
       );
       if (!cotacao.rows[0]) throw { status: 404, erro: 'Cotação não encontrada neste item' };
 
+      const prazoDias = cotacao.rows[0].prazo_dias;
+
       await client.query(
         `UPDATE itens_processo_compra
-         SET status = 'aprovado', cotacao_vencedora_id = $1, aprovado_por = $2, aprovado_em = NOW()
+         SET status = 'aprovado', cotacao_vencedora_id = $1, aprovado_por = $2, aprovado_em = NOW(),
+             data_prevista_entrega = CASE WHEN $4::int IS NOT NULL THEN (CURRENT_DATE + $4::int) ELSE NULL END
          WHERE id = $3`,
-        [parseInt(cotacao_id), usuarioId, itemProcessoId]
+        [parseInt(cotacao_id), usuarioId, itemProcessoId, prazoDias]
       );
     });
 
@@ -270,6 +274,81 @@ export async function excluirProcesso(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /compras/acompanhamento — itens aprovados aguardando chegar (sem entrada confirmada ainda)
+export async function listarAcompanhamento(req, res, next) {
+  try {
+    const result = await query(`
+      SELECT
+        i.id, i.processo_id, i.material_id, i.quantidade_necessaria,
+        i.aprovado_em, i.data_prevista_entrega,
+        COALESCE(m.codigo, i.codigo_snapshot)       AS material_codigo,
+        COALESCE(m.descricao, i.descricao_snapshot) AS material_descricao,
+        COALESCE(m.unidade, i.unidade_snapshot)     AS unidade,
+        c.nome AS categoria_nome,
+        f.empresa AS fornecedor_vencedor,
+        ct.prazo_dias
+      FROM itens_processo_compra i
+      LEFT JOIN materiais m    ON m.id = i.material_id
+      LEFT JOIN categorias c   ON c.id = m.categoria_id
+      LEFT JOIN cotacoes ct    ON ct.id = i.cotacao_vencedora_id
+      LEFT JOIN fornecedores f ON f.id = ct.fornecedor_id
+      WHERE i.status = 'aprovado' AND i.entrada_id IS NULL
+      ORDER BY i.data_prevista_entrega ASC NULLS LAST
+    `);
+    res.json({ itens: result.rows });
+  } catch (err) { next(err); }
+}
+
+// POST /compras/processos/:id/itens/:itemId/confirmar-entrega
+export async function confirmarEntrega(req, res, next) {
+  try {
+    const { itemId } = req.params;
+    const { numero_nota_fiscal } = req.body;
+    const usuarioId = req.usuario.id;
+    const itemProcessoId = parseInt(itemId);
+
+    if (!numero_nota_fiscal || !numero_nota_fiscal.trim()) {
+      return res.status(400).json({ erro: 'Informe o número da nota fiscal' });
+    }
+
+    await transaction(async (client) => {
+      const item = await client.query(
+        `SELECT status, material_id, quantidade_necessaria, entrada_id
+         FROM itens_processo_compra WHERE id = $1 FOR UPDATE`,
+        [itemProcessoId]
+      );
+      if (!item.rows[0]) throw { status: 404, erro: 'Item não encontrado' };
+      if (item.rows[0].status !== 'aprovado') throw { status: 400, erro: 'Item ainda não foi aprovado' };
+      if (item.rows[0].entrada_id) throw { status: 400, erro: 'Entrega já confirmada para este item' };
+
+      const { material_id, quantidade_necessaria } = item.rows[0];
+
+      const entrada = await client.query(
+        `INSERT INTO entradas_estoque (material_id, quantidade, usuario_id, observacao)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [material_id, quantidade_necessaria, usuarioId, `Compra aprovada (item #${itemProcessoId}) — NF ${numero_nota_fiscal.trim()}`]
+      );
+
+      await client.query(
+        `UPDATE estoques SET quantidade = quantidade + $1, updated_at = NOW() WHERE material_id = $2`,
+        [quantidade_necessaria, material_id]
+      );
+
+      await client.query(
+        `UPDATE itens_processo_compra
+         SET numero_nota_fiscal = $1, entrada_id = $2, recebido_em = NOW()
+         WHERE id = $3`,
+        [numero_nota_fiscal.trim(), entrada.rows[0].id, itemProcessoId]
+      );
+    });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ erro: err.erro });
+    next(err);
+  }
+}
+
 // GET /compras/historico — itens aprovados, com a cotação vencedora
 export async function historicoCompras(req, res, next) {
   try {
@@ -286,6 +365,7 @@ export async function historicoCompras(req, res, next) {
     const sql = `
       SELECT
         i.id, i.quantidade_necessaria, i.aprovado_em,
+        i.numero_nota_fiscal, i.recebido_em,
         COALESCE(m.codigo, i.codigo_snapshot)       AS material_codigo,
         COALESCE(m.descricao, i.descricao_snapshot) AS material_descricao,
         COALESCE(m.unidade, i.unidade_snapshot)      AS unidade,

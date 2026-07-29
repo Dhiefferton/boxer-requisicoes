@@ -21,7 +21,8 @@ import {
 import { calcularMRP, importarMovimentacoes } from '../controllers/mrpController.js';
 import {
   listarProcessos, detalharProcesso, detalharItem, criarProcesso, adicionarCotacao,
-  aprovarItem, cancelarItem, cancelarProcesso, excluirProcesso, historicoCompras, dashboardCompras
+  aprovarItem, cancelarItem, cancelarProcesso, excluirProcesso, historicoCompras, dashboardCompras,
+  listarAcompanhamento, confirmarEntrega
 } from '../controllers/comprasController.js';
 import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 
@@ -97,5 +98,7 @@ router.post('/compras/processos/:id/itens/:itemId/aprovar',   autenticar, exigir
 router.post('/compras/processos/:id/itens/:itemId/cancelar',  autenticar, exigirPerfil('admin'), cancelarItem);
 router.get('/compras/historico',                       autenticar, exigirPerfil('admin'), historicoCompras);
 router.get('/compras/dashboard',                       autenticar, exigirPerfil('admin'), dashboardCompras);
+router.get('/compras/acompanhamento',                  autenticar, exigirPerfil('admin'), listarAcompanhamento);
+router.post('/compras/processos/:id/itens/:itemId/confirmar-entrega', autenticar, exigirPerfil('admin'), confirmarEntrega);
 
 export default router;

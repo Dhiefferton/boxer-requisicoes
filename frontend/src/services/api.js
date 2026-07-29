@@ -85,6 +85,9 @@ export const comprasService = {
   cancelarItem:     (processoId, itemId)    => api.post(`/compras/processos/${processoId}/itens/${itemId}/cancelar`),
   historico:        (params)                => api.get('/compras/historico', { params }),
   dashboard:        ()                      => api.get('/compras/dashboard'),
+  acompanhamento:   ()                      => api.get('/compras/acompanhamento'),
+  confirmarEntrega: (processoId, itemId, numeroNotaFiscal) =>
+    api.post(`/compras/processos/${processoId}/itens/${itemId}/confirmar-entrega`, { numero_nota_fiscal: numeroNotaFiscal }),
 };
 
 export default api;
