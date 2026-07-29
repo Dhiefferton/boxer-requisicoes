@@ -83,8 +83,8 @@ function AbaCotacoes() {
         </button>
       </div>
 
-      <Secao titulo={`Prontas para aprovar (${prontos.length})`} vazio="Nenhum card com itens prontos para aprovar ainda.">
-        {agruparPorCategoria(prontos).map(([categoria, cards]) => (
+      <Secao titulo={`Aguardando cotação (${aguardando.length})`} vazio="Nenhum card aguardando cotação. Solicite pela tela de MRP.">
+        {agruparPorCategoria(aguardando).map(([categoria, cards]) => (
           <GrupoCategoria key={categoria} categoria={categoria}>
             {cards.map(p => (
               <CardProcesso key={p.id} processo={p} expandido={expandido === p.id}
@@ -95,8 +95,8 @@ function AbaCotacoes() {
         ))}
       </Secao>
 
-      <Secao titulo={`Aguardando cotação (${aguardando.length})`} vazio="Nenhum card aguardando cotação. Solicite pela tela de MRP.">
-        {agruparPorCategoria(aguardando).map(([categoria, cards]) => (
+      <Secao titulo={`Prontas para aprovar (${prontos.length})`} vazio="Nenhum card com itens prontos para aprovar ainda.">
+        {agruparPorCategoria(prontos).map(([categoria, cards]) => (
           <GrupoCategoria key={categoria} categoria={categoria}>
             {cards.map(p => (
               <CardProcesso key={p.id} processo={p} expandido={expandido === p.id}
