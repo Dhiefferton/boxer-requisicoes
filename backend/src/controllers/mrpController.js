@@ -33,8 +33,11 @@ export async function calcularMRP(req, res, next) {
         ROUND((COALESCE(saidas_req.total, 0) + COALESCE(saidas_mrp.total, 0))::numeric / $2, 2) AS media_mensal,
         CEIL((COALESCE(saidas_req.total, 0) + COALESCE(saidas_mrp.total, 0))::numeric / $2 * 1.5) AS necessidade_mensal,
         CEIL((COALESCE(saidas_req.total, 0) + COALESCE(saidas_mrp.total, 0))::numeric / $2 / 2) AS ponto_reabastecimento,
-        GREATEST(0,
-          CEIL((COALESCE(saidas_req.total, 0) + COALESCE(saidas_mrp.total, 0))::numeric / $2 * 1.5) - e.quantidade
+        GREATEST(
+          CEIL((COALESCE(saidas_req.total, 0) + COALESCE(saidas_mrp.total, 0))::numeric / $2 * 1.5) - e.quantidade,
+          -- nunca deixa zerar quando já bateu no ponto de reabastecimento (urgente/crítico)
+          CASE WHEN e.quantidade <= CEIL((COALESCE(saidas_req.total, 0) + COALESCE(saidas_mrp.total, 0))::numeric / $2 / 2) THEN 1 ELSE 0 END,
+          0
         ) AS quantidade_comprar,
         CASE
           WHEN e.quantidade = 0 THEN 'critico'
