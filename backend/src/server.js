@@ -1,4 +1,4 @@
-﻿import 'dotenv/config';
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -35,11 +35,22 @@ app.use('/api/erp', erpRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`\nBoxer Requisicoes API`);
-  console.log(`   Rodando em: http://localhost:${PORT}`);
-  console.log(`   Ambiente:   ${process.env.NODE_ENV || 'development'}\n`);
-  iniciarSyncErp(db);
-});
+// Só sobe o servidor de verdade (escutando porta) e liga o sync
+// automático de 5 em 5 minutos quando esse arquivo é executado
+// direto - é o caso do Render/local hoje (node server.js). Quando é
+// importado como módulo (o handler serverless do Vercel), não faz
+// sentido nem escutar porta nem manter setInterval vivo - função
+// serverless não tem processo contínuo. Nesse cenário o sync passa
+// a ser disparado por um Cron Job do Vercel, chamando a rota
+// GET /api/erp/cron (ver routes/erp.js) - por padrão 1x por dia,
+// já que o plano gratuito não permite mais frequente.
+if (import.meta.url === `file://${process.argv[1]}`) {
+    app.listen(PORT, () => {
+        console.log(`\nBoxer Requisicoes API`);
+        console.log(`   Rodando em: http://localhost:${PORT}`);
+        console.log(`   Ambiente:   ${process.env.NODE_ENV || 'development'}\n`);
+        iniciarSyncErp(db);
+    });
+}
 
 export default app;
