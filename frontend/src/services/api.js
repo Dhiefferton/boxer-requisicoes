@@ -1,27 +1,36 @@
-﻿// ============================================================
+// ============================================================
 // services/api.js — Cliente HTTP centralizado
 // ============================================================
+// Toda chamada ao backend passa por aqui.
+// O interceptor injeta o token JWT automaticamente em toda requisição
+// e redireciona para o login se o token expirar.
+// ============================================================
+
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : '/api';
-
+// Em desenvolvimento local, usa o proxy do Vite ('/api' relativo).
+// Em produção no Vercel, frontend e backend ficam em domínios
+// separados - VITE_API_URL aponta pra URL completa do backend.
 const api = axios.create({
-  baseURL,
+  baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api',
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Injeta o token JWT em todas as requisições autenticadas
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('boxer_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
+// Trata erros globalmente
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Token expirado ou inválido → redireciona para o login
     if (error.response?.status === 401) {
       localStorage.removeItem('boxer_token');
       localStorage.removeItem('boxer_usuario');
@@ -31,63 +40,33 @@ api.interceptors.response.use(
   }
 );
 
+// ── Endpoints de Autenticação ────────────────────────────────
 export const authService = {
-  login:       (email, senha) => api.post('/auth/login', { email, senha }),
-  me:          ()             => api.get('/auth/me'),
-  trocarSenha: (senha_nova)   => api.patch('/auth/trocar-senha', { senha_nova }),
+  login:  (email, senha) => api.post('/auth/login', { email, senha }),
+  me:     ()             => api.get('/auth/me'),
 };
 
+// ── Endpoints do Catálogo ────────────────────────────────────
 export const materiaisService = {
-  listar:          (params) => api.get('/materiais', { params }),
-  detalhar:        (id)     => api.get(`/materiais/${id}`),
-  categorias:      ()       => api.get('/categorias'),
-  atualizarEstoque:(id, d)  => api.patch(`/materiais/${id}/estoque`, d),
+  listar:     (params) => api.get('/materiais', { params }),
+  detalhar:   (id)     => api.get(`/materiais/${id}`),
+  categorias: ()       => api.get('/categorias'),
 };
 
+// ── Endpoints de Requisições ─────────────────────────────────
 export const requisicoesService = {
-  criar:       (dados)           => api.post('/requisicoes', dados),
-  listar:      (params)          => api.get('/requisicoes', { params }),
-  detalhar:    (id)              => api.get(`/requisicoes/${id}`),
-  relatorio:    () => api.get('/requisicoes/relatorio'),
-  mudarStatus: (id, status, obs) => api.patch(`/requisicoes/${id}/status`, { status, observacao: obs }),
+  criar:       (dados)            => api.post('/requisicoes', dados),
+  listar:      (params)           => api.get('/requisicoes', { params }),
+  detalhar:    (id)               => api.get(`/requisicoes/${id}`),
+  mudarStatus: (id, status, obs)  => api.patch(`/requisicoes/${id}/status`, { status, observacao: obs }),
 };
 
+// ── Endpoints de Admin ───────────────────────────────────────
 export const adminService = {
-  listarUsuarios:   ()       => api.get('/admin/usuarios'),
-  criarUsuario:     (dados)  => api.post('/admin/usuarios', dados),
-  atualizarUsuario: (id, d)  => api.patch(`/admin/usuarios/${id}`, d),
-  excluirUsuario:   (id)     => api.delete(`/admin/usuarios/${id}`),
-  departamentos:    ()       => api.get('/admin/departamentos'),
-};
-
-export const materialFornecedoresService = {
-  listar:     (materialId) => api.get('/materiais/'+materialId+'/fornecedores'),
-  vincular:   (materialId, d) => api.post('/materiais/'+materialId+'/fornecedores', d),
-  desvincular:(materialId, fornecedorId) => api.delete('/materiais/'+materialId+'/fornecedores/'+fornecedorId),
-};
-
-export const fornecedoresService = {
-  listar:  () => api.get('/fornecedores'),
-  criar:   (d) => api.post('/fornecedores', d),
-  editar:  (id, d) => api.patch('/fornecedores/'+id, d),
-  excluir: (id) => api.delete('/fornecedores/'+id),
-};
-
-export const comprasService = {
-  listarProcessos:  ()                      => api.get('/compras/processos'),
-  detalharProcesso: (id)                    => api.get(`/compras/processos/${id}`),
-  criarProcesso:    (itens)                 => api.post('/compras/processos', { itens }),
-  cancelarProcesso: (id)                    => api.post(`/compras/processos/${id}/cancelar`),
-  excluirProcesso:  (id)                    => api.delete(`/compras/processos/${id}`),
-  detalharItem:     (processoId, itemId)    => api.get(`/compras/processos/${processoId}/itens/${itemId}`),
-  adicionarCotacao: (processoId, itemId, d) => api.post(`/compras/processos/${processoId}/itens/${itemId}/cotacoes`, d),
-  aprovarItem:      (processoId, itemId, cotacaoId) => api.post(`/compras/processos/${processoId}/itens/${itemId}/aprovar`, { cotacao_id: cotacaoId }),
-  cancelarItem:     (processoId, itemId)    => api.post(`/compras/processos/${processoId}/itens/${itemId}/cancelar`),
-  historico:        (params)                => api.get('/compras/historico', { params }),
-  dashboard:        ()                      => api.get('/compras/dashboard'),
-  acompanhamento:   ()                      => api.get('/compras/acompanhamento'),
-  confirmarEntrega: (processoId, itemId, numeroNotaFiscal) =>
-    api.post(`/compras/processos/${processoId}/itens/${itemId}/confirmar-entrega`, { numero_nota_fiscal: numeroNotaFiscal }),
+  listarUsuarios:    ()      => api.get('/admin/usuarios'),
+  criarUsuario:      (dados) => api.post('/admin/usuarios', dados),
+  atualizarUsuario:  (id, d) => api.patch(`/admin/usuarios/${id}`, d),
+  departamentos:     ()      => api.get('/admin/departamentos'),
 };
 
 export default api;
