@@ -52,9 +52,9 @@ router.get('/requisicoes/:id',          autenticar, detalharRequisicao);
 router.patch('/requisicoes/:id/status', autenticar, exigirPerfil('operador', 'admin'), mudarStatus);
 
 // ── Entradas de Estoque
-router.get('/entradas',        autenticar, exigirPerfil('operador', 'admin'), listarEntradas);
-router.post('/entradas',       autenticar, exigirPerfil('operador', 'admin'), registrarEntrada);
-router.delete('/entradas/:id', autenticar, exigirPerfil('operador', 'admin'), excluirEntrada);
+router.get('/entradas',        autenticar, exigirPerfil('admin'), listarEntradas);
+router.post('/entradas',       autenticar, exigirPerfil('admin'), registrarEntrada);
+router.delete('/entradas/:id', autenticar, exigirPerfil('admin'), excluirEntrada);
 
 // ── Admin — Usuários
 router.get('/admin/usuarios',        autenticar, exigirPerfil('admin'), listarUsuarios);

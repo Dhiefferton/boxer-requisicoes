@@ -64,7 +64,7 @@ export default function App() {
               <RotaPerfil perfis={['operador', 'admin']}><PainelOperador /></RotaPerfil>
             } />
             <Route path="/entradas" element={
-              <RotaPerfil perfis={['operador', 'admin']}><RegistroEntradas /></RotaPerfil>
+              <RotaPerfil perfis={['admin']}><RegistroEntradas /></RotaPerfil>
             } />
             <Route path="/admin" element={
               <RotaPerfil perfis={['admin']}><PainelAdmin /></RotaPerfil>

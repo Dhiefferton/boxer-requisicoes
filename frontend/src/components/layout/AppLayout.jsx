@@ -21,7 +21,7 @@ export default function AppLayout({ children }) {
     { to: '/catalogo',  icon: Package,        label: 'Catálogo',   perfis: ['colaborador', 'operador', 'admin'] },
     { to: '/historico', icon: ClipboardList,   label: 'Histórico',  perfis: ['colaborador', 'operador', 'admin'] },
     { to: '/operador',  icon: LayoutDashboard, label: 'Operador',   perfis: ['operador', 'admin'] },
-    { to: '/entradas',  icon: PackagePlus,     label: 'Entradas',   perfis: ['operador', 'admin'] },
+    { to: '/entradas',  icon: PackagePlus,     label: 'Entradas',   perfis: ['admin'] },
     { to: '/admin',     icon: ShieldCheck,     label: 'Admin',      perfis: ['admin'] },
     { to: '/mrp',       icon: BarChart2,       label: 'MRP',        perfis: ['admin'] },
     { to: '/compras',   icon: FileText,        label: 'Compras',    perfis: ['admin'] },
