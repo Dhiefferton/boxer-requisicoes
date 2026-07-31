@@ -1,4 +1,5 @@
-﻿// ============================================================
+@'
+// ============================================================
 // services/api.js — Cliente HTTP centralizado
 // ============================================================
 import axios from 'axios';
@@ -91,3 +92,4 @@ export const comprasService = {
 };
 
 export default api;
+'@ | Set-Content -Path frontend\src\services\api.js -Encoding utf8 -NoNewline
