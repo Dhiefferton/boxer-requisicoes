@@ -24,7 +24,7 @@ export async function listarEntradas(req, res, next) {
 
     const sql = `
       SELECT
-        e.id, e.quantidade, e.observacao, e.created_at,
+        e.id, e.quantidade, e.observacao, e.created_at, e.valor_unitario,
         m.id AS material_id, m.codigo, m.descricao, m.unidade,
         u.nome AS usuario_nome
       FROM entradas_estoque e

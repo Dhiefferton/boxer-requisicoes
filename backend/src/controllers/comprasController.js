@@ -313,7 +313,7 @@ export async function confirmarEntrega(req, res, next) {
 
     await transaction(async (client) => {
       const item = await client.query(
-        `SELECT status, material_id, quantidade_necessaria, entrada_id
+        `SELECT status, material_id, quantidade_necessaria, entrada_id, cotacao_vencedora_id
          FROM itens_processo_compra WHERE id = $1 FOR UPDATE`,
         [itemProcessoId]
       );
@@ -321,12 +321,18 @@ export async function confirmarEntrega(req, res, next) {
       if (item.rows[0].status !== 'aprovado') throw { status: 400, erro: 'Item ainda não foi aprovado' };
       if (item.rows[0].entrada_id) throw { status: 400, erro: 'Entrega já confirmada para este item' };
 
-      const { material_id, quantidade_necessaria } = item.rows[0];
+      const { material_id, quantidade_necessaria, cotacao_vencedora_id } = item.rows[0];
+
+      const cotacao = await client.query(
+        `SELECT preco_unitario FROM cotacoes WHERE id = $1`,
+        [cotacao_vencedora_id]
+      );
+      const valorUnitario = cotacao.rows[0]?.preco_unitario ?? null;
 
       const entrada = await client.query(
-        `INSERT INTO entradas_estoque (material_id, quantidade, usuario_id, observacao)
-         VALUES ($1, $2, $3, $4) RETURNING id`,
-        [material_id, quantidade_necessaria, usuarioId, `Compra aprovada (item #${itemProcessoId}) — NF ${numero_nota_fiscal.trim()}`]
+        `INSERT INTO entradas_estoque (material_id, quantidade, usuario_id, observacao, valor_unitario)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [material_id, quantidade_necessaria, usuarioId, `Compra aprovada (item #${itemProcessoId}) — NF ${numero_nota_fiscal.trim()}`, valorUnitario]
       );
 
       await client.query(

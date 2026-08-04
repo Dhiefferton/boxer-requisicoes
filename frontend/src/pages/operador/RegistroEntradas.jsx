@@ -98,20 +98,24 @@ export default function RegistroEntradas() {
   }
 
   function gerarRelatorio() {
-    const linhas = entradas.map(e => ({
-      'Data':        formatarData(e.created_at),
-      'Código':      e.codigo,
-      'Descrição':   e.descricao,
-      'Quantidade':  e.quantidade,
-      'Unidade':     e.unidade,
-      'Observação':  e.observacao || '',
-      'Registrado por': e.usuario_nome || '',
-    }));
+    const linhas = entradas.map(e => {
+      const valorUnitario = e.valor_unitario !== null ? parseFloat(e.valor_unitario) : null;
+      const valorTotal = valorUnitario !== null ? valorUnitario * e.quantidade : null;
+      return {
+        'Data':            formatarData(e.created_at),
+        'Código':          e.codigo,
+        'Descrição':       e.descricao,
+        'Qtd':             e.quantidade,
+        'Registrado por':  e.usuario_nome || '',
+        'Valor Unitário':  valorUnitario !== null ? valorUnitario : '',
+        'Valor Total':     valorTotal !== null ? valorTotal : '',
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(linhas);
     ws['!cols'] = [
       { wch: 18 }, { wch: 15 }, { wch: 45 },
-      { wch: 12 }, { wch: 10 }, { wch: 30 }, { wch: 25 }
+      { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Entradas');
