@@ -371,11 +371,18 @@ function DetalheItem({ processoId, item, onAtualizar }) {
   );
 }
 
+// Extrai só a parte YYYY-MM-DD, não importa se vier como 'YYYY-MM-DD' ou ISO completo com hora
+function somenteData(valor) {
+  if (!valor) return null;
+  return String(valor).slice(0, 10);
+}
+
 // Calcula quantos dias faltam (ou de atraso) até a entrega planejada
 function statusEntrega(dataPrevistaEntrega) {
-  if (!dataPrevistaEntrega) return { texto: 'Sem prazo informado', cor: 'text-[#8b91a8]', bg: 'bg-[#2e3347]' };
+  const dataStr = somenteData(dataPrevistaEntrega);
+  if (!dataStr) return { texto: 'Sem prazo informado', cor: 'text-[#8b91a8]', bg: 'bg-[#2e3347]' };
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-  const prevista = new Date(dataPrevistaEntrega + 'T00:00:00');
+  const prevista = new Date(dataStr + 'T00:00:00');
   const dias = Math.round((prevista - hoje) / (1000 * 60 * 60 * 24));
 
   if (dias < 0) return { texto: `Atrasado ${Math.abs(dias)} dia(s)`, cor: 'text-red-400', bg: 'bg-red-500/15' };
@@ -461,7 +468,10 @@ function AbaAcompanhamento() {
                   <div>
                     <p className="text-[#8b91a8]">Entrega Planejada</p>
                     <p className="text-[#e8eaf0]">
-                      {item.data_prevista_entrega ? new Date(item.data_prevista_entrega + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                      {(() => {
+                        const d = somenteData(item.data_prevista_entrega);
+                        return d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+                      })()}
                     </p>
                   </div>
                 </div>
