@@ -14,7 +14,7 @@ let _intervalId = null;
 
 async function buscarPagina(token, offset) {
   const filtro = 'productPacking.product.productProfile.code==\"PEC\" or productPacking.product.productProfile.code==\"PEC/S\"';
-  const url = `${ZEN_BASE_URL}/material/stock?q=${encodeURIComponent(filtro)}&first=${offset}&max=${TAMANHO_PAGINA}`;
+  const url = `${ZEN_BASE_URL}/material/stock?q=${encodeURIComponent(filtro)}&sort=id&first=${offset}&max=${TAMANHO_PAGINA}`;
   const response = await fetch(url, {
     headers: {
       'accept': 'application/json',
@@ -42,19 +42,19 @@ async function executarSync(db) {
     const codigosSet = new Set(result.rows.map(r => r.codigo));
     console.log(`[SyncERP] Monitorando ${codigosSet.size} pecas...`);
     const saldos = {};
+    const idsVistos = new Set(); // deduplica linhas repetidas entre páginas
+    let duplicatasIgnoradas = 0;
     let offset = 0;
     let continua = true;
     let totalRegistros = 0;
-    const CODIGO_DEBUG = '701879'; // diagnóstico temporário
     while (continua) {
       const pagina = await buscarPagina(token, offset);
       if (pagina.length === 0) { continua = false; break; }
       for (const item of pagina) {
         const produto = item.productPacking?.product;
         if (!produto) continue;
-        if (produto.code === CODIGO_DEBUG) {
-          console.log(`[SyncERP][DEBUG ${CODIGO_DEBUG}] offset=${offset} quantity=${item.quantity} status=${item.status} type=${item.type}`);
-        }
+        if (idsVistos.has(item.id)) { duplicatasIgnoradas++; continue; }
+        idsVistos.add(item.id);
         if (item.status !== 'FREE') continue;
         if (item.type !== 'REGULAR') continue;
         const codigo = produto.code;
@@ -66,7 +66,9 @@ async function executarSync(db) {
       console.log(`[SyncERP] Processados ${totalRegistros} registros PEC do ERP...`);
       if (pagina.length < TAMANHO_PAGINA) continua = false;
     }
-    console.log(`[SyncERP][DEBUG ${CODIGO_DEBUG}] Total somado ao final: ${saldos[CODIGO_DEBUG]}`);
+    if (duplicatasIgnoradas > 0) {
+      console.log(`[SyncERP] ${duplicatasIgnoradas} linha(s) duplicada(s) entre páginas foram ignoradas.`);
+    }
     const codigos = Array.from(codigosSet);
     const quantidades = codigos.map(c => saldos[c] || 0);
     await db.query(
