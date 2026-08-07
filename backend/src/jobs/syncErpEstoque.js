@@ -138,28 +138,31 @@ export async function forcerSync(db) {
 // sincronização normal.
 export async function debugEstoquePorCodigo(codigo) {
   const token = await getToken();
-  const encontrados = [];
-  let offset = 0;
-  let continua = true;
-  while (continua) {
-    const pagina = await buscarPagina(token, offset);
-    if (pagina.length === 0) { continua = false; break; }
-    for (const item of pagina) {
-      const produto = item.productPacking?.product;
-      if (produto?.code === codigo) {
-        encontrados.push({
-          quantity: item.quantity,
-          status: item.status,
-          type: item.type,
-          productProfile: produto.productProfile?.code,
-          serial: item.serial || item.serialNumber || null,
-          codigoProduto: produto.code,
-          descricao: produto.description,
-        });
-      }
-    }
-    offset += pagina.length;
-    if (pagina.length < TAMANHO_PAGINA) continua = false;
+  const filtro = `(productPacking.product.productProfile.code=="PEC" or productPacking.product.productProfile.code=="PEC/S") and productPacking.product.code=="${codigo}"`;
+  const url = `${ZEN_BASE_URL}/material/stock?q=${encodeURIComponent(filtro)}&first=0&max=500`;
+  const response = await fetch(url, {
+    headers: {
+      'accept': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'tenant': ZEN_TENANT,
+    },
+  });
+  if (!response.ok) {
+    const erro = await response.text().catch(() => '');
+    throw new Error(`ZenERP respondeu ${response.status}: ${erro}`);
   }
-  return encontrados;
+  const pagina = await response.json();
+  const itens = Array.isArray(pagina) ? pagina : [];
+  return itens.map(item => {
+    const produto = item.productPacking?.product;
+    return {
+      quantity: item.quantity,
+      status: item.status,
+      type: item.type,
+      productProfile: produto?.productProfile?.code,
+      serial: item.serial || item.serialNumber || null,
+      codigoProduto: produto?.code,
+      descricao: produto?.description,
+    };
+  });
 }
