@@ -1,11 +1,21 @@
 import express from 'express';
-import { statusSyncErp, forcerSync } from '../jobs/syncErpEstoque.js';
+import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncErpEstoque.js';
+import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 
 const router = express.Router();
 
 router.get('/status', async (req, res, next) => {
   try {
     res.json(await statusSyncErp(req.app.locals.db));
+  } catch (err) { next(err); }
+});
+
+// DIAGNÓSTICO — mostra os itens crus do ERP para um código, sem
+// filtro. Ex: GET /api/erp/debug/701879
+router.get('/debug/:codigo', autenticar, exigirPerfil('admin'), async (req, res, next) => {
+  try {
+    const itens = await debugEstoquePorCodigo(req.params.codigo);
+    res.json({ codigo: req.params.codigo, total_linhas: itens.length, itens });
   } catch (err) { next(err); }
 });
 

@@ -131,3 +131,35 @@ export async function statusSyncErp(db) {
 export async function forcerSync(db) {
   return await executarSync(db);
 }
+
+// DIAGNÓSTICO — retorna os itens brutos do ZenERP para um código
+// específico, SEM aplicar os filtros de status/type/profile. Usado
+// só pra investigar divergências entre o app e o ERP. Não afeta a
+// sincronização normal.
+export async function debugEstoquePorCodigo(codigo) {
+  const token = await getToken();
+  const encontrados = [];
+  let offset = 0;
+  let continua = true;
+  while (continua) {
+    const pagina = await buscarPagina(token, offset);
+    if (pagina.length === 0) { continua = false; break; }
+    for (const item of pagina) {
+      const produto = item.productPacking?.product;
+      if (produto?.code === codigo) {
+        encontrados.push({
+          quantity: item.quantity,
+          status: item.status,
+          type: item.type,
+          productProfile: produto.productProfile?.code,
+          serial: item.serial || item.serialNumber || null,
+          codigoProduto: produto.code,
+          descricao: produto.description,
+        });
+      }
+    }
+    offset += pagina.length;
+    if (pagina.length < TAMANHO_PAGINA) continua = false;
+  }
+  return encontrados;
+}
