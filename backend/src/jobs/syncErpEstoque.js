@@ -158,16 +158,5 @@ export async function debugEstoquePorCodigo(codigo) {
   }
   const pagina = await response.json();
   const itens = Array.isArray(pagina) ? pagina : [];
-  return itens.map(item => {
-    const produto = item.productPacking?.product;
-    return {
-      quantity: item.quantity,
-      status: item.status,
-      type: item.type,
-      productProfile: produto?.productProfile?.code,
-      serial: item.serial || item.serialNumber || null,
-      codigoProduto: produto?.code,
-      descricao: produto?.description,
-    };
-  });
+  return itens; // retorna o objeto CRU completo, sem filtrar campos
 }
