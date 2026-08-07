@@ -117,21 +117,25 @@ export async function criarRequisicao(req, res, next) {
       [requisicao.id]
     );
 
-    // Cria card no Pipefy (assíncrono, não bloqueia a resposta)
-    criarCardPipefy({
-      requisicaoId:    requisicao.id,
-      solicitante:     req.usuario.nome,
-      departamento:    req.usuario.departamento_nome || '',
-      itens:           itensResult.rows,
-      dataNecessidade: dados.data_necessidade || '',
-    }).then(cardId => {
+    // Cria card no Pipefy — aguarda terminar antes de responder.
+    // Em ambientes serverless (Vercel), a função é encerrada assim que a
+    // resposta é enviada, então chamadas "em segundo plano" sem await
+    // nunca chegam a completar. Envolvido em try/catch pra uma falha no
+    // Pipefy não impedir a requisição de ser criada.
+    try {
+      const cardId = await criarCardPipefy({
+        requisicaoId:    requisicao.id,
+        solicitante:     req.usuario.nome,
+        departamento:    req.usuario.departamento_nome || '',
+        itens:           itensResult.rows,
+        dataNecessidade: dados.data_necessidade || '',
+      });
       if (cardId) {
-        query(
-          `UPDATE requisicoes SET pipefy_card_id = $1 WHERE id = $2`,
-          [cardId, requisicao.id]
-        ).catch(console.error);
+        await query(`UPDATE requisicoes SET pipefy_card_id = $1 WHERE id = $2`, [cardId, requisicao.id]);
       }
-    });
+    } catch (erroPipefy) {
+      console.error('Falha ao criar card no Pipefy:', erroPipefy);
+    }
 
     res.status(201).json({
       mensagem: 'Requisição criada com sucesso!',
@@ -299,7 +303,10 @@ export async function mudarStatus(req, res, next) {
       });
 
       // Exclui card no Pipefy
-      if (pipefyCardId) excluirCardPipefy(pipefyCardId);
+      if (pipefyCardId) {
+        try { await excluirCardPipefy(pipefyCardId); }
+        catch (erroPipefy) { console.error('Falha ao excluir card no Pipefy:', erroPipefy); }
+      }
 
       await query(
         `INSERT INTO logs (usuario_id, acao, tabela, registro_id, payload_json, ip)
@@ -330,7 +337,10 @@ export async function mudarStatus(req, res, next) {
     });
 
     // Move card no Pipefy
-    if (pipefyCardId) moverCardPipefy(pipefyCardId, status);
+    if (pipefyCardId) {
+      try { await moverCardPipefy(pipefyCardId, status); }
+      catch (erroPipefy) { console.error('Falha ao mover card no Pipefy:', erroPipefy); }
+    }
 
     await query(
       `INSERT INTO logs (usuario_id, acao, tabela, registro_id, payload_json, ip)
