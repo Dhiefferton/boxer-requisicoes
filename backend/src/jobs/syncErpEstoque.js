@@ -5,13 +5,15 @@ const ZEN_TENANT   = 'boxer';
 const INTERVALO_MS = 5 * 60 * 1000;
 const TAMANHO_PAGINA = 500;
 
+// Guarda contra chamadas concorrentes na MESMA instância de processo
+// (útil no Railway/local, onde o processo fica vivo; numa instância
+// serverless "fria" da Vercel esse valor sempre nasce false, o que é
+// esperado — cada invocação é isolada).
 let _jobAtivo = false;
 let _intervalId = null;
-let _ultimaSync = null;
-let _ultimoResultado = null;
 
 async function buscarPagina(token, offset) {
-  const filtro = 'productPacking.product.productProfile.code=="PEC" or productPacking.product.productProfile.code=="PEC/S"';
+  const filtro = 'productPacking.product.productProfile.code==\"PEC\" or productPacking.product.productProfile.code==\"PEC/S\"';
   const url = `${ZEN_BASE_URL}/material/stock?q=${encodeURIComponent(filtro)}&first=${offset}&max=${TAMANHO_PAGINA}`;
   const response = await fetch(url, {
     headers: {
@@ -26,7 +28,7 @@ async function buscarPagina(token, offset) {
 }
 
 async function executarSync(db) {
-  if (_jobAtivo) return;
+  if (_jobAtivo) return statusSyncErp(db);
   _jobAtivo = true;
   const inicio = Date.now();
   console.log('[SyncERP] Iniciando sincronizacao com ZenERP...');
@@ -69,31 +71,63 @@ async function executarSync(db) {
       [codigos, quantidades]
     );
     const duracao = ((Date.now() - inicio) / 1000).toFixed(1);
-    _ultimaSync = new Date();
-    _ultimoResultado = { atualizados: codigos.length, total: codigosSet.size, totalRegistrosERP: totalRegistros, duracao };
+    const resultado = { atualizados: codigos.length, total: codigosSet.size, totalRegistrosERP: totalRegistros, duracao };
+
+    await db.query(
+      `UPDATE sync_erp_status
+       SET ultima_sync = NOW(), atualizados = $1, total_monitorado = $2,
+           total_registros_erp = $3, duracao_segundos = $4, erro = NULL
+       WHERE id = 1`,
+      [resultado.atualizados, resultado.total, resultado.totalRegistrosERP, duracao]
+    );
+
     console.log(`[SyncERP] Concluido em ${duracao}s - ${codigos.length} pecas atualizadas.`);
+    return resultado;
   } catch (err) {
     console.error('[SyncERP] Erro:', err.message);
+    await db.query(
+      `UPDATE sync_erp_status SET ultima_sync = NOW(), erro = $1 WHERE id = 1`,
+      [err.message]
+    ).catch(() => {}); // se até isso falhar, não derruba a resposta
+    throw err;
   } finally {
     _jobAtivo = false;
   }
 }
 
+// Mantido só pro modo processo-contínuo (Railway/local via `node server.js`).
+// Não é chamado em ambiente serverless (ver server.js).
 export function iniciarSyncErp(db) {
   console.log('[SyncERP] Job iniciado. Intervalo: 5 minutos.');
-  executarSync(db);
-  _intervalId = setInterval(() => executarSync(db), INTERVALO_MS);
+  executarSync(db).catch(() => {});
+  _intervalId = setInterval(() => executarSync(db).catch(() => {}), INTERVALO_MS);
 }
 
 export function pararSyncErp() {
   if (_intervalId) { clearInterval(_intervalId); _intervalId = null; }
 }
 
-export function statusSyncErp() {
-  return { ativo: _jobAtivo, ultimaSync: _ultimaSync, ultimoResultado: _ultimoResultado, intervaloMinutos: 5 };
+// Lê o status persistido no banco — funciona igual em processo
+// contínuo (Railway) ou serverless (Vercel), já que não depende de
+// memória do processo.
+export async function statusSyncErp(db) {
+  const result = await db.query(`SELECT * FROM sync_erp_status WHERE id = 1`);
+  const row = result.rows[0];
+  if (!row) return { ativo: _jobAtivo, ultimaSync: null, ultimoResultado: null, intervaloMinutos: 5 };
+  return {
+    ativo: _jobAtivo,
+    ultimaSync: row.ultima_sync,
+    ultimoResultado: row.ultima_sync ? {
+      atualizados: row.atualizados,
+      total: row.total_monitorado,
+      totalRegistrosERP: row.total_registros_erp,
+      duracao: row.duracao_segundos,
+    } : null,
+    erro: row.erro,
+    intervaloMinutos: 5,
+  };
 }
 
 export async function forcerSync(db) {
-  await executarSync(db);
-  return _ultimoResultado;
+  return await executarSync(db);
 }

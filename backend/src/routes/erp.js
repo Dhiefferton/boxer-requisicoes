@@ -3,8 +3,10 @@ import { statusSyncErp, forcerSync } from '../jobs/syncErpEstoque.js';
 
 const router = express.Router();
 
-router.get('/status', (req, res) => {
-  res.json(statusSyncErp());
+router.get('/status', async (req, res, next) => {
+  try {
+    res.json(await statusSyncErp(req.app.locals.db));
+  } catch (err) { next(err); }
 });
 
 router.post('/sync', async (req, res) => {
