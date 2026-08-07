@@ -22,6 +22,19 @@ router.get('/debug/:codigo', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Força sincronização manual (GET, testável no navegador, mesmo secret do cron)
+router.get('/sync-manual', async (req, res, next) => {
+  try {
+    if (req.query.secret !== process.env.CRON_SECRET) {
+      return res.status(401).json({ erro: 'Acesso negado' });
+    }
+    const resultado = await forcerSync(req.app.locals.db);
+    res.json({ sucesso: true, resultado });
+  } catch (err) {
+    res.status(500).json({ sucesso: false, erro: err.message });
+  }
+});
+
 router.post('/sync', async (req, res) => {
   try {
     const resultado = await forcerSync(req.app.locals.db);

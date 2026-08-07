@@ -45,12 +45,16 @@ async function executarSync(db) {
     let offset = 0;
     let continua = true;
     let totalRegistros = 0;
+    const CODIGO_DEBUG = '701879'; // diagnóstico temporário
     while (continua) {
       const pagina = await buscarPagina(token, offset);
       if (pagina.length === 0) { continua = false; break; }
       for (const item of pagina) {
         const produto = item.productPacking?.product;
         if (!produto) continue;
+        if (produto.code === CODIGO_DEBUG) {
+          console.log(`[SyncERP][DEBUG ${CODIGO_DEBUG}] offset=${offset} quantity=${item.quantity} status=${item.status} type=${item.type}`);
+        }
         if (item.status !== 'FREE') continue;
         if (item.type !== 'REGULAR') continue;
         const codigo = produto.code;
@@ -62,6 +66,7 @@ async function executarSync(db) {
       console.log(`[SyncERP] Processados ${totalRegistros} registros PEC do ERP...`);
       if (pagina.length < TAMANHO_PAGINA) continua = false;
     }
+    console.log(`[SyncERP][DEBUG ${CODIGO_DEBUG}] Total somado ao final: ${saldos[CODIGO_DEBUG]}`);
     const codigos = Array.from(codigosSet);
     const quantidades = codigos.map(c => saldos[c] || 0);
     await db.query(
