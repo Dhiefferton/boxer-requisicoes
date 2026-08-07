@@ -1,6 +1,5 @@
 import express from 'express';
 import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncErpEstoque.js';
-import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 
 const router = express.Router();
 
@@ -11,9 +10,13 @@ router.get('/status', async (req, res, next) => {
 });
 
 // DIAGNÓSTICO — mostra os itens crus do ERP para um código, sem
-// filtro. Ex: GET /api/erp/debug/701879
-router.get('/debug/:codigo', autenticar, exigirPerfil('admin'), async (req, res, next) => {
+// filtro. Ex: GET /api/erp/debug/701879?secret=SEU_CRON_SECRET
+// Usa o mesmo CRON_SECRET (query string, pra testar direto no navegador)
+router.get('/debug/:codigo', async (req, res, next) => {
   try {
+    if (req.query.secret !== process.env.CRON_SECRET) {
+      return res.status(401).json({ erro: 'Acesso negado' });
+    }
     const itens = await debugEstoquePorCodigo(req.params.codigo);
     res.json({ codigo: req.params.codigo, total_linhas: itens.length, itens });
   } catch (err) { next(err); }
