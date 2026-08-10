@@ -12,9 +12,10 @@ const TAMANHO_PAGINA = 500;
 let _jobAtivo = false;
 let _intervalId = null;
 
-async function buscarPagina(token, offset) {
-  const filtro = 'productPacking.product.productProfile.code==\"PEC\" or productPacking.product.productProfile.code==\"PEC/S\"';
-  const url = `${ZEN_BASE_URL}/material/stock?q=${encodeURIComponent(filtro)}&sort=id&first=${offset}&max=${TAMANHO_PAGINA}`;
+async function buscarPagina(token, ultimoId) {
+  const filtroBase = '(productPacking.product.productProfile.code==\"PEC\" or productPacking.product.productProfile.code==\"PEC/S\")';
+  const filtro = ultimoId > 0 ? `${filtroBase} and id>${ultimoId}` : filtroBase;
+  const url = `${ZEN_BASE_URL}/material/stock?q=${encodeURIComponent(filtro)}&sort=id&first=0&max=${TAMANHO_PAGINA}`;
   const response = await fetch(url, {
     headers: {
       'accept': 'application/json',
@@ -42,13 +43,13 @@ async function executarSync(db) {
     const codigosSet = new Set(result.rows.map(r => r.codigo));
     console.log(`[SyncERP] Monitorando ${codigosSet.size} pecas...`);
     const saldos = {};
-    const idsVistos = new Set(); // deduplica linhas repetidas entre páginas
+    const idsVistos = new Set(); // deduplica linhas repetidas entre páginas (proteção extra)
     let duplicatasIgnoradas = 0;
-    let offset = 0;
+    let ultimoId = 0;
     let continua = true;
     let totalRegistros = 0;
     while (continua) {
-      const pagina = await buscarPagina(token, offset);
+      const pagina = await buscarPagina(token, ultimoId);
       if (pagina.length === 0) { continua = false; break; }
       for (const item of pagina) {
         const produto = item.productPacking?.product;
@@ -62,7 +63,7 @@ async function executarSync(db) {
         saldos[codigo] = (saldos[codigo] || 0) + (item.quantity || 0);
       }
       totalRegistros += pagina.length;
-      offset += pagina.length;
+      ultimoId = pagina[pagina.length - 1].id;
       console.log(`[SyncERP] Processados ${totalRegistros} registros PEC do ERP...`);
       if (pagina.length < TAMANHO_PAGINA) continua = false;
     }
