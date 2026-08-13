@@ -237,20 +237,20 @@ export async function cancelarItem(req, res, next) {
   try {
     const { itemId } = req.params;
     const result = await query(
-      `UPDATE itens_processo_compra SET status = 'cancelada' WHERE id = $1 AND status != 'aprovado' RETURNING id`,
+      `UPDATE itens_processo_compra SET status = 'cancelada' WHERE id = $1 AND entrada_id IS NULL RETURNING id`,
       [parseInt(itemId)]
     );
-    if (result.rows.length === 0) return res.status(400).json({ erro: 'Item já aprovado não pode ser cancelado' });
+    if (result.rows.length === 0) return res.status(400).json({ erro: 'Item já com entrada confirmada não pode ser cancelado' });
     res.json({ sucesso: true });
   } catch (err) { next(err); }
 }
 
-// POST /compras/processos/:id/cancelar — cancela o card inteiro (todos os itens não aprovados)
+// POST /compras/processos/:id/cancelar — cancela o card inteiro (todos os itens sem entrada confirmada)
 export async function cancelarProcesso(req, res, next) {
   try {
     const { id } = req.params;
     const result = await query(
-      `UPDATE itens_processo_compra SET status = 'cancelada' WHERE processo_id = $1 AND status != 'aprovado' RETURNING id`,
+      `UPDATE itens_processo_compra SET status = 'cancelada' WHERE processo_id = $1 AND entrada_id IS NULL RETURNING id`,
       [parseInt(id)]
     );
     res.json({ sucesso: true, itens_cancelados: result.rows.length });
@@ -261,12 +261,12 @@ export async function cancelarProcesso(req, res, next) {
 export async function excluirProcesso(req, res, next) {
   try {
     const { id } = req.params;
-    const aprovados = await query(
-      `SELECT COUNT(*) FROM itens_processo_compra WHERE processo_id = $1 AND status = 'aprovado'`,
+    const recebidos = await query(
+      `SELECT COUNT(*) FROM itens_processo_compra WHERE processo_id = $1 AND entrada_id IS NOT NULL`,
       [parseInt(id)]
     );
-    if (parseInt(aprovados.rows[0].count) > 0) {
-      return res.status(400).json({ erro: 'Este card tem itens já aprovados (compra realizada). Use "Cancelar" para os itens pendentes; o histórico de compra não pode ser excluído.' });
+    if (parseInt(recebidos.rows[0].count) > 0) {
+      return res.status(400).json({ erro: 'Este card tem itens já recebidos (entrada de estoque confirmada). Use "Cancelar" para os itens ainda pendentes; o histórico de compra recebida não pode ser excluído.' });
     }
     const result = await query(`DELETE FROM processos_compra WHERE id = $1 RETURNING id`, [parseInt(id)]);
     if (!result.rows[0]) return res.status(404).json({ erro: 'Card não encontrado' });
@@ -359,7 +359,7 @@ export async function confirmarEntrega(req, res, next) {
 export async function historicoCompras(req, res, next) {
   try {
     const { data_inicio, data_fim, fornecedor_id, categoria_id } = req.query;
-    const condicoes = [`i.status = 'aprovado'`];
+    const condicoes = [`i.status = 'aprovado'`, `i.entrada_id IS NOT NULL`];
     const params = [];
     let idx = 1;
 
@@ -411,7 +411,7 @@ export async function dashboardCompras(req, res, next) {
         SELECT COALESCE(SUM(ct.preco_unitario * i.quantidade_necessaria), 0) AS total
         FROM itens_processo_compra i
         JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
-        WHERE i.status = 'aprovado' AND i.aprovado_em >= date_trunc('month', NOW())
+        WHERE i.status = 'aprovado' AND i.entrada_id IS NOT NULL AND i.recebido_em >= date_trunc('month', NOW())
       `),
       query(`
         SELECT f.empresa, COUNT(*) AS qtd_compras,
@@ -419,7 +419,7 @@ export async function dashboardCompras(req, res, next) {
         FROM itens_processo_compra i
         JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
         JOIN fornecedores f ON f.id = ct.fornecedor_id
-        WHERE i.status = 'aprovado'
+        WHERE i.status = 'aprovado' AND i.entrada_id IS NOT NULL
         GROUP BY f.empresa
         ORDER BY total_gasto DESC
         LIMIT 10
@@ -431,7 +431,7 @@ export async function dashboardCompras(req, res, next) {
         LEFT JOIN materiais m  ON m.id = i.material_id
         LEFT JOIN categorias c ON c.id = m.categoria_id
         JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
-        WHERE i.status = 'aprovado'
+        WHERE i.status = 'aprovado' AND i.entrada_id IS NOT NULL
         GROUP BY c.nome
         ORDER BY total_gasto DESC
       `),

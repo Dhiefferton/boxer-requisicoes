@@ -425,6 +425,16 @@ function AbaAcompanhamento() {
     }
   }
 
+  async function cancelarPedido(item) {
+    if (!confirm(`Cancelar a solicitação de ${item.material_descricao}? Como a entrega ainda não foi confirmada, isso não afeta o estoque.`)) return;
+    try {
+      await comprasService.cancelarItem(item.processo_id, item.id);
+      await carregar();
+    } catch (err) {
+      alert(err.response?.data?.erro || 'Erro ao cancelar.');
+    }
+  }
+
   if (loading) return <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>;
 
   return (
@@ -455,9 +465,15 @@ function AbaAcompanhamento() {
                       <Building2 size={11} /> {item.fornecedor_vencedor} · {item.quantidade_necessaria} {item.unidade}
                     </p>
                   </div>
-                  <span className={`shrink-0 text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 ${st.bg} ${st.cor}`}>
-                    <Truck size={11} /> {st.texto}
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={`text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 ${st.bg} ${st.cor}`}>
+                      <Truck size={11} /> {st.texto}
+                    </span>
+                    <button onClick={() => cancelarPedido(item)} title="Cancelar solicitação"
+                      className="p-1.5 rounded-lg text-[#8b91a8] hover:text-red-400 hover:bg-red-500/10">
+                      <Ban size={13} />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
