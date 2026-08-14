@@ -136,7 +136,8 @@ async function buscaEstoque() {
     'parameters': {
       'SHOW_PRODUCT': true,
       'SHOW_PRODUCT_PACKING': true,
-      'PRODUCT_PROFILE_IDS': [1002, 1003]
+      'PRODUCT_PROFILE_IDS': [1002, 1003],
+      'TYPE_LIST': ["REGULAR"]
     }
   };
 
