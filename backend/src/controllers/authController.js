@@ -94,6 +94,34 @@ export async function trocarSenha(req, res, next) {
   }
 }
 
+// PATCH /auth/alterar-senha — troca voluntária, feita a qualquer momento pelo próprio
+// usuário (diferente de trocarSenha, que é só pra troca obrigatória no primeiro acesso).
+// Exige a senha atual pra confirmar identidade, já que fica acessível o tempo todo.
+export async function alterarSenha(req, res, next) {
+  try {
+    const { senha_atual, senha_nova } = req.body;
+    const usuarioId = req.usuario.id;
+
+    if (!senha_atual) return res.status(400).json({ erro: 'Informe a senha atual.' });
+    if (!senha_nova || senha_nova.length < 6) {
+      return res.status(400).json({ erro: 'A nova senha deve ter ao menos 6 caracteres.' });
+    }
+
+    const result = await query(`SELECT senha_hash FROM usuarios WHERE id = $1`, [usuarioId]);
+    if (!result.rows[0]) return res.status(404).json({ erro: 'Usuário não encontrado.' });
+
+    const senhaValida = await bcrypt.compare(senha_atual, result.rows[0].senha_hash);
+    if (!senhaValida) return res.status(400).json({ erro: 'Senha atual incorreta.' });
+
+    const senha_hash = await bcrypt.hash(senha_nova, 10);
+    await query(`UPDATE usuarios SET senha_hash = $1, updated_at = NOW() WHERE id = $2`, [senha_hash, usuarioId]);
+
+    res.json({ mensagem: 'Senha alterada com sucesso!' });
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /auth/me
 export async function me(req, res, next) {
   try {

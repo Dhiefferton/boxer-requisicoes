@@ -7,6 +7,7 @@ import { CartProvider } from './context/CartContext';
 import AppLayout from './components/layout/AppLayout';
 import Login            from './pages/Login';
 import TrocarSenha      from './pages/TrocarSenha';
+import MinhaSenha       from './pages/MinhaSenha';
 import Catalogo         from './pages/Catalogo';
 import Revisao          from './pages/Revisao';
 import Historico        from './pages/Historico';
@@ -53,6 +54,9 @@ export default function App() {
             <Route path="/trocar-senha" element={<TrocarSenha />} />
             <Route path="/catalogo" element={
               <RotaProtegida><Catalogo /></RotaProtegida>
+            } />
+            <Route path="/minha-senha" element={
+              <RotaProtegida><MinhaSenha /></RotaProtegida>
             } />
             <Route path="/revisao" element={
               <RotaProtegida><Revisao /></RotaProtegida>
