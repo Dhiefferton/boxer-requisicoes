@@ -1,7 +1,7 @@
 ﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor } from '../controllers/fornecedoresController.js';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { login, me, trocarSenha } from '../controllers/authController.js';
+import { login, me, trocarSenha, alterarSenha } from '../controllers/authController.js';
 import {
   listarMateriais, listarCategorias, detalharMaterial,
   criarMaterial, editarMaterial, atualizarEstoque
@@ -35,6 +35,7 @@ router.get('/usuarios/buscar', buscarUsuarios);
 router.post('/auth/login',         login);
 router.get('/auth/me',             autenticar, me);
 router.patch('/auth/trocar-senha', autenticar, trocarSenha);
+router.patch('/auth/alterar-senha', autenticar, alterarSenha);
 
 // ── Catálogo
 router.get('/materiais',               autenticar, listarMateriais);

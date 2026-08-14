@@ -32,9 +32,10 @@ api.interceptors.response.use(
 );
 
 export const authService = {
-  login:       (email, senha) => api.post('/auth/login', { email, senha }),
-  me:          ()             => api.get('/auth/me'),
-  trocarSenha: (senha_nova)   => api.patch('/auth/trocar-senha', { senha_nova }),
+  login:       (email, senha)              => api.post('/auth/login', { email, senha }),
+  me:          ()                          => api.get('/auth/me'),
+  trocarSenha: (senha_nova)                => api.patch('/auth/trocar-senha', { senha_nova }),
+  alterarSenha: (senha_atual, senha_nova)  => api.patch('/auth/alterar-senha', { senha_atual, senha_nova }),
 };
 
 export const materiaisService = {

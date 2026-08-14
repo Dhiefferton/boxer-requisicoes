@@ -3,7 +3,7 @@
 // ============================================================
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
@@ -83,6 +83,9 @@ export default function AppLayout({ children }) {
                 <p className="text-xs font-medium text-[#e8eaf0] leading-tight">{usuario?.nome?.split(' ')[0]}</p>
                 <p className="text-[10px] text-[#8b91a8] capitalize">{usuario?.perfil}</p>
               </div>
+              <button onClick={() => navigate('/minha-senha')} className="p-2 rounded-xl text-[#8b91a8] hover:text-[#e8eaf0] hover:bg-[#2e3347] transition-colors" title="Trocar senha">
+                <Lock size={16} />
+              </button>
               <button onClick={handleLogout} className="p-2 rounded-xl text-[#8b91a8] hover:text-red-400 hover:bg-red-500/10 transition-colors" title="Sair">
                 <LogOut size={16} />
               </button>
@@ -114,9 +117,14 @@ export default function AppLayout({ children }) {
                 <p className="text-sm font-medium text-[#e8eaf0]">{usuario?.nome}</p>
                 <p className="text-xs text-[#8b91a8] capitalize">{usuario?.perfil} · {usuario?.departamento_nome}</p>
               </div>
-              <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs text-red-400 py-1.5 px-3 rounded-xl hover:bg-red-500/10">
-                <LogOut size={14} />Sair
-              </button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => { setMenuOpen(false); navigate('/minha-senha'); }} className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347]" title="Trocar senha">
+                  <Lock size={16} />
+                </button>
+                <button onClick={handleLogout} className="flex items-center gap-1.5 text-xs text-red-400 py-1.5 px-3 rounded-xl hover:bg-red-500/10">
+                  <LogOut size={14} />Sair
+                </button>
+              </div>
             </div>
           </div>
         )}
