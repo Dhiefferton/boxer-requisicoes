@@ -3,7 +3,6 @@
 const ZEN_BASE_URL = 'https://api.zenerp.app.br';
 const ZEN_TENANT   = 'boxer';
 const INTERVALO_MS = 5 * 60 * 1000;
-const TAMANHO_PAGINA = 500;
 
 // Guarda contra chamadas concorrentes na MESMA instância de processo
 // (útil no Railway/local, onde o processo fica vivo; numa instância
@@ -12,28 +11,12 @@ const TAMANHO_PAGINA = 500;
 let _jobAtivo = false;
 let _intervalId = null;
 
-async function buscarPagina(token, offset) {
-  const filtro = 'productPacking.product.productProfile.code==\"PEC\" or productPacking.product.productProfile.code==\"PEC/S\"';
-  const url = `${ZEN_BASE_URL}/material/stock?q=${encodeURIComponent(filtro)}&sort=id&first=${offset}&max=${TAMANHO_PAGINA}`;
-  const response = await fetch(url, {
-    headers: {
-      'accept': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'tenant': ZEN_TENANT,
-    },
-  });
-  if (!response.ok) return [];
-  const items = await response.json();
-  return Array.isArray(items) ? items : [];
-}
-
 async function executarSync(db) {
   if (_jobAtivo) return statusSyncErp(db);
   _jobAtivo = true;
   const inicio = Date.now();
   console.log('[SyncERP] Iniciando sincronizacao com ZenERP...');
   try {
-    const token = await getToken();
     const result = await db.query(
       `SELECT m.codigo FROM materiais m
        JOIN categorias c ON c.id = m.categoria_id
@@ -41,34 +24,16 @@ async function executarSync(db) {
     );
     const codigosSet = new Set(result.rows.map(r => r.codigo));
     console.log(`[SyncERP] Monitorando ${codigosSet.size} pecas...`);
+    const dados = await buscaEstoque();
+    const linhas = Array.isArray(dados) ? dados : [];
     const saldos = {};
-    const idsVistos = new Set(); // deduplica linhas repetidas entre páginas
-    let duplicatasIgnoradas = 0;
-    let offset = 0;
-    let continua = true;
-    let totalRegistros = 0;
-    while (continua) {
-      const pagina = await buscarPagina(token, offset);
-      if (pagina.length === 0) { continua = false; break; }
-      for (const item of pagina) {
-        const produto = item.productPacking?.product;
-        if (!produto) continue;
-        if (idsVistos.has(item.id)) { duplicatasIgnoradas++; continue; }
-        idsVistos.add(item.id);
-        if (item.status !== 'FREE') continue;
-        if (item.type !== 'REGULAR') continue;
-        const codigo = produto.code;
-        if (!codigosSet.has(codigo)) continue;
-        saldos[codigo] = (saldos[codigo] || 0) + (item.quantity || 0);
-      }
-      totalRegistros += pagina.length;
-      offset += pagina.length;
-      console.log(`[SyncERP] Processados ${totalRegistros} registros PEC do ERP...`);
-      if (pagina.length < TAMANHO_PAGINA) continua = false;
+    for (const item of linhas) {
+      const codigo = item.product_code;
+      if (!codigo || !codigosSet.has(codigo)) continue;
+      saldos[codigo] = (saldos[codigo] || 0) + (item.sum_quantity || 0);
     }
-    if (duplicatasIgnoradas > 0) {
-      console.log(`[SyncERP] ${duplicatasIgnoradas} linha(s) duplicada(s) entre páginas foram ignoradas.`);
-    }
+    const totalRegistros = linhas.length;
+    console.log(`[SyncERP] Processados ${totalRegistros} registros PEC do ERP...`);
     const codigos = Array.from(codigosSet);
     const quantidades = codigos.map(c => saldos[c] || 0);
     await db.query(
@@ -161,4 +126,33 @@ export async function debugEstoquePorCodigo(codigo) {
   const pagina = await response.json();
   const itens = Array.isArray(pagina) ? pagina : [];
   return itens; // retorna o objeto CRU completo, sem filtrar campos
+}
+
+async function buscaEstoque() {
+  const token = await getToken();
+  const url = `${ZEN_BASE_URL}/system/data/dataSourceOpRead`;
+  const body = {
+    'code': "/material/report/stockCube",
+    'parameters': {
+      'SHOW_PRODUCT': true,
+      'SHOW_PRODUCT_PACKING': true,
+      'PRODUCT_PROFILE_IDS': [1002, 1003]
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'tenant': ZEN_TENANT
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) {
+    const erro = await response.text().catch(() => '');
+    throw new Error(`ZenERP respondeu ${response.status}: ${erro}`);
+  }
+  return await response.json();
 }
