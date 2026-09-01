@@ -488,7 +488,7 @@ export async function dashboardCompras(req, res, next) {
         LEFT JOIN materiais m ON m.id = i.material_id
         JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
         WHERE ${whereComMes}
-        GROUP BY codigo, descricao
+        GROUP BY COALESCE(m.codigo, i.codigo_snapshot), COALESCE(m.descricao, i.descricao_snapshot)
         ORDER BY quantidade DESC
         LIMIT 10
       `, params),
@@ -501,7 +501,7 @@ export async function dashboardCompras(req, res, next) {
         LEFT JOIN materiais m ON m.id = i.material_id
         JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
         WHERE ${whereComMes}
-        GROUP BY codigo, descricao
+        GROUP BY COALESCE(m.codigo, i.codigo_snapshot), COALESCE(m.descricao, i.descricao_snapshot)
         ORDER BY valor_gasto DESC
         LIMIT 50
       `, params),
