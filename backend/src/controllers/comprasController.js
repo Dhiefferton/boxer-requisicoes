@@ -233,6 +233,29 @@ export async function aprovarItem(req, res, next) {
 }
 
 // POST /compras/processos/:id/itens/:itemId/cancelar — cancela só este item
+// PATCH /compras/processos/:id/itens/:itemId — edita a quantidade necessária
+// (só permitido antes do item ser aprovado ou cancelado)
+export async function editarQuantidadeItem(req, res, next) {
+  try {
+    const { itemId } = req.params;
+    const { quantidade_necessaria } = req.body;
+
+    if (!Number.isInteger(quantidade_necessaria) || quantidade_necessaria <= 0) {
+      return res.status(400).json({ erro: 'Quantidade deve ser um número inteiro maior que zero' });
+    }
+
+    const result = await query(
+      `UPDATE itens_processo_compra SET quantidade_necessaria = $1
+       WHERE id = $2 AND status NOT IN ('aprovado', 'cancelada') RETURNING id`,
+      [quantidade_necessaria, parseInt(itemId)]
+    );
+    if (result.rows.length === 0) {
+      return res.status(400).json({ erro: 'Item não encontrado, ou já aprovado/cancelado — quantidade não pode mais ser alterada.' });
+    }
+    res.json({ sucesso: true });
+  } catch (err) { next(err); }
+}
+
 export async function cancelarItem(req, res, next) {
   try {
     const { itemId } = req.params;

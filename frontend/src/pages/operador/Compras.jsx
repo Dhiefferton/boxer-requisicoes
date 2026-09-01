@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import {
   RefreshCw, Plus, Check, ChevronDown, ChevronUp, Building2,
-  TrendingUp, Clock, CheckCircle2, DollarSign, Trash2, Ban, Truck
+  TrendingUp, Clock, CheckCircle2, DollarSign, Trash2, Ban, Truck, Pencil
 } from 'lucide-react';
 import { comprasService, fornecedoresService } from '../../services/api';
 import { Spinner } from '../../components/ui';
@@ -221,6 +221,9 @@ function DetalheItem({ processoId, item, onAtualizar }) {
   const [form,         setForm]         = useState({ fornecedor_id: '', preco_unitario: '', prazo_dias: '', observacoes: '' });
   const [enviando,     setEnviando]     = useState(false);
   const [erro,         setErro]         = useState('');
+  const [editandoQtd,  setEditandoQtd]  = useState(false);
+  const [novaQtd,      setNovaQtd]      = useState('');
+  const [salvandoQtd,  setSalvandoQtd]  = useState(false);
 
   async function carregar() {
     setLoading(true);
@@ -278,6 +281,27 @@ function DetalheItem({ processoId, item, onAtualizar }) {
     }
   }
 
+  function abrirEdicaoQtd() {
+    setNovaQtd(String(item.quantidade_necessaria));
+    setEditandoQtd(true);
+  }
+
+  async function salvarQtd() {
+    const valor = parseInt(novaQtd, 10);
+    if (!valor || valor <= 0) { alert('Informe uma quantidade válida.'); return; }
+    setSalvandoQtd(true);
+    try {
+      await comprasService.editarQuantidade(processoId, item.id, valor);
+      setEditandoQtd(false);
+      await carregar();
+      onAtualizar();
+    } catch (err) {
+      alert(err.response?.data?.erro || 'Erro ao atualizar quantidade.');
+    } finally {
+      setSalvandoQtd(false);
+    }
+  }
+
   if (loading || !dados) return <div className="px-4 py-4 flex justify-center"><Spinner size={18} className="text-[#4f6ef7]" /></div>;
 
   const menorPreco = dados.cotacoes.length > 0 ? Math.min(...dados.cotacoes.map(c => parseFloat(c.preco_unitario))) : null;
@@ -291,7 +315,27 @@ function DetalheItem({ processoId, item, onAtualizar }) {
             <span className="text-[10px] text-[#8b91a8]">{item.categoria_nome}</span>
           </div>
           <p className="text-sm text-[#e8eaf0]">{item.material_descricao}</p>
-          <p className="text-[10px] text-[#8b91a8]">Necessidade: {item.quantidade_necessaria} {item.unidade}</p>
+          {editandoQtd ? (
+            <div className="flex items-center gap-1.5 mt-1">
+              <input type="number" min="1" value={novaQtd} onChange={e => setNovaQtd(e.target.value)}
+                autoFocus className="w-20 bg-[#0f1117] border border-[#4f6ef7] text-[#e8eaf0] rounded-lg px-2 py-1 text-[11px]" />
+              <span className="text-[10px] text-[#8b91a8]">{item.unidade}</span>
+              <button onClick={salvarQtd} disabled={salvandoQtd}
+                className="text-[10px] font-medium text-green-400 hover:text-green-300 disabled:opacity-40">
+                {salvandoQtd ? '...' : 'Salvar'}
+              </button>
+              <button onClick={() => setEditandoQtd(false)} className="text-[10px] text-[#8b91a8] hover:text-[#e8eaf0]">Cancelar</button>
+            </div>
+          ) : (
+            <p className="text-[10px] text-[#8b91a8] flex items-center gap-1">
+              Necessidade: {item.quantidade_necessaria} {item.unidade}
+              {item.status !== 'aprovado' && (
+                <button onClick={abrirEdicaoQtd} title="Editar quantidade" className="text-[#8b91a8] hover:text-[#4f6ef7]">
+                  <Pencil size={11} />
+                </button>
+              )}
+            </p>
+          )}
         </div>
         {item.status !== 'aprovado' && (
           <button onClick={cancelarItem} title="Cancelar item" className="p-1.5 rounded-lg text-[#8b91a8] hover:text-amber-400 hover:bg-amber-500/10">

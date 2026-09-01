@@ -81,6 +81,8 @@ export const comprasService = {
   cancelarProcesso: (id)                    => api.post(`/compras/processos/${id}/cancelar`),
   excluirProcesso:  (id)                    => api.delete(`/compras/processos/${id}`),
   detalharItem:     (processoId, itemId)    => api.get(`/compras/processos/${processoId}/itens/${itemId}`),
+  editarQuantidade: (processoId, itemId, quantidade) =>
+    api.patch(`/compras/processos/${processoId}/itens/${itemId}`, { quantidade_necessaria: quantidade }),
   adicionarCotacao: (processoId, itemId, d) => api.post(`/compras/processos/${processoId}/itens/${itemId}/cotacoes`, d),
   aprovarItem:      (processoId, itemId, cotacaoId) => api.post(`/compras/processos/${processoId}/itens/${itemId}/aprovar`, { cotacao_id: cotacaoId }),
   cancelarItem:     (processoId, itemId)    => api.post(`/compras/processos/${processoId}/itens/${itemId}/cancelar`),
