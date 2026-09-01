@@ -643,12 +643,17 @@ function AbaDashboard() {
   const [mes, setMes] = useState(null); // null = ano inteiro
   const [dados, setDados] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
 
   useEffect(() => {
     setLoading(true);
+    setErro(null);
     comprasService.dashboard({ ano, ...(mes ? { mes } : {}) })
       .then(({ data }) => setDados(data))
-      .catch(console.error)
+      .catch(err => {
+        console.error(err);
+        setErro(err.response?.data?.erro || err.message || 'Erro ao carregar o dashboard.');
+      })
       .finally(() => setLoading(false));
   }, [ano, mes]);
 
@@ -697,9 +702,13 @@ function AbaDashboard() {
         ))}
       </div>
 
-      {loading || !dados ? (
+      {loading ? (
         <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
-      ) : (
+      ) : erro ? (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+          {erro}
+        </div>
+      ) : !dados ? null : (
         <>
           {/* KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
