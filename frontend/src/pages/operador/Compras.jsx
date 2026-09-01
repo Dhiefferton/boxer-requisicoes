@@ -4,8 +4,13 @@
 import { useState, useEffect } from 'react';
 import {
   RefreshCw, Plus, Check, ChevronDown, ChevronUp, Building2,
-  TrendingUp, Clock, CheckCircle2, DollarSign, Trash2, Ban, Truck, Pencil
+  TrendingUp, TrendingDown, Clock, CheckCircle2, DollarSign, Trash2, Ban, Truck, Pencil,
+  Package, Layers
 } from 'lucide-react';
+import {
+  BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer, LabelList
+} from 'recharts';
 import { comprasService, fornecedoresService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -617,78 +622,271 @@ function AbaHistorico() {
 // ============================================================
 // ABA: Dashboard
 // ============================================================
+const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const CORES_DONUT = ['#4f6ef7', '#f97316', '#10b981', '#eab308', '#ec4899', '#8b5cf6', '#06b6d4', '#f43f5e', '#84cc16', '#a855f7'];
+
+function TooltipCustom({ active, payload, label, formatador }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-[#0f1117] border border-[#2e3347] rounded-lg px-3 py-2 text-xs shadow-xl">
+      {label && <p className="text-[#e8eaf0] font-medium mb-1">{label}</p>}
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color || p.fill }}>{p.name}: {formatador ? formatador(p.value) : p.value}</p>
+      ))}
+    </div>
+  );
+}
+
 function AbaDashboard() {
+  const anoAtual = new Date().getFullYear();
+  const [ano, setAno] = useState(anoAtual);
+  const [mes, setMes] = useState(null); // null = ano inteiro
   const [dados, setDados] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    comprasService.dashboard()
+    setLoading(true);
+    comprasService.dashboard({ ano, ...(mes ? { mes } : {}) })
       .then(({ data }) => setDados(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [ano, mes]);
 
-  if (loading) return <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>;
-  if (!dados) return null;
+  const anosDisponiveis = [anoAtual, anoAtual - 1, anoAtual - 2];
 
-  const cards = [
-    { label: 'Aguardando cotação', valor: dados.pendentes.aguardando_cotacao, icon: Clock,       cor: 'text-amber-400',  bg: 'bg-amber-500/15' },
-    { label: 'Prontos p/ aprovar', valor: dados.pendentes.pronta_aprovar,     icon: CheckCircle2, cor: 'text-green-400', bg: 'bg-green-500/15' },
-    { label: 'Gasto no mês',       valor: `R$ ${dados.gasto_mes_atual.toFixed(2)}`, icon: DollarSign, cor: 'text-[#4f6ef7]', bg: 'bg-[#4f6ef7]/15' },
-  ];
+  const dadosMensais = MESES.map((nome, idx) => {
+    const registro = dados?.por_mes.find(m => m.mes === idx + 1);
+    return { mes: nome, valor: registro ? parseFloat(registro.valor) : 0, quantidade: registro ? parseInt(registro.quantidade) : 0 };
+  });
+
+  const dadosEconomiaMensal = MESES.map((nome, idx) => {
+    const registro = dados?.economia_por_mes.find(m => m.mes === idx + 1);
+    return { mes: nome, economia: registro ? parseFloat(registro.economia) : 0 };
+  });
+
+  const totalCategorias = dados?.por_categoria.reduce((s, c) => s + parseFloat(c.total_gasto), 0) || 0;
+  const dadosDonut = (dados?.por_categoria || []).map((c, i) => ({
+    name: c.categoria,
+    value: parseFloat(c.total_gasto),
+    percentual: totalCategorias > 0 ? (parseFloat(c.total_gasto) / totalCategorias * 100) : 0,
+    cor: CORES_DONUT[i % CORES_DONUT.length],
+  }));
+
+  const formatarMoeda = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {cards.map(c => {
-          const Icon = c.icon;
-          return (
-            <div key={c.label} className="flex items-center gap-3 p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27]">
-              <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center shrink-0`}>
-                <Icon size={17} className={c.cor} />
-              </div>
+      {/* Filtro de período */}
+      <div className="flex flex-wrap items-center gap-2">
+        {anosDisponiveis.map(a => (
+          <button key={a} onClick={() => setAno(a)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${ano === a ? 'bg-[#4f6ef7] text-white' : 'bg-[#1a1d27] text-[#8b91a8] border border-[#2e3347] hover:text-[#e8eaf0]'}`}>
+            {a}
+          </button>
+        ))}
+        <div className="w-px h-5 bg-[#2e3347] mx-1" />
+        <button onClick={() => setMes(null)}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${mes === null ? 'bg-[#4f6ef7] text-white' : 'bg-[#1a1d27] text-[#8b91a8] border border-[#2e3347] hover:text-[#e8eaf0]'}`}>
+          Ano todo
+        </button>
+        {MESES.map((nome, idx) => (
+          <button key={nome} onClick={() => setMes(idx + 1)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${mes === idx + 1 ? 'bg-[#4f6ef7] text-white' : 'bg-[#1a1d27] text-[#8b91a8] border border-[#2e3347] hover:text-[#e8eaf0]'}`}>
+            {nome}
+          </button>
+        ))}
+      </div>
+
+      {loading || !dados ? (
+        <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
+      ) : (
+        <>
+          {/* KPIs */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="flex items-center gap-3 p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27]">
+              <div className="w-10 h-10 rounded-xl bg-[#4f6ef7]/15 flex items-center justify-center shrink-0"><DollarSign size={19} className="text-[#4f6ef7]" /></div>
               <div>
-                <p className={`text-lg font-bold ${c.cor}`}>{c.valor}</p>
-                <p className="text-xs text-[#8b91a8]">{c.label}</p>
+                <p className="text-xl font-bold text-[#4f6ef7]">{formatarMoeda(dados.gasto_total)}</p>
+                <p className="text-xs text-[#8b91a8]">Gasto {mes ? `em ${MESES[mes - 1]}` : `em ${ano}`}</p>
               </div>
             </div>
-          );
-        })}
-      </div>
-
-      <div className="grid sm:grid-cols-2 gap-4">
-        <div>
-          <h3 className="text-sm font-semibold text-[#e8eaf0] mb-2 flex items-center gap-1.5"><TrendingUp size={14} /> Gasto por fornecedor</h3>
-          {dados.por_fornecedor.length === 0 ? (
-            <p className="text-xs text-[#8b91a8]">Sem dados ainda.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {dados.por_fornecedor.map(f => (
-                <div key={f.empresa} className="flex justify-between text-xs px-3 py-2 rounded-lg bg-[#1a1d27] border border-[#2e3347]">
-                  <span className="text-[#e8eaf0]">{f.empresa}</span>
-                  <span className="text-[#8b91a8]">{f.qtd_compras}x · R$ {parseFloat(f.total_gasto).toFixed(2)}</span>
-                </div>
-              ))}
+            <div className="flex items-center gap-3 p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27]">
+              <div className="w-10 h-10 rounded-xl bg-green-500/15 flex items-center justify-center shrink-0"><Package size={19} className="text-green-400" /></div>
+              <div>
+                <p className="text-xl font-bold text-green-400">{dados.qtd_produtos}</p>
+                <p className="text-xs text-[#8b91a8]">Qtd. Produtos comprados</p>
+              </div>
             </div>
-          )}
-        </div>
-
-        <div>
-          <h3 className="text-sm font-semibold text-[#e8eaf0] mb-2 flex items-center gap-1.5"><TrendingUp size={14} /> Gasto por categoria</h3>
-          {dados.por_categoria.length === 0 ? (
-            <p className="text-xs text-[#8b91a8]">Sem dados ainda.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {dados.por_categoria.map(c => (
-                <div key={c.categoria} className="flex justify-between text-xs px-3 py-2 rounded-lg bg-[#1a1d27] border border-[#2e3347]">
-                  <span className="text-[#e8eaf0]">{c.categoria}</span>
-                  <span className="text-[#8b91a8]">R$ {parseFloat(c.total_gasto).toFixed(2)}</span>
-                </div>
-              ))}
+            <div className="flex items-center gap-3 p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27]">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0"><Layers size={19} className="text-amber-400" /></div>
+              <div>
+                <p className="text-xl font-bold text-amber-400">{dados.qtd_categorias}</p>
+                <p className="text-xs text-[#8b91a8]">Qtd. Categorias</p>
+              </div>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+
+          {/* Gasto/Qtd Mensal + Donut por categoria */}
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div className="p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27]">
+              <h3 className="text-sm font-semibold text-[#e8eaf0] mb-3">Gasto / Qtd. Mensal — {ano}</h3>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={dadosMensais} margin={{ top: 20, right: 8, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2e3347" vertical={false} />
+                  <XAxis dataKey="mes" stroke="#8b91a8" fontSize={11} tickLine={false} axisLine={{ stroke: '#2e3347' }} />
+                  <YAxis stroke="#8b91a8" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip content={<TooltipCustom formatador={formatarMoeda} />} cursor={{ fill: '#2e334740' }} />
+                  <Bar dataKey="valor" name="Valor" fill="#4f6ef7" radius={[6, 6, 0, 0]}>
+                    <LabelList dataKey="quantidade" position="insideTop" fill="#e8eaf0" fontSize={10} formatter={v => v > 0 ? v : ''} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27]">
+              <h3 className="text-sm font-semibold text-[#e8eaf0] mb-3">Valor / Porcentagem por Categoria</h3>
+              {dadosDonut.length === 0 ? (
+                <p className="text-xs text-[#8b91a8] py-16 text-center">Sem dados no período.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={dadosDonut} dataKey="value" nameKey="name" innerRadius={55} outerRadius={95} paddingAngle={2}>
+                      {dadosDonut.map((d, i) => <Cell key={i} fill={d.cor} stroke="#1a1d27" strokeWidth={2} />)}
+                    </Pie>
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return <div className="bg-[#0f1117] border border-[#2e3347] rounded-lg px-3 py-2 text-xs"><p style={{ color: d.cor }}>{d.name}: {formatarMoeda(d.value)} ({d.percentual.toFixed(1)}%)</p></div>;
+                    }} />
+                    <Legend layout="vertical" align="right" verticalAlign="middle" iconSize={8}
+                      formatter={(value, entry) => <span className="text-[10px] text-[#8b91a8]">{value} ({entry.payload.percentual.toFixed(1)}%)</span>} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* Por solicitante + Por produto */}
+          <div className="grid lg:grid-cols-2 gap-4">
+            <div className="p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27]">
+              <h3 className="text-sm font-semibold text-[#e8eaf0] mb-3">Qtd. por Solicitante</h3>
+              {dados.por_solicitante.length === 0 ? (
+                <p className="text-xs text-[#8b91a8] py-6 text-center">Sem dados no período.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={Math.max(180, dados.por_solicitante.length * 34)}>
+                  <BarChart data={dados.por_solicitante} layout="vertical" margin={{ left: 8, right: 24 }}>
+                    <XAxis type="number" hide />
+                    <YAxis type="category" dataKey="solicitante" stroke="#8b91a8" fontSize={11} width={110} tickLine={false} axisLine={false} />
+                    <Tooltip content={<TooltipCustom />} cursor={{ fill: '#2e334740' }} />
+                    <Bar dataKey="quantidade" name="Qtd" fill="#06b6d4" radius={[0, 6, 6, 0]}>
+                      <LabelList dataKey="quantidade" position="right" fill="#e8eaf0" fontSize={11} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27]">
+              <h3 className="text-sm font-semibold text-[#e8eaf0] mb-3">Qtd. por Produto</h3>
+              {dados.por_produto.length === 0 ? (
+                <p className="text-xs text-[#8b91a8] py-6 text-center">Sem dados no período.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={Math.max(180, dados.por_produto.length * 34)}>
+                  <BarChart data={dados.por_produto} layout="vertical" margin={{ left: 8, right: 24 }}>
+                    <XAxis type="number" hide />
+                    <YAxis type="category" dataKey="codigo" stroke="#8b91a8" fontSize={11} width={70} tickLine={false} axisLine={false} />
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return <div className="bg-[#0f1117] border border-[#2e3347] rounded-lg px-3 py-2 text-xs max-w-[220px]"><p className="text-[#e8eaf0]">{d.descricao}</p><p className="text-[#f97316]">Qtd: {d.quantidade}</p></div>;
+                    }} cursor={{ fill: '#2e334740' }} />
+                    <Bar dataKey="quantidade" name="Qtd" fill="#f97316" radius={[0, 6, 6, 0]}>
+                      <LabelList dataKey="quantidade" position="right" fill="#e8eaf0" fontSize={11} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          {/* Redução de preço */}
+          <div className="p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27]">
+            <h3 className="text-sm font-semibold text-[#e8eaf0] mb-1 flex items-center gap-1.5"><TrendingDown size={15} className="text-green-400" /> Redução no Preço — Economia por mês</h3>
+            <p className="text-[11px] text-[#8b91a8] mb-3">Compara o preço de cada item com a compra anterior mais recente dele.</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={dadosEconomiaMensal} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2e3347" vertical={false} />
+                <XAxis dataKey="mes" stroke="#8b91a8" fontSize={11} tickLine={false} axisLine={{ stroke: '#2e3347' }} />
+                <YAxis stroke="#8b91a8" fontSize={10} tickLine={false} axisLine={false} tickFormatter={v => `R$${v}`} />
+                <Tooltip content={<TooltipCustom formatador={formatarMoeda} />} cursor={{ fill: '#2e334740' }} />
+                <Bar dataKey="economia" name="Economia" fill="#10b981" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+
+            {dados.reducao_preco.length === 0 ? (
+              <p className="text-xs text-[#8b91a8] mt-3 text-center py-4">Nenhum item teve o preço reduzido em {ano} até agora.</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-[#8b91a8] border-b border-[#2e3347]">
+                      <th className="py-2 pr-3 font-medium">Código</th>
+                      <th className="py-2 pr-3 font-medium">Descrição</th>
+                      <th className="py-2 pr-3 font-medium text-right">Preço anterior</th>
+                      <th className="py-2 pr-3 font-medium text-right">Preço atual</th>
+                      <th className="py-2 pr-3 font-medium text-right">Redução</th>
+                      <th className="py-2 font-medium text-right">Economia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dados.reducao_preco.map((r, i) => (
+                      <tr key={i} className="border-b border-[#2e3347]/50">
+                        <td className="py-2 pr-3 font-mono text-[#4f6ef7]">{r.codigo}</td>
+                        <td className="py-2 pr-3 text-[#e8eaf0]">{r.descricao}</td>
+                        <td className="py-2 pr-3 text-right text-[#8b91a8] line-through">{formatarMoeda(r.preco_anterior)}</td>
+                        <td className="py-2 pr-3 text-right text-[#e8eaf0] font-medium">{formatarMoeda(r.preco_atual)}</td>
+                        <td className="py-2 pr-3 text-right text-green-400 font-medium">-{r.reducao_percentual}%</td>
+                        <td className="py-2 text-right text-green-400">{formatarMoeda(r.economia_estimada)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Tabela de produtos */}
+          <div className="p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27]">
+            <h3 className="text-sm font-semibold text-[#e8eaf0] mb-3">Produtos</h3>
+            {dados.tabela_produtos.length === 0 ? (
+              <p className="text-xs text-[#8b91a8] py-6 text-center">Sem dados no período.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-[#8b91a8] border-b border-[#2e3347]">
+                      <th className="py-2 pr-3 font-medium">Código</th>
+                      <th className="py-2 pr-3 font-medium">Descrição</th>
+                      <th className="py-2 pr-3 font-medium text-right">Qtd.</th>
+                      <th className="py-2 font-medium text-right">Valor Gasto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dados.tabela_produtos.map((p, i) => (
+                      <tr key={i} className="border-b border-[#2e3347]/50">
+                        <td className="py-2 pr-3 font-mono text-[#4f6ef7]">{p.codigo}</td>
+                        <td className="py-2 pr-3 text-[#e8eaf0]">{p.descricao}</td>
+                        <td className="py-2 pr-3 text-right text-[#8b91a8]">{p.quantidade}</td>
+                        <td className="py-2 text-right text-[#e8eaf0] font-medium">{formatarMoeda(p.valor_gasto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

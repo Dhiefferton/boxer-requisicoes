@@ -87,7 +87,7 @@ export const comprasService = {
   aprovarItem:      (processoId, itemId, cotacaoId) => api.post(`/compras/processos/${processoId}/itens/${itemId}/aprovar`, { cotacao_id: cotacaoId }),
   cancelarItem:     (processoId, itemId)    => api.post(`/compras/processos/${processoId}/itens/${itemId}/cancelar`),
   historico:        (params)                => api.get('/compras/historico', { params }),
-  dashboard:        ()                      => api.get('/compras/dashboard'),
+  dashboard:        (params)                => api.get('/compras/dashboard', { params }),
   acompanhamento:   ()                      => api.get('/compras/acompanhamento'),
   confirmarEntrega: (processoId, itemId, numeroNotaFiscal) =>
     api.post(`/compras/processos/${processoId}/itens/${itemId}/confirmar-entrega`, { numero_nota_fiscal: numeroNotaFiscal }),

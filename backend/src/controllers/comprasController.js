@@ -421,9 +421,17 @@ export async function historicoCompras(req, res, next) {
 }
 
 // GET /compras/dashboard
+// GET /compras/dashboard?ano=2026&mes=7 (mes é opcional)
 export async function dashboardCompras(req, res, next) {
   try {
-    const [pendentes, gastoMes, porFornecedor, porCategoria] = await Promise.all([
+    const ano = parseInt(req.query.ano) || new Date().getFullYear();
+    const mes = req.query.mes ? parseInt(req.query.mes) : null;
+
+    const baseWhere = `i.status = 'aprovado' AND i.entrada_id IS NOT NULL AND EXTRACT(YEAR FROM i.recebido_em) = $1`;
+    const params = mes ? [ano, mes] : [ano];
+    const whereComMes = mes ? `${baseWhere} AND EXTRACT(MONTH FROM i.recebido_em) = $2` : baseWhere;
+
+    const [pendentes, kpis, porMes, porCategoria, porSolicitante, porProduto, tabelaProdutos, reducaoPreco] = await Promise.all([
       query(`
         SELECT
           COUNT(*) FILTER (WHERE status = 'aguardando_cotacao') AS aguardando_cotacao,
@@ -431,22 +439,24 @@ export async function dashboardCompras(req, res, next) {
         FROM itens_processo_compra
       `),
       query(`
-        SELECT COALESCE(SUM(ct.preco_unitario * i.quantidade_necessaria), 0) AS total
+        SELECT
+          COALESCE(SUM(ct.preco_unitario * i.quantidade_necessaria), 0) AS gasto_total,
+          COUNT(DISTINCT i.material_id) AS qtd_produtos,
+          COUNT(DISTINCT m.categoria_id) AS qtd_categorias
         FROM itens_processo_compra i
         JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
-        WHERE i.status = 'aprovado' AND i.entrada_id IS NOT NULL AND i.recebido_em >= date_trunc('month', NOW())
-      `),
+        LEFT JOIN materiais m ON m.id = i.material_id
+        WHERE ${whereComMes}
+      `, params),
       query(`
-        SELECT f.empresa, COUNT(*) AS qtd_compras,
-               SUM(ct.preco_unitario * i.quantidade_necessaria) AS total_gasto
+        SELECT EXTRACT(MONTH FROM i.recebido_em)::int AS mes,
+               SUM(ct.preco_unitario * i.quantidade_necessaria) AS valor,
+               SUM(i.quantidade_necessaria) AS quantidade
         FROM itens_processo_compra i
         JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
-        JOIN fornecedores f ON f.id = ct.fornecedor_id
-        WHERE i.status = 'aprovado' AND i.entrada_id IS NOT NULL
-        GROUP BY f.empresa
-        ORDER BY total_gasto DESC
-        LIMIT 10
-      `),
+        WHERE ${baseWhere}
+        GROUP BY mes ORDER BY mes
+      `, [ano]),
       query(`
         SELECT COALESCE(c.nome, 'Sem categoria') AS categoria,
                SUM(ct.preco_unitario * i.quantidade_necessaria) AS total_gasto
@@ -454,17 +464,120 @@ export async function dashboardCompras(req, res, next) {
         LEFT JOIN materiais m  ON m.id = i.material_id
         LEFT JOIN categorias c ON c.id = m.categoria_id
         JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
-        WHERE i.status = 'aprovado' AND i.entrada_id IS NOT NULL
+        WHERE ${whereComMes}
         GROUP BY c.nome
         ORDER BY total_gasto DESC
-      `),
+      `, params),
+      query(`
+        SELECT COALESCE(u.nome, 'Não identificado') AS solicitante,
+               SUM(i.quantidade_necessaria) AS quantidade
+        FROM itens_processo_compra i
+        JOIN processos_compra p ON p.id = i.processo_id
+        LEFT JOIN usuarios u ON u.id = p.criado_por
+        JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
+        WHERE ${whereComMes}
+        GROUP BY u.nome
+        ORDER BY quantidade DESC
+        LIMIT 10
+      `, params),
+      query(`
+        SELECT COALESCE(m.codigo, i.codigo_snapshot) AS codigo,
+               COALESCE(m.descricao, i.descricao_snapshot) AS descricao,
+               SUM(i.quantidade_necessaria) AS quantidade
+        FROM itens_processo_compra i
+        LEFT JOIN materiais m ON m.id = i.material_id
+        JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
+        WHERE ${whereComMes}
+        GROUP BY codigo, descricao
+        ORDER BY quantidade DESC
+        LIMIT 10
+      `, params),
+      query(`
+        SELECT COALESCE(m.codigo, i.codigo_snapshot) AS codigo,
+               COALESCE(m.descricao, i.descricao_snapshot) AS descricao,
+               SUM(i.quantidade_necessaria) AS quantidade,
+               SUM(ct.preco_unitario * i.quantidade_necessaria) AS valor_gasto
+        FROM itens_processo_compra i
+        LEFT JOIN materiais m ON m.id = i.material_id
+        JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
+        WHERE ${whereComMes}
+        GROUP BY codigo, descricao
+        ORDER BY valor_gasto DESC
+        LIMIT 50
+      `, params),
+      // Redução de preço: compara a compra mais recente de cada item com a compra
+      // imediatamente anterior a ela (não precisa estar no mesmo ano/mês filtrado,
+      // a comparação é sempre sobre o histórico completo do item).
+      query(`
+        WITH compras_ordenadas AS (
+          SELECT i.material_id,
+                 COALESCE(m.codigo, i.codigo_snapshot) AS codigo,
+                 COALESCE(m.descricao, i.descricao_snapshot) AS descricao,
+                 ct.preco_unitario,
+                 i.quantidade_necessaria,
+                 i.recebido_em,
+                 ROW_NUMBER() OVER (PARTITION BY i.material_id ORDER BY i.recebido_em DESC) AS rn
+          FROM itens_processo_compra i
+          LEFT JOIN materiais m ON m.id = i.material_id
+          JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
+          WHERE i.status = 'aprovado' AND i.entrada_id IS NOT NULL
+        ),
+        comparacao AS (
+          SELECT a.codigo, a.descricao,
+                 a.preco_unitario AS preco_atual, a.recebido_em AS data_atual, a.quantidade_necessaria,
+                 b.preco_unitario AS preco_anterior, b.recebido_em AS data_anterior
+          FROM compras_ordenadas a
+          JOIN compras_ordenadas b ON b.material_id = a.material_id AND b.rn = a.rn + 1
+          WHERE a.rn = 1
+        )
+        SELECT codigo, descricao, preco_atual, preco_anterior, data_atual, data_anterior,
+               (preco_anterior - preco_atual) AS reducao_unitaria,
+               ROUND(((preco_anterior - preco_atual) / preco_anterior * 100)::numeric, 1) AS reducao_percentual,
+               ((preco_anterior - preco_atual) * quantidade_necessaria) AS economia_estimada
+        FROM comparacao
+        WHERE preco_atual < preco_anterior AND EXTRACT(YEAR FROM data_atual) = $1
+        ORDER BY reducao_percentual DESC
+        LIMIT 20
+      `, [ano]),
     ]);
 
+    // Economia por mês (soma da economia_estimada de itens com redução, agrupado
+    // pelo mês da compra mais recente que gerou a comparação)
+    const economiaPorMesResult = await query(`
+      WITH compras_ordenadas AS (
+        SELECT i.material_id, ct.preco_unitario, i.quantidade_necessaria, i.recebido_em,
+               ROW_NUMBER() OVER (PARTITION BY i.material_id ORDER BY i.recebido_em DESC) AS rn
+        FROM itens_processo_compra i
+        JOIN cotacoes ct ON ct.id = i.cotacao_vencedora_id
+        WHERE i.status = 'aprovado' AND i.entrada_id IS NOT NULL
+      ),
+      comparacao AS (
+        SELECT a.recebido_em AS data_atual, a.quantidade_necessaria,
+               a.preco_unitario AS preco_atual, b.preco_unitario AS preco_anterior
+        FROM compras_ordenadas a
+        JOIN compras_ordenadas b ON b.material_id = a.material_id AND b.rn = a.rn + 1
+        WHERE a.rn = 1
+      )
+      SELECT EXTRACT(MONTH FROM data_atual)::int AS mes,
+             COALESCE(SUM((preco_anterior - preco_atual) * quantidade_necessaria), 0) AS economia
+      FROM comparacao
+      WHERE preco_atual < preco_anterior AND EXTRACT(YEAR FROM data_atual) = $1
+      GROUP BY mes ORDER BY mes
+    `, [ano]);
+
     res.json({
-      pendentes:       pendentes.rows[0],
-      gasto_mes_atual: parseFloat(gastoMes.rows[0].total),
-      por_fornecedor:  porFornecedor.rows,
-      por_categoria:   porCategoria.rows,
+      ano, mes,
+      pendentes:        pendentes.rows[0],
+      gasto_total:      parseFloat(kpis.rows[0].gasto_total),
+      qtd_produtos:     parseInt(kpis.rows[0].qtd_produtos),
+      qtd_categorias:   parseInt(kpis.rows[0].qtd_categorias),
+      por_mes:          porMes.rows,
+      por_categoria:    porCategoria.rows,
+      por_solicitante:  porSolicitante.rows,
+      por_produto:      porProduto.rows,
+      tabela_produtos:  tabelaProdutos.rows,
+      reducao_preco:    reducaoPreco.rows,
+      economia_por_mes: economiaPorMesResult.rows,
     });
   } catch (err) { next(err); }
 }
