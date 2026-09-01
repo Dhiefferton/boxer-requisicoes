@@ -657,7 +657,7 @@ function AbaDashboard() {
       .finally(() => setLoading(false));
   }, [ano, mes]);
 
-  const anosDisponiveis = [anoAtual, anoAtual - 1, anoAtual - 2];
+  const anosDisponiveis = [anoAtual];
 
   const dadosMensais = MESES.map((nome, idx) => {
     const registro = dados?.por_mes.find(m => m.mes === idx + 1);
