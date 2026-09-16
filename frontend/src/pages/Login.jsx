@@ -32,17 +32,34 @@ export default function Login() {
       try {
         const { data } = await api.get('/usuarios/buscar', { params: { q: buscaNome } });
         setSugestoes(data.usuarios);
+        // Se sobrou só um resultado e o nome batê certinho (ignorando maiúsculas/
+        // acentos), já traz o e-mail sozinho — sem precisar clicar na sugestão.
+        if (data.usuarios.length === 1 && normalizar(data.usuarios[0].nome) === normalizar(buscaNome)) {
+          selecionarUsuario(data.usuarios[0], { manterBusca: true });
+        }
       } catch {
         setSugestoes([]);
       } finally { setBuscando(false); }
     }, 300);
   }, [buscaNome]);
 
-  function selecionarUsuario(u) {
+  function normalizar(texto) {
+    return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  }
+
+  function selecionarUsuario(u, { manterBusca } = {}) {
     setEmail(u.email);
     setNomeExibido(u.nome);
-    setBuscaNome(u.nome);
+    if (!manterBusca) setBuscaNome(u.nome);
     setSugestoes([]);
+  }
+
+  function aoPressionarTeclaBusca(e) {
+    // Enter com sugestões na tela seleciona a primeira, sem precisar do mouse.
+    if (e.key === 'Enter' && sugestoes.length > 0) {
+      e.preventDefault();
+      selecionarUsuario(sugestoes[0]);
+    }
   }
 
   async function handleSubmit(e) {
@@ -95,6 +112,7 @@ export default function Login() {
                     setEmail('');
                     setNomeExibido('');
                   }}
+                  onKeyDown={aoPressionarTeclaBusca}
                   autoComplete="off"
                   className="
                     w-full bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl
