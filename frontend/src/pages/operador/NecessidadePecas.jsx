@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Ship, Plane, Check, X, Send, RefreshCw, Ban, Package } from 'lucide-react';
 import { necessidadesPecasService, materiaisService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { Spinner } from '../../components/ui';
 
 function formatarData(iso) {
@@ -16,9 +17,11 @@ function formatarData(iso) {
 }
 
 export default function NecessidadePecas() {
-  // Quem chega nessa tela já passou pelo controle de acesso da rota
-  // (admin ou setor Sac / Suporte) — então pode revisar/aprovar/enviar.
-  const podeRevisar = true;
+  // A tela é aberta a admin ou setor Sac / Suporte, mas as ações de
+  // Em andamento e Aprovado (revisar, editar, aprovar, recusar, enviar)
+  // são restritas a admin.
+  const { usuario } = useAuth();
+  const podeRevisar = usuario?.perfil === 'admin';
 
   const [itens,       setItens]       = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -244,17 +247,17 @@ function CardSolicitado({ item, podeRevisar, onAtualizar }) {
   return (
     <div className="p-3 rounded-xl border border-[#2e3347] bg-[#1a1d27] space-y-2">
       <CabecalhoCard item={item} />
-      {podeRevisar && (
-        <div className="flex gap-2 pt-1">
+      <div className="flex gap-2 pt-1">
+        {podeRevisar && (
           <button onClick={iniciar} disabled={carregando}
             className="flex-1 text-xs font-semibold py-1.5 rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 disabled:opacity-40">
             {carregando ? 'Abrindo...' : 'Iniciar revisão →'}
           </button>
-          <button onClick={cancelar} title="Cancelar" className="p-1.5 rounded-lg text-[#8b91a8] hover:text-red-400 hover:bg-red-500/10">
-            <Ban size={14} />
-          </button>
-        </div>
-      )}
+        )}
+        <button onClick={cancelar} title="Cancelar" className="p-1.5 rounded-lg text-[#8b91a8] hover:text-red-400 hover:bg-red-500/10">
+          <Ban size={14} />
+        </button>
+      </div>
     </div>
   );
 }

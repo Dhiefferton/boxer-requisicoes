@@ -108,13 +108,16 @@ router.get('/compras/acompanhamento',                  autenticar, exigirPerfil(
 router.post('/compras/processos/:id/itens/:itemId/confirmar-entrega', autenticar, exigirPerfil('admin'), confirmarEntrega);
 
 // ── Necessidade de Peças
+// Solicitado: aberto a admin ou setor Sac / Suporte (criar, ver, cancelar)
 router.get('/necessidades-pecas',                  autenticar, exigirAdminOuSetor('Sac / Suporte'), listarNecessidades);
 router.post('/necessidades-pecas',                 autenticar, exigirAdminOuSetor('Sac / Suporte'), criarNecessidade);
-router.post('/necessidades-pecas/:id/iniciar-revisao', autenticar, exigirAdminOuSetor('Sac / Suporte'), iniciarRevisao);
-router.patch('/necessidades-pecas/:id',             autenticar, exigirAdminOuSetor('Sac / Suporte'), editarNecessidade);
-router.post('/necessidades-pecas/:id/aprovar',      autenticar, exigirAdminOuSetor('Sac / Suporte'), aprovarNecessidade);
-router.post('/necessidades-pecas/:id/recusar',      autenticar, exigirAdminOuSetor('Sac / Suporte'), recusarNecessidade);
-router.post('/necessidades-pecas/:id/enviar',       autenticar, exigirAdminOuSetor('Sac / Suporte'), enviarOutroSistema);
 router.post('/necessidades-pecas/:id/cancelar',     autenticar, exigirAdminOuSetor('Sac / Suporte'), cancelarNecessidade);
+
+// Em andamento e Aprovado: só admin edita/decide
+router.post('/necessidades-pecas/:id/iniciar-revisao', autenticar, exigirPerfil('admin'), iniciarRevisao);
+router.patch('/necessidades-pecas/:id',             autenticar, exigirPerfil('admin'), editarNecessidade);
+router.post('/necessidades-pecas/:id/aprovar',      autenticar, exigirPerfil('admin'), aprovarNecessidade);
+router.post('/necessidades-pecas/:id/recusar',      autenticar, exigirPerfil('admin'), recusarNecessidade);
+router.post('/necessidades-pecas/:id/enviar',       autenticar, exigirPerfil('admin'), enviarOutroSistema);
 
 export default router;
