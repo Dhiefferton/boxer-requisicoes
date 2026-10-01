@@ -112,6 +112,21 @@ export async function editarNecessidade(req, res, next) {
 }
 
 // POST /necessidades-pecas/:id/aprovar — move Em andamento -> Aprovado
+// POST /necessidades-pecas/:id/recusar — recusa (Em andamento -> arquivado como "recusado")
+export async function recusarNecessidade(req, res, next) {
+  try {
+    const { id } = req.params;
+    const usuarioId = req.usuario.id;
+    const result = await query(
+      `UPDATE necessidades_pecas SET status = 'recusado', revisado_por = $1, revisado_em = NOW()
+       WHERE id = $2 AND status = 'em_andamento' RETURNING id`,
+      [usuarioId, parseInt(id)]
+    );
+    if (!result.rows[0]) return res.status(400).json({ erro: 'Item não encontrado ou não está mais em "Em andamento".' });
+    res.json({ sucesso: true });
+  } catch (err) { next(err); }
+}
+
 export async function aprovarNecessidade(req, res, next) {
   try {
     const { id } = req.params;

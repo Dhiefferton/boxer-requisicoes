@@ -20,8 +20,9 @@ export default function NecessidadePecas() {
   // (admin ou setor Sac / Suporte) — então pode revisar/aprovar/enviar.
   const podeRevisar = true;
 
-  const [itens,   setItens]   = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [itens,       setItens]       = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [arquivadosAbertos, setArquivadosAbertos] = useState(false);
 
   async function carregar() {
     try {
@@ -36,6 +37,7 @@ export default function NecessidadePecas() {
   const solicitados  = itens.filter(i => i.status === 'solicitado');
   const emAndamento  = itens.filter(i => i.status === 'em_andamento');
   const aprovados    = itens.filter(i => i.status === 'aprovado');
+  const recusados    = itens.filter(i => i.status === 'recusado');
 
   return (
     <div className="space-y-5">
@@ -75,6 +77,33 @@ export default function NecessidadePecas() {
               <CardAprovado key={item.id} item={item} podeRevisar={podeRevisar} onAtualizar={carregar} />
             ))}
           </Coluna>
+        </div>
+      )}
+
+      {!loading && (
+        <div className="pt-2">
+          <button onClick={() => setArquivadosAbertos(!arquivadosAbertos)}
+            className="flex items-center gap-1.5 text-xs text-[#8b91a8] hover:text-[#e8eaf0] transition-colors">
+            {arquivadosAbertos ? '▾' : '▸'} Arquivados ({recusados.length})
+          </button>
+          {arquivadosAbertos && (
+            <div className="mt-2 space-y-1.5">
+              {recusados.length === 0 ? (
+                <p className="text-xs text-[#8b91a8] py-4 text-center bg-[#1a1d27] rounded-xl border border-[#2e3347]">Nenhum item recusado.</p>
+              ) : (
+                recusados.map(item => (
+                  <div key={item.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#1a1d27] border border-[#2e3347] text-xs">
+                    <div>
+                      <span className="font-mono text-[#4f6ef7] mr-2">{item.codigo}</span>
+                      <span className="text-[#e8eaf0]">{item.descricao}</span>
+                      <span className="text-[#8b91a8]"> · Qtd: {item.quantidade}</span>
+                    </div>
+                    <span className="text-[#8b91a8] shrink-0 ml-2">recusado em {formatarData(item.revisado_em)} por {item.revisado_por_nome || '—'}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -234,11 +263,12 @@ function CardSolicitado({ item, podeRevisar, onAtualizar }) {
 // Card — Em andamento (revisão: frete + observações, editável)
 // ============================================================
 function CardEmAndamento({ item, podeRevisar, onAtualizar }) {
-  const [maritimo,  setMaritimo]  = useState(item.frete_maritimo);
-  const [aereo,     setAereo]     = useState(item.frete_aereo);
-  const [obs,       setObs]       = useState(item.observacoes || '');
-  const [salvando,  setSalvando]  = useState(false);
-  const [aprovando, setAprovando] = useState(false);
+  const [maritimo,   setMaritimo]   = useState(item.frete_maritimo);
+  const [aereo,      setAereo]      = useState(item.frete_aereo);
+  const [obs,        setObs]        = useState(item.observacoes || '');
+  const [quantidade, setQuantidade] = useState(String(item.quantidade));
+  const [salvando,   setSalvando]   = useState(false);
+  const [decidindo,  setDecidindo]  = useState(false);
 
   async function salvar(campos) {
     setSalvando(true);
@@ -249,14 +279,31 @@ function CardEmAndamento({ item, podeRevisar, onAtualizar }) {
     finally { setSalvando(false); }
   }
 
+  function salvarQuantidade() {
+    const qtd = parseInt(quantidade, 10);
+    if (!qtd || qtd <= 0) { setQuantidade(String(item.quantidade)); return; }
+    if (qtd === item.quantidade) return;
+    salvar({ quantidade: qtd });
+  }
+
   async function aprovar() {
     if (!confirm('Aprovar esta necessidade de peça?')) return;
-    setAprovando(true);
+    setDecidindo(true);
     try {
       await necessidadesPecasService.aprovar(item.id);
       onAtualizar();
     } catch (err) { alert(err.response?.data?.erro || 'Erro ao aprovar.'); }
-    finally { setAprovando(false); }
+    finally { setDecidindo(false); }
+  }
+
+  async function recusar() {
+    if (!confirm('Recusar esta necessidade de peça? Ela vai pra Arquivados.')) return;
+    setDecidindo(true);
+    try {
+      await necessidadesPecasService.recusar(item.id);
+      onAtualizar();
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao recusar.'); }
+    finally { setDecidindo(false); }
   }
 
   return (
@@ -265,6 +312,14 @@ function CardEmAndamento({ item, podeRevisar, onAtualizar }) {
 
       {podeRevisar ? (
         <>
+          <div className="flex items-center gap-2">
+            <label className="text-[11px] text-[#8b91a8] shrink-0">Quantidade:</label>
+            <input type="number" min="1" value={quantidade}
+              onChange={e => setQuantidade(e.target.value)}
+              onBlur={salvarQuantidade}
+              className="w-20 bg-[#0f1117] border border-[#2e3347] text-[#e8eaf0] rounded-lg px-2 py-1 text-xs" />
+          </div>
+
           <div className="flex gap-2">
             <button onClick={() => { setMaritimo(!maritimo); salvar({ frete_maritimo: !maritimo }); }}
               className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-medium py-1.5 rounded-lg border transition-colors ${maritimo ? 'bg-blue-500/15 border-blue-500/30 text-blue-400' : 'border-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0]'}`}>
@@ -282,10 +337,16 @@ function CardEmAndamento({ item, podeRevisar, onAtualizar }) {
             rows={2}
             className="w-full bg-[#0f1117] border border-[#2e3347] text-[#e8eaf0] rounded-lg px-2.5 py-1.5 text-xs resize-none" />
 
-          <button onClick={aprovar} disabled={aprovando}
-            className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-green-500/15 text-green-400 hover:bg-green-500/25 disabled:opacity-40">
-            <Check size={13} /> {aprovando ? 'Aprovando...' : 'Aprovar'}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={aprovar} disabled={decidindo}
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-green-500/15 text-green-400 hover:bg-green-500/25 disabled:opacity-40">
+              <Check size={13} /> Aprovar
+            </button>
+            <button onClick={recusar} disabled={decidindo}
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 disabled:opacity-40">
+              <X size={13} /> Recusado
+            </button>
+          </div>
         </>
       ) : (
         <div className="flex gap-2 text-[11px] text-[#8b91a8]">

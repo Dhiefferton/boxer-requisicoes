@@ -51,6 +51,7 @@ export const necessidadesPecasService = {
   iniciarRevisao: (id)               => api.post(`/necessidades-pecas/${id}/iniciar-revisao`),
   editar:         (id, dados)        => api.patch(`/necessidades-pecas/${id}`, dados),
   aprovar:        (id)               => api.post(`/necessidades-pecas/${id}/aprovar`),
+  recusar:        (id)               => api.post(`/necessidades-pecas/${id}/recusar`),
   enviar:         (id)               => api.post(`/necessidades-pecas/${id}/enviar`),
   cancelar:       (id)               => api.post(`/necessidades-pecas/${id}/cancelar`),
 };

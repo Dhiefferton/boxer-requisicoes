@@ -26,7 +26,7 @@ import {
 } from '../controllers/comprasController.js';
 import {
   listarNecessidades, criarNecessidade, iniciarRevisao, editarNecessidade,
-  aprovarNecessidade, enviarOutroSistema, cancelarNecessidade
+  aprovarNecessidade, recusarNecessidade, enviarOutroSistema, cancelarNecessidade
 } from '../controllers/necessidadesPecasController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 
@@ -113,6 +113,7 @@ router.post('/necessidades-pecas',                 autenticar, exigirAdminOuSeto
 router.post('/necessidades-pecas/:id/iniciar-revisao', autenticar, exigirAdminOuSetor('Sac / Suporte'), iniciarRevisao);
 router.patch('/necessidades-pecas/:id',             autenticar, exigirAdminOuSetor('Sac / Suporte'), editarNecessidade);
 router.post('/necessidades-pecas/:id/aprovar',      autenticar, exigirAdminOuSetor('Sac / Suporte'), aprovarNecessidade);
+router.post('/necessidades-pecas/:id/recusar',      autenticar, exigirAdminOuSetor('Sac / Suporte'), recusarNecessidade);
 router.post('/necessidades-pecas/:id/enviar',       autenticar, exigirAdminOuSetor('Sac / Suporte'), enviarOutroSistema);
 router.post('/necessidades-pecas/:id/cancelar',     autenticar, exigirAdminOuSetor('Sac / Suporte'), cancelarNecessidade);
 
