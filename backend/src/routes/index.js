@@ -28,7 +28,7 @@ import {
   listarNecessidades, criarNecessidade, iniciarRevisao, editarNecessidade,
   aprovarNecessidade, enviarOutroSistema, cancelarNecessidade
 } from '../controllers/necessidadesPecasController.js';
-import { autenticar, exigirPerfil } from '../middlewares/auth.js';
+import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 
 const router = Router();
 
@@ -108,12 +108,12 @@ router.get('/compras/acompanhamento',                  autenticar, exigirPerfil(
 router.post('/compras/processos/:id/itens/:itemId/confirmar-entrega', autenticar, exigirPerfil('admin'), confirmarEntrega);
 
 // ── Necessidade de Peças
-router.get('/necessidades-pecas',                  autenticar, listarNecessidades);
-router.post('/necessidades-pecas',                 autenticar, criarNecessidade);
-router.post('/necessidades-pecas/:id/iniciar-revisao', autenticar, exigirPerfil('operador', 'admin'), iniciarRevisao);
-router.patch('/necessidades-pecas/:id',             autenticar, exigirPerfil('operador', 'admin'), editarNecessidade);
-router.post('/necessidades-pecas/:id/aprovar',      autenticar, exigirPerfil('operador', 'admin'), aprovarNecessidade);
-router.post('/necessidades-pecas/:id/enviar',       autenticar, exigirPerfil('operador', 'admin'), enviarOutroSistema);
-router.post('/necessidades-pecas/:id/cancelar',     autenticar, cancelarNecessidade);
+router.get('/necessidades-pecas',                  autenticar, exigirAdminOuSetor('Sac / Suporte'), listarNecessidades);
+router.post('/necessidades-pecas',                 autenticar, exigirAdminOuSetor('Sac / Suporte'), criarNecessidade);
+router.post('/necessidades-pecas/:id/iniciar-revisao', autenticar, exigirAdminOuSetor('Sac / Suporte'), iniciarRevisao);
+router.patch('/necessidades-pecas/:id',             autenticar, exigirAdminOuSetor('Sac / Suporte'), editarNecessidade);
+router.post('/necessidades-pecas/:id/aprovar',      autenticar, exigirAdminOuSetor('Sac / Suporte'), aprovarNecessidade);
+router.post('/necessidades-pecas/:id/enviar',       autenticar, exigirAdminOuSetor('Sac / Suporte'), enviarOutroSistema);
+router.post('/necessidades-pecas/:id/cancelar',     autenticar, exigirAdminOuSetor('Sac / Suporte'), cancelarNecessidade);
 
 export default router;

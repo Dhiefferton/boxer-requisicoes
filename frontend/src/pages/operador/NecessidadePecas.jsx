@@ -8,7 +8,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Ship, Plane, Check, X, Send, RefreshCw, Ban, Package } from 'lucide-react';
 import { necessidadesPecasService, materiaisService } from '../../services/api';
-import { useAuth } from '../../context/AuthContext';
 import { Spinner } from '../../components/ui';
 
 function formatarData(iso) {
@@ -17,8 +16,9 @@ function formatarData(iso) {
 }
 
 export default function NecessidadePecas() {
-  const { usuario } = useAuth();
-  const podeRevisar = usuario?.perfil === 'operador' || usuario?.perfil === 'admin';
+  // Quem chega nessa tela já passou pelo controle de acesso da rota
+  // (admin ou setor Sac / Suporte) — então pode revisar/aprovar/enviar.
+  const podeRevisar = true;
 
   const [itens,   setItens]   = useState([]);
   const [loading, setLoading] = useState(true);

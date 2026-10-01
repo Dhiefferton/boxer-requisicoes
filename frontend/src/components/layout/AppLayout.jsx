@@ -25,8 +25,15 @@ export default function AppLayout({ children }) {
     { to: '/admin',     icon: ShieldCheck,     label: 'Admin',      perfis: ['admin'] },
     { to: '/mrp',       icon: BarChart2,       label: 'MRP',        perfis: ['admin'] },
     { to: '/compras',   icon: FileText,        label: 'Compras',    perfis: ['admin'] },
-    { to: '/necessidade-pecas', icon: Package, label: 'Nec. Peças', perfis: ['colaborador', 'operador', 'admin'] },
-  ].filter(item => item.perfis.includes(usuario?.perfil));
+    { to: '/necessidade-pecas', icon: Package, label: 'Nec. Peças', perfis: ['admin'], setores: ['Sac / Suporte'] },
+  ].filter(item => {
+    if (item.perfis.includes(usuario?.perfil)) return true;
+    if (item.setores) {
+      const setoresNormalizados = item.setores.map(s => s.trim().toLowerCase());
+      return setoresNormalizados.includes((usuario?.departamento_nome || '').trim().toLowerCase());
+    }
+    return false;
+  });
 
   return (
     <div className="min-h-screen bg-[#0f1117] flex flex-col">
