@@ -24,6 +24,10 @@ import {
   aprovarItem, cancelarItem, cancelarProcesso, excluirProcesso, historicoCompras, dashboardCompras,
   listarAcompanhamento, confirmarEntrega, editarQuantidadeItem
 } from '../controllers/comprasController.js';
+import {
+  listarNecessidades, criarNecessidade, iniciarRevisao, editarNecessidade,
+  aprovarNecessidade, enviarOutroSistema, cancelarNecessidade
+} from '../controllers/necessidadesPecasController.js';
 import { autenticar, exigirPerfil } from '../middlewares/auth.js';
 
 const router = Router();
@@ -102,5 +106,14 @@ router.get('/compras/historico',                       autenticar, exigirPerfil(
 router.get('/compras/dashboard',                       autenticar, exigirPerfil('admin'), dashboardCompras);
 router.get('/compras/acompanhamento',                  autenticar, exigirPerfil('admin'), listarAcompanhamento);
 router.post('/compras/processos/:id/itens/:itemId/confirmar-entrega', autenticar, exigirPerfil('admin'), confirmarEntrega);
+
+// ── Necessidade de Peças
+router.get('/necessidades-pecas',                  autenticar, listarNecessidades);
+router.post('/necessidades-pecas',                 autenticar, criarNecessidade);
+router.post('/necessidades-pecas/:id/iniciar-revisao', autenticar, exigirPerfil('operador', 'admin'), iniciarRevisao);
+router.patch('/necessidades-pecas/:id',             autenticar, exigirPerfil('operador', 'admin'), editarNecessidade);
+router.post('/necessidades-pecas/:id/aprovar',      autenticar, exigirPerfil('operador', 'admin'), aprovarNecessidade);
+router.post('/necessidades-pecas/:id/enviar',       autenticar, exigirPerfil('operador', 'admin'), enviarOutroSistema);
+router.post('/necessidades-pecas/:id/cancelar',     autenticar, cancelarNecessidade);
 
 export default router;

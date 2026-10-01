@@ -45,6 +45,16 @@ export const materiaisService = {
   atualizarEstoque:(id, d)  => api.patch(`/materiais/${id}/estoque`, d),
 };
 
+export const necessidadesPecasService = {
+  listar:         ()                => api.get('/necessidades-pecas'),
+  criar:          (codigo, quantidade) => api.post('/necessidades-pecas', { codigo, quantidade }),
+  iniciarRevisao: (id)               => api.post(`/necessidades-pecas/${id}/iniciar-revisao`),
+  editar:         (id, dados)        => api.patch(`/necessidades-pecas/${id}`, dados),
+  aprovar:        (id)               => api.post(`/necessidades-pecas/${id}/aprovar`),
+  enviar:         (id)               => api.post(`/necessidades-pecas/${id}/enviar`),
+  cancelar:       (id)               => api.post(`/necessidades-pecas/${id}/cancelar`),
+};
+
 export const requisicoesService = {
   criar:       (dados)           => api.post('/requisicoes', dados),
   listar:      (params)          => api.get('/requisicoes', { params }),

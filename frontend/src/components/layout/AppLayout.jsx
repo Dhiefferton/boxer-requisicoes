@@ -25,6 +25,7 @@ export default function AppLayout({ children }) {
     { to: '/admin',     icon: ShieldCheck,     label: 'Admin',      perfis: ['admin'] },
     { to: '/mrp',       icon: BarChart2,       label: 'MRP',        perfis: ['admin'] },
     { to: '/compras',   icon: FileText,        label: 'Compras',    perfis: ['admin'] },
+    { to: '/necessidade-pecas', icon: Package, label: 'Nec. Peças', perfis: ['colaborador', 'operador', 'admin'] },
   ].filter(item => item.perfis.includes(usuario?.perfil));
 
   return (
