@@ -186,3 +186,16 @@ export async function criarPedidoVendaZen(pedido) {
 
   return resultado;
 }
+
+/**
+ * Situação da ordem de separação no Zen.
+ * A separação está concluída quando a reserva é finalizada (FINISHED).
+ */
+export async function consultarOrdemSeparacao(ordemId) {
+  const ordem = await zen('GET', `/material/pickingOrder/${ordemId}`);
+  return {
+    status:        ordem?.status || null,
+    reservaStatus: ordem?.reservation?.status || null,
+    separado:      ordem?.reservation?.status === 'FINISHED',
+  };
+}
