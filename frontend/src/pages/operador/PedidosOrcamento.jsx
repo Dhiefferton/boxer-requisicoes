@@ -6,7 +6,7 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { Plus, ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -164,10 +164,8 @@ function FormNovoPedido({ onCriado }) {
 
 function CardPedido({ pedido, onAtualizar }) {
   const [mudando, setMudando] = useState(false);
-  const [abrirCampos, setAbrirCampos] = useState(false);
   const itens = pedido.itens || [];
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
-  const campos = (pedido.pipefy_campos || []).filter(c => c.valor !== null && c.valor !== '' && c.valor !== '[]');
   const indiceAtual = COLUNAS.findIndex(c => c.status === pedido.status);
   const proxima = COLUNAS[indiceAtual + 1];
 
@@ -239,23 +237,6 @@ function CardPedido({ pedido, onAtualizar }) {
               </tr>
             </tfoot>
           </table>
-        </div>
-      )}
-      {campos.length > 0 && (
-        <div>
-          <button onClick={() => setAbrirCampos(v => !v)} className="flex items-center gap-1 text-[11px] text-[#8b91a8] hover:text-[#e8eaf0]">
-            {abrirCampos ? <ChevronUp size={12} /> : <ChevronDown size={12} />} todos os campos do card ({campos.length})
-          </button>
-          {abrirCampos && (
-            <dl className="mt-1.5 space-y-1 text-xs">
-              {campos.map((c, i) => (
-                <div key={c.id || i}>
-                  <dt className="text-[#8b91a8]">{c.nome}</dt>
-                  <dd className="text-[#e8eaf0] whitespace-pre-wrap break-words">{c.valor}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
         </div>
       )}
       {pedido.observacoes && <p className="text-xs text-[#8b91a8]">{pedido.observacoes}</p>}
