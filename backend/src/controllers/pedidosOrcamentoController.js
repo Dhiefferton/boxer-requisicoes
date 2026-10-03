@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import { query } from '../config/db.js';
 import { pipefyQuery, listarCardsDaFase, extrairDadosOrcamento } from '../integrations/pipefyService.js';
-import { criarPedidoVendaZen } from '../integrations/zenPedidoVenda.js';
+import { criarPedidoVendaZen, consultarOrdemSeparacao } from '../integrations/zenPedidoVenda.js';
 
 const BASE_SELECT = `
   SELECT
@@ -55,7 +55,7 @@ export async function criarPedido(req, res, next) {
 }
 
 // PATCH /pedidos-orcamento/:id/mover — avança/retrocede de coluna
-const STATUS_VALIDOS = ['solicitacao', 'separando', 'finalizado'];
+const STATUS_VALIDOS = ['solicitacao', 'separando', 'separado', 'finalizado'];
 export async function moverPedido(req, res, next) {
   try {
     const { id } = req.params;
@@ -199,7 +199,28 @@ export async function sincronizarPipefy(req, res, next) {
       if (result.rows[0]?.inserido) novos++; else atualizados++;
     }
 
-    res.json({ total: cards.length, novos, atualizados });
+    // Separando -> Separado: quando a reserva da ordem de separação é finalizada no Zen
+    let separados = 0;
+    const emSeparacao = await query(
+      `SELECT id, zen_ordem_separacao_id FROM pedidos_orcamento
+        WHERE status = 'separando' AND zen_ordem_separacao_id IS NOT NULL`
+    );
+    for (const p of emSeparacao.rows) {
+      try {
+        const situacao = await consultarOrdemSeparacao(p.zen_ordem_separacao_id);
+        if (situacao.separado) {
+          await query(
+            `UPDATE pedidos_orcamento SET status = 'separado', atualizado_em = NOW() WHERE id = $1 AND status = 'separando'`,
+            [p.id]
+          );
+          separados++;
+        }
+      } catch (err) {
+        console.error(`⚠️ Não consegui consultar a ordem de separação ${p.zen_ordem_separacao_id}:`, err.message);
+      }
+    }
+
+    res.json({ total: cards.length, novos, atualizados, separados });
   } catch (err) { next(err); }
 }
 
