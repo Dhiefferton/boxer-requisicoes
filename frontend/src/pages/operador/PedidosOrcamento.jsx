@@ -14,6 +14,7 @@ const COLUNAS = [
   { status: 'solicitacao', titulo: 'Solicitação', cor: 'border-blue-500/30' },
   { status: 'separando',   titulo: 'Separando',   cor: 'border-amber-500/30' },
   { status: 'separado',    titulo: 'Separado',    cor: 'border-purple-500/30' },
+  { status: 'aprovado_recusado', titulo: 'Aprovado/Recusado', cor: 'border-cyan-500/30' },
   { status: 'finalizado',  titulo: 'Finalizado',  cor: 'border-green-500/30' },
 ];
 
@@ -55,7 +56,7 @@ export default function PedidosOrcamento() {
     setMsgSync('');
     try {
       const { data } = await pedidosOrcamentoService.sincronizarPipefy();
-      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s). Zen: ${data.separados || 0} separado(s).`);
+      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s). Zen: ${data.separados || 0} separado(s). Aprovado/Recusado: ${data.aprovadosRecusados || 0}.`);
       await carregar();
     } catch (err) {
       setMsgSync(err.response?.data?.erro || 'Erro ao sincronizar com o Pipefy.');
@@ -87,7 +88,7 @@ export default function PedidosOrcamento() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
       ) : (
-        <div className="grid lg:grid-cols-4 gap-4">
+        <div className="grid md:grid-cols-3 xl:grid-cols-5 gap-4">
           {COLUNAS.map(({ status, titulo, cor }) => {
             const itens = pedidos.filter(p => p.status === status);
             return (
@@ -125,8 +126,10 @@ function CardPedido({ pedido, onAtualizar }) {
   const itens = pedido.itens || [];
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
   const indiceAtual = COLUNAS.findIndex(c => c.status === pedido.status);
-  // Separando -> Separado é automático (reserva finalizada no Zen, via "Atualizar")
-  const proxima = pedido.status === 'separando' ? null : COLUNAS[indiceAtual + 1];
+  // Automáticos (via "Atualizar"): Separando -> Separado (reserva finalizada no Zen)
+  // e -> Aprovado/Recusado (fase do card no Pipefy)
+  const proxima = ['separando', 'separado'].includes(pedido.status) ? null : COLUNAS[indiceAtual + 1];
+  const aprovacao = String(pedido.aprovacao || '').toLowerCase();
 
   async function avancar() {
     setMudando(true);
@@ -155,6 +158,12 @@ function CardPedido({ pedido, onAtualizar }) {
             className="text-[#8b91a8] hover:text-[#4f6ef7]"><ExternalLink size={13} /></a>
         )}
       </div>
+      {pedido.aprovacao && (
+        <span className={`inline-block mr-1 text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${
+          aprovacao.startsWith('aprov') ? 'text-green-300 bg-green-500/20'
+          : aprovacao.startsWith('recus') ? 'text-red-300 bg-red-500/20'
+          : 'text-[#8b91a8] bg-[#2e3347]'}`}>{pedido.aprovacao}</span>
+      )}
       {pedido.pipefy_card_id && (
         <span className="inline-block text-[10px] font-semibold text-[#4f6ef7] bg-[#4f6ef7]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
       )}
