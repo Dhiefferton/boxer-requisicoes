@@ -6,7 +6,7 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink } from 'lucide-react';
+import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -92,7 +92,7 @@ export default function PedidosOrcamento() {
           {COLUNAS.map(({ status, titulo, cor }) => {
             const itens = pedidos.filter(p => p.status === status);
             return (
-              <Coluna key={status} titulo={titulo} cor={cor} total={itens.length}>
+              <Coluna key={status} titulo={titulo} cor={cor} total={itens.length} arquivada={status === 'finalizado'}>
                 {itens.length === 0 ? (
                   <p className="text-xs text-[#8b91a8] py-8 text-center bg-[#1a1d27] rounded-xl border border-[#2e3347]">Nenhum pedido aqui.</p>
                 ) : (
@@ -109,14 +109,30 @@ export default function PedidosOrcamento() {
   );
 }
 
-function Coluna({ titulo, cor, total, children }) {
+function Coluna({ titulo, cor, total, arquivada = false, children }) {
+  // Finalizado: arquivado — lista fechada, abre na seta
+  const [aberta, setAberta] = useState(!arquivada);
   return (
     <div>
       <div className={`flex items-center justify-between pb-2 mb-3 border-b-2 ${cor}`}>
-        <h2 className="text-sm font-semibold text-[#e8eaf0]">{titulo}</h2>
+        {arquivada ? (
+          <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1 text-sm font-semibold text-[#e8eaf0] hover:text-white">
+            {aberta ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+            <Archive size={13} className="text-[#8b91a8]" /> {titulo}
+          </button>
+        ) : (
+          <h2 className="text-sm font-semibold text-[#e8eaf0]">{titulo}</h2>
+        )}
         <span className="text-xs text-[#8b91a8] bg-[#1a1d27] border border-[#2e3347] rounded-full px-2 py-0.5">{total}</span>
       </div>
-      <div className="space-y-2">{children}</div>
+      {aberta ? (
+        <div className="space-y-2">{children}</div>
+      ) : (
+        <button onClick={() => setAberta(true)}
+          className="w-full text-xs text-[#8b91a8] py-3 text-center bg-[#1a1d27] rounded-xl border border-dashed border-[#2e3347] hover:text-[#e8eaf0]">
+          {total} arquivado(s) — clique para ver
+        </button>
+      )}
     </div>
   );
 }
