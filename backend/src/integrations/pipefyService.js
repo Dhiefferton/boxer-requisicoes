@@ -56,6 +56,52 @@ export async function pipefyQuery(query, variables) {
   return pipefyMutation(query, variables);
 }
 
+// Pipe "Orçamento BOXER SOLDAS" -> fase "Requisitar Peças"
+export const ORCAMENTO_PIPE_ID          = process.env.PIPEFY_ORCAMENTO_PIPE_ID  || '301367367';
+export const ORCAMENTO_PHASE_REQUISITAR = process.env.PIPEFY_ORCAMENTO_PHASE_ID || '344449850';
+
+// Busca todos os cards de uma fase (paginado, 50 por página).
+export async function listarCardsDaFase(phaseId = ORCAMENTO_PHASE_REQUISITAR) {
+  const gql = `
+    query CardsDaFase($phaseId: ID!, $after: String) {
+      phase(id: $phaseId) {
+        cards(first: 50, after: $after) {
+          pageInfo { hasNextPage endCursor }
+          edges {
+            node {
+              id
+              title
+              url
+              createdAt
+              fields { name value field { id } }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const cards = [];
+  let after = null;
+  for (let pagina = 0; pagina < 40; pagina++) {
+    const data = await pipefyQuery(gql, { phaseId: String(phaseId), after });
+    const conn = data?.phase?.cards;
+    if (!conn) break;
+    for (const { node } of conn.edges) {
+      cards.push({
+        id:        String(node.id),
+        titulo:    node.title,
+        url:       node.url,
+        criadoEm:  node.createdAt,
+        campos:    (node.fields || []).map(f => ({ id: f.field?.id || null, nome: f.name, valor: f.value })),
+      });
+    }
+    if (!conn.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  return cards;
+}
+
 export async function criarCardPipefy({ requisicaoId, solicitante, departamento, itens, dataNecessidade }) {
   try {
     const itensTexto = itens.map(i =>
