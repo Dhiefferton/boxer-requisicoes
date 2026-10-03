@@ -261,7 +261,15 @@ export async function buscarSituacaoCards(cardIds) {
     lote.forEach((id, n) => {
       const card = data?.[`c${n}`];
       if (!card) return;
-      const campo = (card.fields || []).find(f => norm(f.name) === 'aprovacao');
+      const fields = card.fields || [];
+      const valorNorm = (f) => norm(valorTexto(f.value));
+      const campo =
+        fields.find(f => norm(f.name).replace(/[^a-z]/g, '') === 'aprovacao')
+        || fields.find(f => /aprova/.test(norm(f.name)) && /^(aprovad|recusad)/.test(valorNorm(f)))
+        || fields.find(f => /^(aprovado|recusado)$/.test(valorNorm(f)));
+      if (!campo && card.current_phase?.id === String(ORCAMENTO_PHASE_APROVADO_RECUSADO)) {
+        console.log(`⚠️ Card ${card.id} sem campo Aprovação. Campos:`, fields.map(f => `${f.name}=${valorTexto(f.value)}`).join(' | '));
+      }
       resultado.set(String(card.id), {
         faseId:    card.current_phase?.id ? String(card.current_phase.id) : null,
         faseNome:  card.current_phase?.name || null,
