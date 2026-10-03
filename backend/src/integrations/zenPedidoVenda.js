@@ -29,6 +29,7 @@ const CFG = {
   taxationOperation:      Number(process.env.ZEN_PV_TAXATION_OP_ID     || 1392),  // CFOP 5.927
   currency:               Number(process.env.ZEN_PV_CURRENCY_ID        || 1001),  // BRL
   pickingProfile:         Number(process.env.ZEN_PV_PICKING_PROFILE_ID || 1003),  // ORCAMENTO
+  paymentMethods:         process.env.ZEN_PV_PAYMENT_METHODS || '0',              // prazo: 0 = à vista
 };
 
 async function zen(metodo, caminho, corpo) {
@@ -103,6 +104,17 @@ export async function criarPedidoVendaZen(pedido) {
   if (!pedido.cliente_cnpj) throw new Error('Pedido sem CNPJ do cliente.');
 
   let zenPedidoId = pedido.zen_pedido_id;
+
+  // Pedido excluído no Zen? Começa do zero.
+  if (zenPedidoId) {
+    try {
+      await zen('GET', `/sale/sale/${zenPedidoId}`);
+    } catch (err) {
+      if (/→ 404/.test(err.message)) zenPedidoId = null;
+      else throw err;
+    }
+  }
+
   const resultado = { zenPedidoId: null, ordemSeparacaoId: null, itensIncluidos: 0, criadoAgora: false };
 
   // 1–2. Cabeçalho
@@ -117,7 +129,7 @@ export async function criarPedidoVendaZen(pedido) {
       freightType:            'NONE',
       currency:               { id: CFG.currency },
       availabilityDate:       hojeSP(),
-      properties:             { comments: montarObservacoes(pedido) },
+      properties:             { comments: montarObservacoes(pedido), paymentMethods: CFG.paymentMethods },
     });
     zenPedidoId = venda?.id;
     if (!zenPedidoId) throw new Error('ZenERP não retornou o ID do pedido criado.');
@@ -152,7 +164,11 @@ export async function criarPedidoVendaZen(pedido) {
         resultado.itensIncluidos++;
       }
 
-      // 4. Finalizar preparação
+      // 4. Finalizar preparação — exige forma de pagamento (prazo) no pedido
+      if (venda.properties?.paymentMethods == null) {
+        venda.properties = { ...(venda.properties || {}), paymentMethods: CFG.paymentMethods };
+        await zen('PUT', '/sale/sale', venda);
+      }
       await zen('POST', `/sale/saleOpPrepare/${zenPedidoId}`);
       venda = await zen('GET', `/sale/sale/${zenPedidoId}`);
     }
