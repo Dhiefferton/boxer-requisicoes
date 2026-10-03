@@ -29,7 +29,7 @@ import {
   aprovarNecessidade, recusarNecessidade, enviarOutroSistema, cancelarNecessidade
 } from '../controllers/necessidadesPecasController.js';
 import {
-  listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy
+  listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy
 } from '../controllers/pedidosOrcamentoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 
@@ -123,6 +123,7 @@ router.patch('/pedidos-orcamento/:id/mover',    autenticar, exigirPerfil('admin'
 router.patch('/pedidos-orcamento/:id',          autenticar, exigirPerfil('admin'), editarPedido);
 router.post('/pedidos-orcamento/:id/cancelar',  autenticar, exigirPerfil('admin'), cancelarPedido);
 router.get('/pedidos-orcamento/pipefy-pipes',   autenticar, exigirPerfil('admin'), listarPipesPipefy);
+router.post('/pedidos-orcamento/sincronizar-pipefy', autenticar, exigirPerfil('admin'), sincronizarPipefy);
 
 // Em andamento e Aprovado: só admin edita/decide
 router.post('/necessidades-pecas/:id/iniciar-revisao', autenticar, exigirPerfil('admin'), iniciarRevisao);
