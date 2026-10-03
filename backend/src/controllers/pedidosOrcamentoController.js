@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { query } from '../config/db.js';
+import { pipefyQuery } from '../integrations/pipefyService.js';
 
 const BASE_SELECT = `
   SELECT
@@ -87,6 +88,29 @@ export async function editarPedido(req, res, next) {
     );
     if (!result.rows[0]) return res.status(404).json({ erro: 'Pedido não encontrado.' });
     res.json({ sucesso: true });
+  } catch (err) { next(err); }
+}
+
+// DIAGNÓSTICO — GET /pedidos-orcamento/pipefy-pipes
+// Lista os pipes da organização Boxer Soldas no Pipefy, com suas fases,
+// pra achar o pipe_id de "Orçamento BOXER SOLDAS" e o phase_id de
+// "Requisitar peças". Só consulta, não mexe em nada. Admin only.
+export async function listarPipesPipefy(req, res, next) {
+  try {
+    const gql = `
+      query {
+        organization(id: 327351) {
+          name
+          pipes {
+            id
+            name
+            phases { id name }
+          }
+        }
+      }
+    `;
+    const data = await pipefyQuery(gql);
+    res.json(data);
   } catch (err) { next(err); }
 }
 

@@ -50,6 +50,12 @@ async function pipefyMutation(mutation, variables) {
   return data.data;
 }
 
+// Consulta genérica (query, não mutation) — reaproveita o mesmo client HTTP.
+// Usada pra diagnóstico (listar pipes/fases) e, futuramente, pra ler cards.
+export async function pipefyQuery(query, variables) {
+  return pipefyMutation(query, variables);
+}
+
 export async function criarCardPipefy({ requisicaoId, solicitante, departamento, itens, dataNecessidade }) {
   try {
     const itensTexto = itens.map(i =>
