@@ -129,7 +129,7 @@ function CardPedido({ pedido, onAtualizar }) {
     try {
       await pedidosOrcamentoService.mover(pedido.id, proxima.status);
       onAtualizar();
-    } catch (err) { alert(err.response?.data?.erro || 'Erro ao mover.'); }
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao mover.'); onAtualizar(); }
     finally { setMudando(false); }
   }
 
@@ -153,6 +153,12 @@ function CardPedido({ pedido, onAtualizar }) {
       </div>
       {pedido.pipefy_card_id && (
         <span className="inline-block text-[10px] font-semibold text-[#4f6ef7] bg-[#4f6ef7]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
+      )}
+      {pedido.zen_pedido_id && (
+        <span className="inline-block ml-1 text-[10px] font-semibold text-green-400 bg-green-500/10 rounded px-1.5 py-0.5">Zen #{pedido.zen_pedido_id}</span>
+      )}
+      {pedido.zen_erro && (
+        <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg px-2 py-1 break-words">ZenERP: {pedido.zen_erro}</p>
       )}
       {pedido.pipefy_card_id && (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
@@ -201,7 +207,7 @@ function CardPedido({ pedido, onAtualizar }) {
         {proxima && (
           <button onClick={avancar} disabled={mudando}
             className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 disabled:opacity-40">
-            {mudando ? 'Movendo...' : <>Mover p/ {proxima.titulo} <ArrowRight size={13} /></>}
+            {mudando ? (proxima.status === 'separando' ? 'Criando pedido no Zen...' : 'Movendo...') : <>Mover p/ {proxima.titulo} <ArrowRight size={13} /></>}
           </button>
         )}
         <button onClick={cancelar} title="Cancelar" className="p-1.5 rounded-lg text-[#8b91a8] hover:text-red-400 hover:bg-red-500/10">
