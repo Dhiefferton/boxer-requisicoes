@@ -240,6 +240,38 @@ export function extrairDadosOrcamento(card) {
   };
 }
 
+// Fase "Aprovado/Recusado" do pipe Orçamento BOXER SOLDAS
+export const ORCAMENTO_PHASE_APROVADO_RECUSADO = process.env.PIPEFY_ORCAMENTO_PHASE_APROVADO_ID || '309113142';
+
+/**
+ * Situação atual de vários cards: fase atual + campo "Aprovação"
+ * (Aprovado / Recusado, preenchido na fase "Aguardando aprovação").
+ * Uma consulta só, com um alias por card (lotes de 30).
+ * @returns {Map<string, { faseId, faseNome, aprovacao }>}
+ */
+export async function buscarSituacaoCards(cardIds) {
+  const resultado = new Map();
+  const ids = [...new Set((cardIds || []).map(String))];
+  for (let i = 0; i < ids.length; i += 30) {
+    const lote = ids.slice(i, i + 30);
+    const corpo = lote.map((id, n) =>
+      `c${n}: card(id: "${id}") { id current_phase { id name } fields { name value field { id } } }`
+    ).join('\n');
+    const data = await pipefyQuery(`query {\n${corpo}\n}`);
+    lote.forEach((id, n) => {
+      const card = data?.[`c${n}`];
+      if (!card) return;
+      const campo = (card.fields || []).find(f => norm(f.name) === 'aprovacao');
+      resultado.set(String(card.id), {
+        faseId:    card.current_phase?.id ? String(card.current_phase.id) : null,
+        faseNome:  card.current_phase?.name || null,
+        aprovacao: valorTexto(campo?.value),
+      });
+    });
+  }
+  return resultado;
+}
+
 export async function criarCardPipefy({ requisicaoId, solicitante, departamento, itens, dataNecessidade }) {
   try {
     const itensTexto = itens.map(i =>
