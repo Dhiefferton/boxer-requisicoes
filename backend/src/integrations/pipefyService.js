@@ -61,26 +61,32 @@ export const ORCAMENTO_PIPE_ID          = process.env.PIPEFY_ORCAMENTO_PIPE_ID  
 export const ORCAMENTO_PHASE_REQUISITAR = process.env.PIPEFY_ORCAMENTO_PHASE_ID || '344449850';
 
 // Busca todos os cards de uma fase (paginado, 50 por página).
-export async function listarCardsDaFase(phaseId = ORCAMENTO_PHASE_REQUISITAR) {
-  const gql = `
+// Tenta trazer também os registros conectados (ex.: cadastro do cliente,
+// de onde sai o CNPJ). Se a API recusar esse trecho, cai pra consulta simples.
+const CAMPOS_CARD_BASE = 'id title url createdAt fields { name value field { id } }';
+const CAMPOS_CARD_CONECTADOS = `id title url createdAt
+  fields {
+    name value field { id }
+    connectedRepoItems {
+      ... on TableRecord { id title record_fields { name value field { id } } }
+      ... on Card { id title fields { name value field { id } } }
+    }
+  }`;
+
+function montarQueryFase(camposCard) {
+  return `
     query CardsDaFase($phaseId: ID!, $after: String) {
       phase(id: $phaseId) {
         cards(first: 50, after: $after) {
           pageInfo { hasNextPage endCursor }
-          edges {
-            node {
-              id
-              title
-              url
-              createdAt
-              fields { name value field { id } }
-            }
-          }
+          edges { node { ${camposCard} } }
         }
       }
     }
   `;
+}
 
+async function buscarCardsFase(phaseId, gql) {
   const cards = [];
   let after = null;
   for (let pagina = 0; pagina < 40; pagina++) {
@@ -89,17 +95,134 @@ export async function listarCardsDaFase(phaseId = ORCAMENTO_PHASE_REQUISITAR) {
     if (!conn) break;
     for (const { node } of conn.edges) {
       cards.push({
-        id:        String(node.id),
-        titulo:    node.title,
-        url:       node.url,
-        criadoEm:  node.createdAt,
-        campos:    (node.fields || []).map(f => ({ id: f.field?.id || null, nome: f.name, valor: f.value })),
+        id:       String(node.id),
+        titulo:   node.title,
+        url:      node.url,
+        criadoEm: node.createdAt,
+        campos:   (node.fields || []).map(f => ({
+          id:    f.field?.id || null,
+          nome:  f.name,
+          valor: f.value,
+          conectados: (f.connectedRepoItems || []).filter(Boolean).map(item => ({
+            id:     item.id,
+            titulo: item.title,
+            campos: (item.record_fields || item.fields || []).map(rf => ({
+              id: rf.field?.id || null, nome: rf.name, valor: rf.value,
+            })),
+          })),
+        })),
       });
     }
     if (!conn.pageInfo?.hasNextPage) break;
     after = conn.pageInfo.endCursor;
   }
   return cards;
+}
+
+export async function listarCardsDaFase(phaseId = ORCAMENTO_PHASE_REQUISITAR) {
+  try {
+    return await buscarCardsFase(phaseId, montarQueryFase(CAMPOS_CARD_CONECTADOS));
+  } catch (err) {
+    console.error('⚠️ Consulta com registros conectados falhou, usando consulta simples:', err.message);
+    return buscarCardsFase(phaseId, montarQueryFase(CAMPOS_CARD_BASE));
+  }
+}
+
+// ---------- Extração dos dados do card "Orçamento BOXER SOLDAS" ----------
+
+// Campos de seleção/conexão vêm como string JSON: '["Fulano"]'
+function valorTexto(valor) {
+  if (valor === null || valor === undefined) return null;
+  const s = String(valor).trim();
+  if (s.startsWith('[')) {
+    try {
+      const arr = JSON.parse(s);
+      if (Array.isArray(arr)) return arr.map(String).join(', ') || null;
+    } catch { /* não é JSON */ }
+  }
+  return s || null;
+}
+
+function valorLista(valor) {
+  if (valor === null || valor === undefined || valor === '') return [];
+  const s = String(valor).trim();
+  if (s.startsWith('[')) {
+    try {
+      const arr = JSON.parse(s);
+      if (Array.isArray(arr)) return arr.map(String).filter(Boolean);
+    } catch { /* não é JSON */ }
+  }
+  return [s];
+}
+
+// "1.234,56" -> 1234.56
+function numeroBR(valor) {
+  const s = valorTexto(valor);
+  if (!s) return null;
+  const n = Number(s.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+export function extrairDadosOrcamento(card) {
+  const campos = card.campos || [];
+  const porId = (id) => campos.find(c => c.id === id);
+  const porNome = (re) => campos.find(c => re.test(norm(c.nome)));
+
+  // Cliente (campo conectado "Cliente")
+  const campoCliente = porId('cadastro_cliente') || porNome(/^cliente$/);
+  const clienteNome = valorTexto(campoCliente?.valor) || card.titulo || null;
+
+  // CNPJ: procura no registro conectado do cliente, depois no próprio card
+  let clienteCnpj = null;
+  for (const item of campoCliente?.conectados || []) {
+    const c = item.campos.find(rf => /cnpj|cpf/.test(norm(rf.nome)));
+    if (c && valorTexto(c.valor)) { clienteCnpj = valorTexto(c.valor); break; }
+  }
+  if (!clienteCnpj) {
+    const c = porNome(/cnpj/);
+    if (c) clienteCnpj = valorTexto(c.valor);
+  }
+  if (!clienteCnpj) {
+    // às vezes o CNPJ está no título do registro conectado
+    const t = (campoCliente?.conectados || []).map(i => i.titulo).join(' ');
+    const m = t.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/);
+    if (m) clienteCnpj = m[0];
+  }
+
+  // Itens: "Peça N" + "Quantidade N" + "Valor de venda - Peça N"
+  const pecas = {}, qtds = {}, valores = {};
+  for (const c of campos) {
+    const n = norm(c.nome);
+    let m;
+    if ((m = n.match(/^peca\s*(\d+)$/)))                       pecas[m[1]]   = c.valor;
+    else if ((m = n.match(/^quantidade\s*(\d+)$/)))            qtds[m[1]]    = c.valor;
+    else if ((m = n.match(/^valor de venda\s*-\s*peca\s*(\d+)$/))) valores[m[1]] = c.valor;
+  }
+  const itens = [];
+  for (const num of Object.keys(pecas).sort((a, b) => a - b)) {
+    for (const texto of valorLista(pecas[num])) {
+      const idx = texto.indexOf(' - ');
+      itens.push({
+        n:              Number(num),
+        codigo:         idx > 0 ? texto.slice(0, idx).trim() : null,
+        descricao:      idx > 0 ? texto.slice(idx + 3).trim() : texto.trim(),
+        quantidade:     numeroBR(qtds[num]),
+        valor_unitario: numeroBR(valores[num]),
+      });
+    }
+  }
+
+  return {
+    cliente_nome:    clienteNome,
+    cliente_cnpj:    clienteCnpj || null,
+    tecnico:         valorTexto((porId('t_cnico_1') || porNome(/^tecnico/))?.valor),
+    frete_por_conta: valorTexto((porId('frete_por_conta') || porNome(/^frete por conta/))?.valor),
+    entregue_por:    valorTexto((porId('entregue_por') || porNome(/^entregue por/))?.valor),
+    ns_entrada:      valorTexto((porId('ns_entrada') || porNome(/^ns de entrada/))?.valor),
+    itens,
+  };
 }
 
 export async function criarCardPipefy({ requisicaoId, solicitante, departamento, itens, dataNecessidade }) {
