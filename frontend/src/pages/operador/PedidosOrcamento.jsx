@@ -16,6 +16,9 @@ const COLUNAS = [
   { status: 'finalizado',  titulo: 'Finalizado',  cor: 'border-green-500/30' },
 ];
 
+const brl = (v) => (v === null || v === undefined) ? '—'
+  : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
 function formatarData(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -155,6 +158,8 @@ function FormNovoPedido({ onCriado }) {
 function CardPedido({ pedido, onAtualizar }) {
   const [mudando, setMudando] = useState(false);
   const [abrirCampos, setAbrirCampos] = useState(false);
+  const itens = pedido.itens || [];
+  const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
   const campos = (pedido.pipefy_campos || []).filter(c => c.valor !== null && c.valor !== '' && c.valor !== '[]');
   const indiceAtual = COLUNAS.findIndex(c => c.status === pedido.status);
   const proxima = COLUNAS[indiceAtual + 1];
@@ -180,7 +185,7 @@ function CardPedido({ pedido, onAtualizar }) {
     <div className="p-3 rounded-xl border border-[#2e3347] bg-[#1a1d27] space-y-2">
       <div className="flex items-center gap-1.5">
         <FileText size={13} className="text-[#4f6ef7] shrink-0" />
-        <p className="text-sm text-[#e8eaf0] font-medium flex-1">{pedido.referencia}</p>
+        <p className="text-sm text-[#e8eaf0] font-medium flex-1">{pedido.cliente_nome || pedido.referencia}</p>
         {pedido.pipefy_url && (
           <a href={pedido.pipefy_url} target="_blank" rel="noreferrer" title="Abrir no Pipefy"
             className="text-[#8b91a8] hover:text-[#4f6ef7]"><ExternalLink size={13} /></a>
@@ -189,10 +194,50 @@ function CardPedido({ pedido, onAtualizar }) {
       {pedido.pipefy_card_id && (
         <span className="inline-block text-[10px] font-semibold text-[#4f6ef7] bg-[#4f6ef7]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
       )}
+      {pedido.pipefy_card_id && (
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+          <Info rotulo="CNPJ" valor={pedido.cliente_cnpj} />
+          <Info rotulo="NS de entrada" valor={pedido.ns_entrada} />
+          <Info rotulo="Técnico" valor={pedido.tecnico} />
+          <Info rotulo="Frete por conta" valor={pedido.frete_por_conta} />
+          <Info rotulo="Entregue por" valor={pedido.entregue_por} />
+        </dl>
+      )}
+      {itens.length > 0 && (
+        <div className="rounded-lg border border-[#2e3347] overflow-hidden">
+          <table className="w-full text-xs">
+            <thead className="bg-[#0f1117] text-[#8b91a8]">
+              <tr>
+                <th className="text-left font-medium px-2 py-1">Peça</th>
+                <th className="text-right font-medium px-2 py-1">Qtd</th>
+                <th className="text-right font-medium px-2 py-1">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itens.map((it, i) => (
+                <tr key={i} className="border-t border-[#2e3347] text-[#e8eaf0]">
+                  <td className="px-2 py-1">
+                    {it.codigo && <span className="font-mono text-[#4f6ef7] mr-1">{it.codigo}</span>}
+                    {it.descricao}
+                  </td>
+                  <td className="px-2 py-1 text-right">{it.quantidade ?? '—'}</td>
+                  <td className="px-2 py-1 text-right whitespace-nowrap">{brl(it.valor_unitario)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-[#2e3347] text-[#e8eaf0] font-semibold">
+                <td className="px-2 py-1" colSpan={2}>Total peças</td>
+                <td className="px-2 py-1 text-right whitespace-nowrap">{brl(totalItens)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
       {campos.length > 0 && (
         <div>
           <button onClick={() => setAbrirCampos(v => !v)} className="flex items-center gap-1 text-[11px] text-[#8b91a8] hover:text-[#e8eaf0]">
-            {abrirCampos ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {campos.length} campo(s) do card
+            {abrirCampos ? <ChevronUp size={12} /> : <ChevronDown size={12} />} todos os campos do card ({campos.length})
           </button>
           {abrirCampos && (
             <dl className="mt-1.5 space-y-1 text-xs">
@@ -220,6 +265,15 @@ function CardPedido({ pedido, onAtualizar }) {
           <Ban size={14} />
         </button>
       </div>
+    </div>
+  );
+}
+
+function Info({ rotulo, valor }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[#8b91a8]">{rotulo}</dt>
+      <dd className="text-[#e8eaf0] truncate" title={valor || ''}>{valor || '—'}</dd>
     </div>
   );
 }
