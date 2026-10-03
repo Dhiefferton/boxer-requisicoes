@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // controllers/pedidosOrcamentoController.js — Pedidos de Orçamento
 // ============================================================
 // V1: só a estrutura (3 colunas, criar/mover/editar/cancelar).
@@ -7,11 +7,12 @@
 
 import { z } from 'zod';
 import { query } from '../config/db.js';
-import { pipefyQuery } from '../integrations/pipefyService.js';
+import { pipefyQuery, listarCardsDaFase } from '../integrations/pipefyService.js';
 
 const BASE_SELECT = `
   SELECT
-    p.id, p.referencia, p.pipefy_card_id, p.status, p.observacoes,
+    p.id, p.referencia, p.pipefy_card_id, p.pipefy_campos, p.pipefy_url,
+    p.pipefy_sincronizado_em, p.status, p.observacoes,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome
   FROM pedidos_orcamento p
@@ -111,6 +112,42 @@ export async function listarPipesPipefy(req, res, next) {
     `;
     const data = await pipefyQuery(gql);
     res.json(data);
+  } catch (err) { next(err); }
+}
+
+// POST /pedidos-orcamento/sincronizar-pipefy — botão "Atualizar do Pipefy"
+// Puxa os cards da fase "Requisitar Peças" do pipe "Orçamento BOXER SOLDAS".
+// Card novo entra em 'solicitacao'; card já existente só tem título/campos
+// atualizados (status no app não é alterado).
+export async function sincronizarPipefy(req, res, next) {
+  try {
+    const cards = await listarCardsDaFase();
+    let novos = 0, atualizados = 0;
+
+    for (const card of cards) {
+      const result = await query(
+        `INSERT INTO pedidos_orcamento
+           (referencia, pipefy_card_id, pipefy_campos, pipefy_url, pipefy_sincronizado_em, criado_por, created_at)
+         VALUES ($1, $2, $3::jsonb, $4, NOW(), $5, COALESCE($6::timestamptz, NOW()))
+         ON CONFLICT (pipefy_card_id) WHERE pipefy_card_id IS NOT NULL
+         DO UPDATE SET referencia = EXCLUDED.referencia,
+                       pipefy_campos = EXCLUDED.pipefy_campos,
+                       pipefy_url = EXCLUDED.pipefy_url,
+                       pipefy_sincronizado_em = NOW()
+         RETURNING (xmax = 0) AS inserido`,
+        [
+          (card.titulo || `Card ${card.id}`).slice(0, 255),
+          card.id,
+          JSON.stringify(card.campos),
+          card.url || null,
+          req.usuario.id,
+          card.criadoEm || null,
+        ]
+      );
+      if (result.rows[0]?.inserido) novos++; else atualizados++;
+    }
+
+    res.json({ total: cards.length, novos, atualizados });
   } catch (err) { next(err); }
 }
 
