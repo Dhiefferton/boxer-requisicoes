@@ -7,12 +7,14 @@
 
 import { z } from 'zod';
 import { query } from '../config/db.js';
-import { pipefyQuery, listarCardsDaFase } from '../integrations/pipefyService.js';
+import { pipefyQuery, listarCardsDaFase, extrairDadosOrcamento } from '../integrations/pipefyService.js';
 
 const BASE_SELECT = `
   SELECT
     p.id, p.referencia, p.pipefy_card_id, p.pipefy_campos, p.pipefy_url,
     p.pipefy_sincronizado_em, p.status, p.observacoes,
+    p.cliente_nome, p.cliente_cnpj, p.tecnico, p.frete_por_conta,
+    p.entregue_por, p.ns_entrada, p.itens,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome
   FROM pedidos_orcamento p
@@ -125,21 +127,39 @@ export async function sincronizarPipefy(req, res, next) {
     let novos = 0, atualizados = 0;
 
     for (const card of cards) {
+      const d = extrairDadosOrcamento(card);
       const result = await query(
         `INSERT INTO pedidos_orcamento
-           (referencia, pipefy_card_id, pipefy_campos, pipefy_url, pipefy_sincronizado_em, criado_por, created_at)
-         VALUES ($1, $2, $3::jsonb, $4, NOW(), $5, COALESCE($6::timestamptz, NOW()))
+           (referencia, pipefy_card_id, pipefy_campos, pipefy_url, pipefy_sincronizado_em,
+            cliente_nome, cliente_cnpj, tecnico, frete_por_conta, entregue_por, ns_entrada, itens,
+            criado_por, created_at)
+         VALUES ($1, $2, $3::jsonb, $4, NOW(), $5, $6, $7, $8, $9, $10, $11::jsonb, $12,
+                 COALESCE($13::timestamptz, NOW()))
          ON CONFLICT (pipefy_card_id) WHERE pipefy_card_id IS NOT NULL
-         DO UPDATE SET referencia = EXCLUDED.referencia,
-                       pipefy_campos = EXCLUDED.pipefy_campos,
-                       pipefy_url = EXCLUDED.pipefy_url,
+         DO UPDATE SET referencia      = EXCLUDED.referencia,
+                       pipefy_campos   = EXCLUDED.pipefy_campos,
+                       pipefy_url      = EXCLUDED.pipefy_url,
+                       cliente_nome    = EXCLUDED.cliente_nome,
+                       cliente_cnpj    = EXCLUDED.cliente_cnpj,
+                       tecnico         = EXCLUDED.tecnico,
+                       frete_por_conta = EXCLUDED.frete_por_conta,
+                       entregue_por    = EXCLUDED.entregue_por,
+                       ns_entrada      = EXCLUDED.ns_entrada,
+                       itens           = EXCLUDED.itens,
                        pipefy_sincronizado_em = NOW()
          RETURNING (xmax = 0) AS inserido`,
         [
-          (card.titulo || `Card ${card.id}`).slice(0, 255),
+          (d.cliente_nome || card.titulo || `Card ${card.id}`).slice(0, 255),
           card.id,
           JSON.stringify(card.campos),
           card.url || null,
+          d.cliente_nome,
+          d.cliente_cnpj,
+          d.tecnico,
+          d.frete_por_conta,
+          d.entregue_por,
+          d.ns_entrada,
+          JSON.stringify(d.itens),
           req.usuario.id,
           card.criadoEm || null,
         ]
