@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // pages/operador/PedidosOrcamento.jsx
 // ============================================================
 // V1: estrutura básica (3 colunas: Solicitação -> Separando ->
@@ -6,7 +6,7 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { Plus, ArrowRight, RefreshCw, Ban, FileText } from 'lucide-react';
+import { Plus, ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -24,6 +24,8 @@ function formatarData(iso) {
 export default function PedidosOrcamento() {
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [msgSync, setMsgSync] = useState('');
 
   async function carregar() {
     try {
@@ -35,6 +37,20 @@ export default function PedidosOrcamento() {
 
   useEffect(() => { carregar(); }, []);
 
+  async function sincronizarPipefy() {
+    setSincronizando(true);
+    setMsgSync('');
+    try {
+      const { data } = await pedidosOrcamentoService.sincronizarPipefy();
+      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s).`);
+      await carregar();
+    } catch (err) {
+      setMsgSync(err.response?.data?.erro || 'Erro ao sincronizar com o Pipefy.');
+    } finally {
+      setSincronizando(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -42,10 +58,19 @@ export default function PedidosOrcamento() {
           <h1 className="text-lg font-bold text-[#e8eaf0]">Pedidos de Orçamento</h1>
           <p className="text-sm text-[#8b91a8] mt-0.5">Solicitação, separação e finalização de pedidos de orçamento</p>
         </div>
-        <button onClick={carregar} className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors">
-          <RefreshCw size={15} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={sincronizarPipefy} disabled={sincronizando}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-[#4f6ef7] text-white hover:bg-[#3d5ce5] disabled:opacity-40 transition-colors">
+            <DownloadCloud size={15} className={sincronizando ? 'animate-pulse' : ''} />
+            {sincronizando ? 'Atualizando...' : 'Atualizar do Pipefy'}
+          </button>
+          <button onClick={carregar} title="Recarregar" className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors">
+            <RefreshCw size={15} />
+          </button>
+        </div>
       </div>
+
+      {msgSync && <p className="text-xs text-[#8b91a8] bg-[#1a1d27] border border-[#2e3347] rounded-xl px-3 py-2">{msgSync}</p>}
 
       <FormNovoPedido onCriado={carregar} />
 
@@ -129,6 +154,8 @@ function FormNovoPedido({ onCriado }) {
 
 function CardPedido({ pedido, onAtualizar }) {
   const [mudando, setMudando] = useState(false);
+  const [abrirCampos, setAbrirCampos] = useState(false);
+  const campos = (pedido.pipefy_campos || []).filter(c => c.valor !== null && c.valor !== '' && c.valor !== '[]');
   const indiceAtual = COLUNAS.findIndex(c => c.status === pedido.status);
   const proxima = COLUNAS[indiceAtual + 1];
 
@@ -153,8 +180,32 @@ function CardPedido({ pedido, onAtualizar }) {
     <div className="p-3 rounded-xl border border-[#2e3347] bg-[#1a1d27] space-y-2">
       <div className="flex items-center gap-1.5">
         <FileText size={13} className="text-[#4f6ef7] shrink-0" />
-        <p className="text-sm text-[#e8eaf0] font-medium">{pedido.referencia}</p>
+        <p className="text-sm text-[#e8eaf0] font-medium flex-1">{pedido.referencia}</p>
+        {pedido.pipefy_url && (
+          <a href={pedido.pipefy_url} target="_blank" rel="noreferrer" title="Abrir no Pipefy"
+            className="text-[#8b91a8] hover:text-[#4f6ef7]"><ExternalLink size={13} /></a>
+        )}
       </div>
+      {pedido.pipefy_card_id && (
+        <span className="inline-block text-[10px] font-semibold text-[#4f6ef7] bg-[#4f6ef7]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
+      )}
+      {campos.length > 0 && (
+        <div>
+          <button onClick={() => setAbrirCampos(v => !v)} className="flex items-center gap-1 text-[11px] text-[#8b91a8] hover:text-[#e8eaf0]">
+            {abrirCampos ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {campos.length} campo(s) do card
+          </button>
+          {abrirCampos && (
+            <dl className="mt-1.5 space-y-1 text-xs">
+              {campos.map((c, i) => (
+                <div key={c.id || i}>
+                  <dt className="text-[#8b91a8]">{c.nome}</dt>
+                  <dd className="text-[#e8eaf0] whitespace-pre-wrap break-words">{c.valor}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      )}
       {pedido.observacoes && <p className="text-xs text-[#8b91a8]">{pedido.observacoes}</p>}
       <p className="text-[11px] text-[#8b91a8]">{formatarData(pedido.created_at)} · por {pedido.criado_por_nome || '—'}</p>
 
