@@ -179,6 +179,12 @@ function CardPedido({ pedido, onAtualizar }) {
           Ordem de separação #{pedido.zen_ordem_separacao_id} <ExternalLink size={10} />
         </a>
       )}
+      {pedido.zen_nota_id && (
+        <a href={`${ZEN_APP_URL}/fiscal/outgoingInvoice.html?q=id==${pedido.zen_nota_id}`} target="_blank" rel="noreferrer" title="Abrir nota fiscal no Zen"
+          className="inline-flex items-center gap-1 ml-1 text-[10px] font-semibold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 rounded px-1.5 py-0.5">
+          Nota fiscal #{pedido.zen_nota_id} <ExternalLink size={10} />
+        </a>
+      )}
       {pedido.zen_erro && (
         <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg px-2 py-1 break-words">ZenERP: {pedido.zen_erro}</p>
       )}
@@ -229,7 +235,7 @@ function CardPedido({ pedido, onAtualizar }) {
         {proxima && (
           <button onClick={avancar} disabled={mudando}
             className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 disabled:opacity-40">
-            {mudando ? (proxima.status === 'separando' ? 'Criando pedido no Zen...' : 'Movendo...') : <>Mover p/ {proxima.titulo} <ArrowRight size={13} /></>}
+            {mudando ? (proxima.status === 'separando' ? 'Criando pedido no Zen...' : proxima.status === 'finalizado' ? 'Finalizando no Zen...' : 'Movendo...') : <>Mover p/ {proxima.titulo} <ArrowRight size={13} /></>}
           </button>
         )}
         <button onClick={cancelar} title="Cancelar" className="p-1.5 rounded-lg text-[#8b91a8] hover:text-red-400 hover:bg-red-500/10">
