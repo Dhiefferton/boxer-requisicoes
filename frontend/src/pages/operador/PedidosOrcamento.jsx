@@ -13,6 +13,7 @@ import { Spinner } from '../../components/ui';
 const COLUNAS = [
   { status: 'solicitacao', titulo: 'Solicitação', cor: 'border-blue-500/30' },
   { status: 'separando',   titulo: 'Separando',   cor: 'border-amber-500/30' },
+  { status: 'separado',    titulo: 'Separado',    cor: 'border-purple-500/30' },
   { status: 'finalizado',  titulo: 'Finalizado',  cor: 'border-green-500/30' },
 ];
 
@@ -54,7 +55,7 @@ export default function PedidosOrcamento() {
     setMsgSync('');
     try {
       const { data } = await pedidosOrcamentoService.sincronizarPipefy();
-      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s).`);
+      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s). Zen: ${data.separados || 0} separado(s).`);
       await carregar();
     } catch (err) {
       setMsgSync(err.response?.data?.erro || 'Erro ao sincronizar com o Pipefy.');
@@ -73,7 +74,7 @@ export default function PedidosOrcamento() {
           <button onClick={sincronizarPipefy} disabled={sincronizando}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-[#4f6ef7] text-white hover:bg-[#3d5ce5] disabled:opacity-40 transition-colors">
             <DownloadCloud size={15} className={sincronizando ? 'animate-pulse' : ''} />
-            {sincronizando ? 'Atualizando...' : 'Atualizar do Pipefy'}
+            {sincronizando ? 'Atualizando...' : 'Atualizar'}
           </button>
           <button onClick={carregar} title="Recarregar" className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors">
             <RefreshCw size={15} />
@@ -86,7 +87,7 @@ export default function PedidosOrcamento() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
       ) : (
-        <div className="grid lg:grid-cols-3 gap-4">
+        <div className="grid lg:grid-cols-4 gap-4">
           {COLUNAS.map(({ status, titulo, cor }) => {
             const itens = pedidos.filter(p => p.status === status);
             return (
@@ -124,7 +125,8 @@ function CardPedido({ pedido, onAtualizar }) {
   const itens = pedido.itens || [];
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
   const indiceAtual = COLUNAS.findIndex(c => c.status === pedido.status);
-  const proxima = COLUNAS[indiceAtual + 1];
+  // Separando -> Separado é automático (reserva finalizada no Zen, via "Atualizar")
+  const proxima = pedido.status === 'separando' ? null : COLUNAS[indiceAtual + 1];
 
   async function avancar() {
     setMudando(true);
