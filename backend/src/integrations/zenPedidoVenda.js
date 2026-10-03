@@ -87,9 +87,6 @@ function hojeSP() {
 function montarObservacoes(pedido) {
   const linhas = [];
   if (pedido.ns_entrada)     linhas.push(`NS: ${pedido.ns_entrada}`);
-  if (pedido.tecnico)        linhas.push(`Técnico: ${pedido.tecnico}`);
-  if (pedido.entregue_por)   linhas.push(`Entregue por: ${pedido.entregue_por}`);
-  if (pedido.pipefy_card_id) linhas.push(`Pipefy: #${pedido.pipefy_card_id}`);
   return linhas.join('\n');
 }
 
