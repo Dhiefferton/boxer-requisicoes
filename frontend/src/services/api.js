@@ -56,6 +56,14 @@ export const necessidadesPecasService = {
   cancelar:       (id)               => api.post(`/necessidades-pecas/${id}/cancelar`),
 };
 
+export const pedidosOrcamentoService = {
+  listar:   ()                  => api.get('/pedidos-orcamento'),
+  criar:    (referencia, observacoes) => api.post('/pedidos-orcamento', { referencia, observacoes }),
+  mover:    (id, status)         => api.patch(`/pedidos-orcamento/${id}/mover`, { status }),
+  editar:   (id, dados)          => api.patch(`/pedidos-orcamento/${id}`, dados),
+  cancelar: (id)                 => api.post(`/pedidos-orcamento/${id}/cancelar`),
+};
+
 export const requisicoesService = {
   criar:       (dados)           => api.post('/requisicoes', dados),
   listar:      (params)          => api.get('/requisicoes', { params }),

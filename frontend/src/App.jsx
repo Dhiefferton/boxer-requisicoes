@@ -17,6 +17,7 @@ import RegistroEntradas from './pages/operador/RegistroEntradas';
 import MRP             from './pages/operador/MRP';
 import Compras         from './pages/operador/Compras';
 import NecessidadePecas from './pages/operador/NecessidadePecas';
+import PedidosOrcamento from './pages/operador/PedidosOrcamento';
 import { Spinner } from './components/ui';
 
 function RotaProtegida({ children }) {
@@ -99,6 +100,9 @@ export default function App() {
             } />
             <Route path="/necessidade-pecas" element={
               <RotaAdminOuSetor setores={['Sac / Suporte']}><NecessidadePecas /></RotaAdminOuSetor>
+            } />
+            <Route path="/pedidos-orcamento" element={
+              <RotaPerfil perfis={['admin']}><PedidosOrcamento /></RotaPerfil>
             } />
             <Route path="/"  element={<Navigate to="/catalogo" replace />} />
             <Route path="*"  element={<Navigate to="/catalogo" replace />} />

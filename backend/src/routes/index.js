@@ -28,6 +28,9 @@ import {
   listarNecessidades, criarNecessidade, iniciarRevisao, editarNecessidade,
   aprovarNecessidade, recusarNecessidade, enviarOutroSistema, cancelarNecessidade
 } from '../controllers/necessidadesPecasController.js';
+import {
+  listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido
+} from '../controllers/pedidosOrcamentoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 
 const router = Router();
@@ -112,6 +115,13 @@ router.post('/compras/processos/:id/itens/:itemId/confirmar-entrega', autenticar
 router.get('/necessidades-pecas',                  autenticar, exigirAdminOuSetor('Sac / Suporte'), listarNecessidades);
 router.post('/necessidades-pecas',                 autenticar, exigirAdminOuSetor('Sac / Suporte'), criarNecessidade);
 router.post('/necessidades-pecas/:id/cancelar',     autenticar, exigirAdminOuSetor('Sac / Suporte'), cancelarNecessidade);
+
+// ── Pedidos de Orçamento (v1: só estrutura, admin only por enquanto)
+router.get('/pedidos-orcamento',                autenticar, exigirPerfil('admin'), listarPedidos);
+router.post('/pedidos-orcamento',               autenticar, exigirPerfil('admin'), criarPedido);
+router.patch('/pedidos-orcamento/:id/mover',    autenticar, exigirPerfil('admin'), moverPedido);
+router.patch('/pedidos-orcamento/:id',          autenticar, exigirPerfil('admin'), editarPedido);
+router.post('/pedidos-orcamento/:id/cancelar',  autenticar, exigirPerfil('admin'), cancelarPedido);
 
 // Em andamento e Aprovado: só admin edita/decide
 router.post('/necessidades-pecas/:id/iniciar-revisao', autenticar, exigirPerfil('admin'), iniciarRevisao);
