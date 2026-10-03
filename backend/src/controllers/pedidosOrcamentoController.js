@@ -229,7 +229,8 @@ export async function sincronizarPipefy(req, res, next) {
     const acompanhados = await query(
       `SELECT id, pipefy_card_id FROM pedidos_orcamento
         WHERE pipefy_card_id IS NOT NULL
-          AND status NOT IN ('aprovado_recusado', 'finalizado', 'cancelado')`
+          AND status NOT IN ('finalizado', 'cancelado')
+          AND (status <> 'aprovado_recusado' OR aprovacao IS NULL)`
     );
     if (acompanhados.rows.length) {
       try {
@@ -238,7 +239,7 @@ export async function sincronizarPipefy(req, res, next) {
           const s = situacao.get(String(p.pipefy_card_id));
           if (s?.faseId === String(ORCAMENTO_PHASE_APROVADO_RECUSADO)) {
             await query(
-              `UPDATE pedidos_orcamento SET status = 'aprovado_recusado', aprovacao = $1, atualizado_em = NOW() WHERE id = $2`,
+              `UPDATE pedidos_orcamento SET status = 'aprovado_recusado', aprovacao = COALESCE($1, aprovacao), atualizado_em = NOW() WHERE id = $2`,
               [s.aprovacao, p.id]
             );
             aprovadosRecusados++;
