@@ -11,7 +11,7 @@ import {
   pipefyQuery, listarCardsDaFase, extrairDadosOrcamento,
   buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO,
 } from '../integrations/pipefyService.js';
-import { criarPedidoVendaZen, consultarOrdemSeparacao } from '../integrations/zenPedidoVenda.js';
+import { criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen } from '../integrations/zenPedidoVenda.js';
 
 const BASE_SELECT = `
   SELECT
@@ -20,6 +20,7 @@ const BASE_SELECT = `
     p.cliente_nome, p.cliente_cnpj, p.tecnico, p.frete_por_conta,
     p.entregue_por, p.ns_entrada, p.itens,
     p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em, p.aprovacao,
+    p.zen_romaneio_id, p.zen_nota_id,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome
   FROM pedidos_orcamento p
@@ -90,6 +91,24 @@ export async function moverPedido(req, res, next) {
           [err.zenPedidoId || null, err.message.slice(0, 1000), pedido.id]
         );
         return res.status(502).json({ erro: `Não foi possível criar o pedido no ZenERP: ${err.message}` });
+      }
+    }
+
+    // Aprovado/Recusado -> Finalizado: finaliza o romaneio e cria a nota no Zen
+    if (pedido.status === 'aprovado_recusado' && status === 'finalizado' && pedido.zen_ordem_separacao_id) {
+      try {
+        const fim = await finalizarRomaneioZen(pedido);
+        await query(
+          `UPDATE pedidos_orcamento SET zen_romaneio_id = $1, zen_nota_id = $2, zen_erro = NULL WHERE id = $3`,
+          [fim.romaneioId, fim.notaId, pedido.id]
+        );
+      } catch (err) {
+        console.error(`❌ ZenERP finalizar pedido orçamento #${pedido.id}:`, err.message);
+        await query(
+          `UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`,
+          [err.message.slice(0, 1000), pedido.id]
+        );
+        return res.status(502).json({ erro: `Não foi possível finalizar no ZenERP: ${err.message}` });
       }
     }
 
