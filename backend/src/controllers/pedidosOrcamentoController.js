@@ -7,7 +7,10 @@
 
 import { z } from 'zod';
 import { query } from '../config/db.js';
-import { pipefyQuery, listarCardsDaFase, extrairDadosOrcamento } from '../integrations/pipefyService.js';
+import {
+  pipefyQuery, listarCardsDaFase, extrairDadosOrcamento,
+  buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO,
+} from '../integrations/pipefyService.js';
 import { criarPedidoVendaZen, consultarOrdemSeparacao } from '../integrations/zenPedidoVenda.js';
 
 const BASE_SELECT = `
@@ -16,7 +19,7 @@ const BASE_SELECT = `
     p.pipefy_sincronizado_em, p.status, p.observacoes,
     p.cliente_nome, p.cliente_cnpj, p.tecnico, p.frete_por_conta,
     p.entregue_por, p.ns_entrada, p.itens,
-    p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em,
+    p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em, p.aprovacao,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome
   FROM pedidos_orcamento p
@@ -55,7 +58,7 @@ export async function criarPedido(req, res, next) {
 }
 
 // PATCH /pedidos-orcamento/:id/mover — avança/retrocede de coluna
-const STATUS_VALIDOS = ['solicitacao', 'separando', 'separado', 'finalizado'];
+const STATUS_VALIDOS = ['solicitacao', 'separando', 'separado', 'aprovado_recusado', 'finalizado'];
 export async function moverPedido(req, res, next) {
   try {
     const { id } = req.params;
@@ -220,7 +223,33 @@ export async function sincronizarPipefy(req, res, next) {
       }
     }
 
-    res.json({ total: cards.length, novos, atualizados, separados });
+    // Card chegou em "Aprovado/Recusado" no Pipefy -> coluna Aprovado/Recusado,
+    // com a tag do campo "Aprovação" (Aprovado / Recusado)
+    let aprovadosRecusados = 0;
+    const acompanhados = await query(
+      `SELECT id, pipefy_card_id FROM pedidos_orcamento
+        WHERE pipefy_card_id IS NOT NULL
+          AND status NOT IN ('aprovado_recusado', 'finalizado', 'cancelado')`
+    );
+    if (acompanhados.rows.length) {
+      try {
+        const situacao = await buscarSituacaoCards(acompanhados.rows.map(p => p.pipefy_card_id));
+        for (const p of acompanhados.rows) {
+          const s = situacao.get(String(p.pipefy_card_id));
+          if (s?.faseId === String(ORCAMENTO_PHASE_APROVADO_RECUSADO)) {
+            await query(
+              `UPDATE pedidos_orcamento SET status = 'aprovado_recusado', aprovacao = $1, atualizado_em = NOW() WHERE id = $2`,
+              [s.aprovacao, p.id]
+            );
+            aprovadosRecusados++;
+          }
+        }
+      } catch (err) {
+        console.error('⚠️ Não consegui consultar a fase dos cards no Pipefy:', err.message);
+      }
+    }
+
+    res.json({ total: cards.length, novos, atualizados, separados, aprovadosRecusados });
   } catch (err) { next(err); }
 }
 
