@@ -61,32 +61,17 @@ export const ORCAMENTO_PIPE_ID          = process.env.PIPEFY_ORCAMENTO_PIPE_ID  
 export const ORCAMENTO_PHASE_REQUISITAR = process.env.PIPEFY_ORCAMENTO_PHASE_ID || '344449850';
 
 // Busca todos os cards de uma fase (paginado, 50 por página).
-// Tenta trazer também os registros conectados (ex.: cadastro do cliente,
-// de onde sai o CNPJ). Se a API recusar esse trecho, cai pra consulta simples.
-const CAMPOS_CARD_BASE = 'id title url createdAt fields { name value field { id } }';
-const CAMPOS_CARD_CONECTADOS = `id title url createdAt
-  fields {
-    name value field { id }
-    connectedRepoItems {
-      ... on TableRecord { id title record_fields { name value field { id } } }
-      ... on Card { id title fields { name value field { id } } }
-    }
-  }`;
-
-function montarQueryFase(camposCard) {
-  return `
+async function buscarCardsFase(phaseId) {
+  const gql = `
     query CardsDaFase($phaseId: ID!, $after: String) {
       phase(id: $phaseId) {
         cards(first: 50, after: $after) {
           pageInfo { hasNextPage endCursor }
-          edges { node { ${camposCard} } }
+          edges { node { id title url createdAt fields { name value field { id } } } }
         }
       }
     }
   `;
-}
-
-async function buscarCardsFase(phaseId, gql) {
   const cards = [];
   let after = null;
   for (let pagina = 0; pagina < 40; pagina++) {
@@ -99,18 +84,7 @@ async function buscarCardsFase(phaseId, gql) {
         titulo:   node.title,
         url:      node.url,
         criadoEm: node.createdAt,
-        campos:   (node.fields || []).map(f => ({
-          id:    f.field?.id || null,
-          nome:  f.name,
-          valor: f.value,
-          conectados: (f.connectedRepoItems || []).filter(Boolean).map(item => ({
-            id:     item.id,
-            titulo: item.title,
-            campos: (item.record_fields || item.fields || []).map(rf => ({
-              id: rf.field?.id || null, nome: rf.name, valor: rf.value,
-            })),
-          })),
-        })),
+        campos:   (node.fields || []).map(f => ({ id: f.field?.id || null, nome: f.name, valor: f.value })),
       });
     }
     if (!conn.pageInfo?.hasNextPage) break;
@@ -119,13 +93,54 @@ async function buscarCardsFase(phaseId, gql) {
   return cards;
 }
 
-export async function listarCardsDaFase(phaseId = ORCAMENTO_PHASE_REQUISITAR) {
+// Registros conectados a um campo de conexão (ex.: "Cliente" -> cadastro do
+// cliente, de onde sai o CNPJ). Pega os IDs via array_value e lê cada um
+// como registro de tabela (ou, se não for, como card). Nunca lança erro.
+async function buscarConectados(cardId, fieldId) {
   try {
-    return await buscarCardsFase(phaseId, montarQueryFase(CAMPOS_CARD_CONECTADOS));
+    const r = await pipefyQuery(
+      `query($id: ID!) { card(id: $id) { fields { field { id } array_value } } }`,
+      { id: String(cardId) }
+    );
+    const ids = (r?.card?.fields || []).find(f => f.field?.id === fieldId)?.array_value || [];
+    const itens = [];
+    for (const id of ids.slice(0, 5)) {
+      try {
+        const t = await pipefyQuery(
+          `query($id: ID!) { table_record(id: $id) { id title record_fields { name value field { id } } } }`,
+          { id: String(id) }
+        );
+        const rec = t?.table_record;
+        if (rec) {
+          itens.push({ id: rec.id, titulo: rec.title,
+            campos: (rec.record_fields || []).map(rf => ({ id: rf.field?.id || null, nome: rf.name, valor: rf.value })) });
+          continue;
+        }
+      } catch { /* não é registro de tabela */ }
+      try {
+        const c = await pipefyQuery(
+          `query($id: ID!) { card(id: $id) { id title fields { name value field { id } } } }`,
+          { id: String(id) }
+        );
+        const card = c?.card;
+        if (card) itens.push({ id: card.id, titulo: card.title,
+          campos: (card.fields || []).map(f => ({ id: f.field?.id || null, nome: f.name, valor: f.value })) });
+      } catch { /* ignora */ }
+    }
+    return itens;
   } catch (err) {
-    console.error('⚠️ Consulta com registros conectados falhou, usando consulta simples:', err.message);
-    return buscarCardsFase(phaseId, montarQueryFase(CAMPOS_CARD_BASE));
+    console.error(`⚠️ Não consegui ler os registros conectados (${fieldId}) do card ${cardId}:`, err.message);
+    return [];
   }
+}
+
+export async function listarCardsDaFase(phaseId = ORCAMENTO_PHASE_REQUISITAR) {
+  const cards = await buscarCardsFase(phaseId);
+  for (const card of cards) {
+    const campoCliente = card.campos.find(c => c.id === 'cadastro_cliente');
+    if (campoCliente) campoCliente.conectados = await buscarConectados(card.id, 'cadastro_cliente');
+  }
+  return cards;
 }
 
 // ---------- Extração dos dados do card "Orçamento BOXER SOLDAS" ----------
