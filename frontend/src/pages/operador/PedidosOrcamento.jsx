@@ -16,6 +16,8 @@ const COLUNAS = [
   { status: 'finalizado',  titulo: 'Finalizado',  cor: 'border-green-500/30' },
 ];
 
+const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
+
 const brl = (v) => (v === null || v === undefined) ? '—'
   : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -155,10 +157,16 @@ function CardPedido({ pedido, onAtualizar }) {
         <span className="inline-block text-[10px] font-semibold text-[#4f6ef7] bg-[#4f6ef7]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
       )}
       {pedido.zen_pedido_id && (
-        <span className="inline-block ml-1 text-[10px] font-semibold text-green-400 bg-green-500/10 rounded px-1.5 py-0.5">Pedido Zen #{pedido.zen_pedido_id}</span>
+        <a href={`${ZEN_APP_URL}/sale/sale?q=id==${pedido.zen_pedido_id}`} target="_blank" rel="noreferrer" title="Abrir pedido no Zen"
+          className="inline-flex items-center gap-1 ml-1 text-[10px] font-semibold text-green-400 bg-green-500/10 hover:bg-green-500/20 rounded px-1.5 py-0.5">
+          Pedido Zen #{pedido.zen_pedido_id} <ExternalLink size={10} />
+        </a>
       )}
       {pedido.zen_ordem_separacao_id && (
-        <span className="inline-block ml-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5">Ordem de separação #{pedido.zen_ordem_separacao_id}</span>
+        <a href={`${ZEN_APP_URL}/material/pickingOrder?q=id==${pedido.zen_ordem_separacao_id}`} target="_blank" rel="noreferrer" title="Abrir ordem de separação no Zen"
+          className="inline-flex items-center gap-1 ml-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded px-1.5 py-0.5">
+          Ordem de separação #{pedido.zen_ordem_separacao_id} <ExternalLink size={10} />
+        </a>
       )}
       {pedido.zen_erro && (
         <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg px-2 py-1 break-words">ZenERP: {pedido.zen_erro}</p>
