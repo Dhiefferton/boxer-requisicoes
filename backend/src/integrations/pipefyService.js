@@ -235,7 +235,7 @@ export function extrairDadosOrcamento(card) {
     tecnico:         valorTexto((porId('t_cnico_1') || porNome(/^tecnico/))?.valor),
     frete_por_conta: valorTexto((porId('frete_por_conta') || porNome(/^frete por conta/))?.valor),
     entregue_por:    valorTexto((porId('entregue_por') || porNome(/^entregue por/))?.valor),
-    ns_entrada:      valorTexto((porId('ns_entrada') || porNome(/^ns de entrada/))?.valor),
+    ns_entrada:      valorTexto((porId('ns_entrada_1') || porNome(/^ns entrada$/))?.valor),
     itens,
   };
 }
