@@ -3,7 +3,8 @@
 // a partir de um Pedido de Orçamento (card do Pipefy)
 // ============================================================
 // Disparado ao mover o pedido de "Solicitação" para "Separando".
-//   1. Busca o cliente no Zen pelo CNPJ
+//   1. Cliente do pedido no Zen é sempre a Tekweld (a própria empresa);
+//      o cliente real (nome/CNPJ do Pipefy) aparece só no card
 //   2. Cria o pedido (POST /sale/sale) — perfil ORCAMENTO, Baixa estoque
 //   3. Para cada peça: busca a embalagem pelo código e inclui o item
 //      (POST /sale/saleItem) com CFOP 5.927
@@ -25,6 +26,7 @@ const CFG = {
   company:                Number(process.env.ZEN_PV_COMPANY_ID         || 1009),  // TEKSP
   saleProfile:            Number(process.env.ZEN_PV_SALE_PROFILE_ID    || 1002),  // ORCAMENTO
   fiscalProfileOperation: Number(process.env.ZEN_PV_FISCAL_OP_ID       || 1003),  // Baixa estoque
+  person:                 Number(process.env.ZEN_PV_PERSON_ID          || 1001),  // Tekweld (cliente fixo)
   salesperson:            Number(process.env.ZEN_PV_SALESPERSON_ID     || 62770), // Daiani
   taxationOperation:      Number(process.env.ZEN_PV_TAXATION_OP_ID     || 1392),  // CFOP 5.927
   currency:               Number(process.env.ZEN_PV_CURRENCY_ID        || 1001),  // BRL
@@ -55,22 +57,6 @@ async function zen(metodo, caminho, corpo) {
 
 const q = (expr) => encodeURIComponent(expr);
 
-function formatarCnpj(doc) {
-  const d = String(doc || '').replace(/\D/g, '');
-  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
-  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
-  return doc;
-}
-
-async function buscarCliente(cnpj) {
-  const formatado = formatarCnpj(cnpj);
-  const lista = await zen('GET', `/catalog/person/person?q=${q(`documentNumber=="${formatado}"`)}&max=2`);
-  if (!Array.isArray(lista) || lista.length === 0) {
-    throw new Error(`Cliente com CNPJ ${formatado} não encontrado no ZenERP.`);
-  }
-  return lista[0];
-}
-
 async function buscarEmbalagem(codigo) {
   const lista = await zen('GET', `/catalog/product/productPacking?q=${q(`code=="${codigo}"`)}&max=2`);
   if (!Array.isArray(lista) || lista.length === 0) {
@@ -98,7 +84,6 @@ function montarObservacoes(pedido) {
 export async function criarPedidoVendaZen(pedido) {
   const itens = (pedido.itens || []).filter(i => i.codigo && Number(i.quantidade) > 0);
   if (itens.length === 0) throw new Error('Pedido sem peças com código e quantidade.');
-  if (!pedido.cliente_cnpj) throw new Error('Pedido sem CNPJ do cliente.');
 
   let zenPedidoId = pedido.zen_pedido_id;
 
@@ -116,12 +101,11 @@ export async function criarPedidoVendaZen(pedido) {
 
   // 1–2. Cabeçalho
   if (!zenPedidoId) {
-    const cliente = await buscarCliente(pedido.cliente_cnpj);
     const venda = await zen('POST', '/sale/sale', {
       company:                { id: CFG.company },
       saleProfile:            { id: CFG.saleProfile },
       fiscalProfileOperation: { id: CFG.fiscalProfileOperation },
-      person:                 { id: cliente.id },
+      person:                 { id: CFG.person },
       personSalesperson:      { id: CFG.salesperson },
       freightType:            'NONE',
       currency:               { id: CFG.currency },
