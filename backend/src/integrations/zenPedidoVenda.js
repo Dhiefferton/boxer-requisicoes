@@ -32,6 +32,7 @@ const CFG = {
   currency:               Number(process.env.ZEN_PV_CURRENCY_ID        || 1001),  // BRL
   pickingProfile:         Number(process.env.ZEN_PV_PICKING_PROFILE_ID || 1003),  // ORCAMENTO
   paymentMethods:         process.env.ZEN_PV_PAYMENT_METHODS || '0',              // prazo: 0 = à vista
+  invoiceSeries:          Number(process.env.ZEN_PV_INVOICE_SERIES_ID  || 1001),  // NF-e
 };
 
 async function zen(metodo, caminho, corpo) {
@@ -198,4 +199,46 @@ export async function consultarOrdemSeparacao(ordemId) {
     reservaStatus: ordem?.reservation?.status || null,
     separado:      ordem?.reservation?.status === 'FINISHED',
   };
+}
+
+/**
+ * Botão "Mover p/ Finalizado": finaliza o romaneio de saída e cria a nota
+ * fiscal (fica em preparação no Zen pra alguém revisar e emitir).
+ *   romaneio PICKED  -> POST /material/outgoingListOpPacked/{id}            -> PACKED
+ *   romaneio PACKED  -> POST /material/outgoingListOpOutgoingInvoiceCreate/{id} -> FINISHED + nota
+ * Idempotente: se o romaneio já está FINISHED, só localiza a nota.
+ * @returns {{ romaneioId: number, notaId: number }}
+ */
+export async function finalizarRomaneioZen(pedido) {
+  if (!pedido.zen_ordem_separacao_id) throw new Error('Pedido sem ordem de separação no Zen.');
+
+  const ordem = await zen('GET', `/material/pickingOrder/${pedido.zen_ordem_separacao_id}`);
+  const romaneioId = ordem?.outgoingList?.id;
+  if (!romaneioId) throw new Error(`Ordem de separação ${pedido.zen_ordem_separacao_id} sem romaneio de saída.`);
+
+  let romaneio = await zen('GET', `/material/outgoingList/${romaneioId}`);
+
+  if (romaneio.status === 'PICKED') {
+    await zen('POST', `/material/outgoingListOpPacked/${romaneioId}`);
+    romaneio = await zen('GET', `/material/outgoingList/${romaneioId}`);
+  }
+
+  let notaId = null;
+  if (romaneio.status === 'PACKED') {
+    const nota = await zen('POST', `/material/outgoingListOpOutgoingInvoiceCreate/${romaneioId}`, {
+      fiscalProfileOperationId: CFG.fiscalProfileOperation,
+      invoiceSeriesId:          CFG.invoiceSeries,
+    });
+    notaId = nota?.id || null;
+  } else if (romaneio.status !== 'FINISHED') {
+    throw new Error(`Romaneio ${romaneioId} está com status ${romaneio.status} — a separação ainda não terminou.`);
+  }
+
+  if (!notaId) {
+    const notas = await zen('GET', `/fiscal/outgoingInvoice?q=${q(`outgoingList.id==${romaneioId}`)}&max=5`);
+    notaId = (notas || []).filter(n => n.status !== 'CANCELED').map(n => n.id).sort((a, b) => b - a)[0] || null;
+  }
+  if (!notaId) throw new Error(`Romaneio ${romaneioId} finalizado, mas a nota fiscal não foi encontrada.`);
+
+  return { romaneioId, notaId };
 }
