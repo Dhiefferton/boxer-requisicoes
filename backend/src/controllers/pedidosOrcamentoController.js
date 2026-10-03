@@ -8,6 +8,7 @@
 import { z } from 'zod';
 import { query } from '../config/db.js';
 import { pipefyQuery, listarCardsDaFase, extrairDadosOrcamento } from '../integrations/pipefyService.js';
+import { criarPedidoVendaZen } from '../integrations/zenPedidoVenda.js';
 
 const BASE_SELECT = `
   SELECT
@@ -15,6 +16,7 @@ const BASE_SELECT = `
     p.pipefy_sincronizado_em, p.status, p.observacoes,
     p.cliente_nome, p.cliente_cnpj, p.tecnico, p.frete_por_conta,
     p.entregue_por, p.ns_entrada, p.itens,
+    p.zen_pedido_id, p.zen_erro, p.zen_enviado_em,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome
   FROM pedidos_orcamento p
@@ -61,12 +63,38 @@ export async function moverPedido(req, res, next) {
     if (!STATUS_VALIDOS.includes(status)) {
       return res.status(400).json({ erro: `Status inválido. Use: ${STATUS_VALIDOS.join(', ')}` });
     }
-    const result = await query(
-      `UPDATE pedidos_orcamento SET status = $1, atualizado_em = NOW() WHERE id = $2 AND status != 'cancelado' RETURNING id`,
-      [status, parseInt(id)]
+    const atual = await query(
+      `SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`,
+      [parseInt(id)]
     );
-    if (!result.rows[0]) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    res.json({ sucesso: true });
+    const pedido = atual.rows[0];
+    if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+
+    // Solicitação -> Separando: cria o pedido de venda no ZenERP antes de mover.
+    // Se o Zen falhar, o card fica onde está e o erro aparece na tela.
+    let zen = null;
+    if (pedido.status === 'solicitacao' && status === 'separando' && pedido.pipefy_card_id) {
+      try {
+        zen = await criarPedidoVendaZen(pedido);
+        await query(
+          `UPDATE pedidos_orcamento SET zen_pedido_id = $1, zen_erro = NULL, zen_enviado_em = NOW() WHERE id = $2`,
+          [zen.zenPedidoId, pedido.id]
+        );
+      } catch (err) {
+        console.error(`❌ ZenERP pedido orçamento #${pedido.id}:`, err.message);
+        await query(
+          `UPDATE pedidos_orcamento SET zen_pedido_id = COALESCE($1, zen_pedido_id), zen_erro = $2, atualizado_em = NOW() WHERE id = $3`,
+          [err.zenPedidoId || null, err.message.slice(0, 1000), pedido.id]
+        );
+        return res.status(502).json({ erro: `Não foi possível criar o pedido no ZenERP: ${err.message}` });
+      }
+    }
+
+    await query(
+      `UPDATE pedidos_orcamento SET status = $1, atualizado_em = NOW() WHERE id = $2`,
+      [status, pedido.id]
+    );
+    res.json({ sucesso: true, zen_pedido_id: zen?.zenPedidoId || pedido.zen_pedido_id || null });
   } catch (err) { next(err); }
 }
 
