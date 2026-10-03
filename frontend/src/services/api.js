@@ -62,6 +62,7 @@ export const pedidosOrcamentoService = {
   mover:    (id, status)         => api.patch(`/pedidos-orcamento/${id}/mover`, { status }),
   editar:   (id, dados)          => api.patch(`/pedidos-orcamento/${id}`, dados),
   cancelar: (id)                 => api.post(`/pedidos-orcamento/${id}/cancelar`),
+  sincronizarPipefy: ()          => api.post('/pedidos-orcamento/sincronizar-pipefy'),
 };
 
 export const requisicoesService = {
