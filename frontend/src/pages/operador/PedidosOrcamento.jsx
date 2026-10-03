@@ -66,7 +66,6 @@ export default function PedidosOrcamento() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-[#e8eaf0]">Pedidos de Orçamento</h1>
-          <p className="text-sm text-[#8b91a8] mt-0.5">Solicitação, separação e finalização de pedidos de orçamento</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={sincronizarPipefy} disabled={sincronizando}
