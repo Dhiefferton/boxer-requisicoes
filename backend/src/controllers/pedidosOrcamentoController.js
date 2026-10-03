@@ -16,7 +16,7 @@ const BASE_SELECT = `
     p.pipefy_sincronizado_em, p.status, p.observacoes,
     p.cliente_nome, p.cliente_cnpj, p.tecnico, p.frete_por_conta,
     p.entregue_por, p.ns_entrada, p.itens,
-    p.zen_pedido_id, p.zen_erro, p.zen_enviado_em,
+    p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome
   FROM pedidos_orcamento p
@@ -77,8 +77,8 @@ export async function moverPedido(req, res, next) {
       try {
         zen = await criarPedidoVendaZen(pedido);
         await query(
-          `UPDATE pedidos_orcamento SET zen_pedido_id = $1, zen_erro = NULL, zen_enviado_em = NOW() WHERE id = $2`,
-          [zen.zenPedidoId, pedido.id]
+          `UPDATE pedidos_orcamento SET zen_pedido_id = $1, zen_ordem_separacao_id = $2, zen_erro = NULL, zen_enviado_em = NOW() WHERE id = $3`,
+          [zen.zenPedidoId, zen.ordemSeparacaoId, pedido.id]
         );
       } catch (err) {
         console.error(`❌ ZenERP pedido orçamento #${pedido.id}:`, err.message);
@@ -94,7 +94,11 @@ export async function moverPedido(req, res, next) {
       `UPDATE pedidos_orcamento SET status = $1, atualizado_em = NOW() WHERE id = $2`,
       [status, pedido.id]
     );
-    res.json({ sucesso: true, zen_pedido_id: zen?.zenPedidoId || pedido.zen_pedido_id || null });
+    res.json({
+      sucesso: true,
+      zen_pedido_id: zen?.zenPedidoId || pedido.zen_pedido_id || null,
+      zen_ordem_separacao_id: zen?.ordemSeparacaoId || pedido.zen_ordem_separacao_id || null,
+    });
   } catch (err) { next(err); }
 }
 
