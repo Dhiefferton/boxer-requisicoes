@@ -6,7 +6,7 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { Plus, ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink } from 'lucide-react';
+import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -82,8 +82,6 @@ export default function PedidosOrcamento() {
 
       {msgSync && <p className="text-xs text-[#8b91a8] bg-[#1a1d27] border border-[#2e3347] rounded-xl px-3 py-2">{msgSync}</p>}
 
-      <FormNovoPedido onCriado={carregar} />
-
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
       ) : (
@@ -117,48 +115,6 @@ function Coluna({ titulo, cor, total, children }) {
       </div>
       <div className="space-y-2">{children}</div>
     </div>
-  );
-}
-
-function FormNovoPedido({ onCriado }) {
-  const [referencia,  setReferencia]  = useState('');
-  const [observacoes, setObservacoes] = useState('');
-  const [enviando,     setEnviando]   = useState(false);
-  const [erro,         setErro]       = useState('');
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setErro('');
-    if (!referencia.trim()) { setErro('Informe uma referência.'); return; }
-    setEnviando(true);
-    try {
-      await pedidosOrcamentoService.criar(referencia.trim(), observacoes.trim() || null);
-      setReferencia(''); setObservacoes('');
-      onCriado();
-    } catch (err) {
-      setErro(err.response?.data?.erro || 'Erro ao registrar o pedido.');
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27] space-y-2">
-      <p className="text-xs font-medium text-[#8b91a8]">Registrar novo pedido de orçamento</p>
-      <div className="grid sm:grid-cols-[1fr_2fr_auto] gap-2">
-        <input type="text" placeholder="Referência (ex: nº do card, cliente...)" value={referencia}
-          onChange={e => setReferencia(e.target.value)}
-          className="bg-[#0f1117] border border-[#2e3347] text-[#e8eaf0] rounded-lg px-3 py-2 text-sm" />
-        <input type="text" placeholder="Observações (opcional)" value={observacoes}
-          onChange={e => setObservacoes(e.target.value)}
-          className="bg-[#0f1117] border border-[#2e3347] text-[#e8eaf0] rounded-lg px-3 py-2 text-sm" />
-        <button type="submit" disabled={enviando}
-          className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-[#4f6ef7] text-white hover:bg-[#3d5ce5] disabled:opacity-40 transition-colors whitespace-nowrap">
-          <Plus size={15} /> {enviando ? 'Enviando...' : 'Registrar'}
-        </button>
-      </div>
-      {erro && <p className="text-xs text-red-400">{erro}</p>}
-    </form>
   );
 }
 
