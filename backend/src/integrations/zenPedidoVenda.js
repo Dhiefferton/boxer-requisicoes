@@ -7,8 +7,12 @@
 //   2. Cria o pedido (POST /sale/sale) — perfil ORCAMENTO, Baixa estoque
 //   3. Para cada peça: busca a embalagem pelo código e inclui o item
 //      (POST /sale/saleItem) com CFOP 5.927
-// Idempotente: se o pedido já foi criado (zen_pedido_id), só inclui os
-// itens que ainda faltam — dá pra reenviar depois de um erro.
+//   4. Finaliza a preparação     (POST /sale/saleOpPrepare/{id})
+//   5. Aprova incondicionalmente (POST /sale/saleOpApproveUnconditionally/{id})
+//   6. Inclui a ordem de separação, perfil ORCAMENTO
+//      (POST /sale/saleOpPickingOrderCreate/{id}) -> ID vai pro card
+// Idempotente: segue do status atual do pedido no Zen — dá pra reenviar
+// depois de um erro sem duplicar pedido, item ou ordem de separação.
 // ============================================================
 
 import { getToken } from './erpZen.js';
@@ -24,6 +28,7 @@ const CFG = {
   salesperson:            Number(process.env.ZEN_PV_SALESPERSON_ID     || 62770), // Daiani
   taxationOperation:      Number(process.env.ZEN_PV_TAXATION_OP_ID     || 1392),  // CFOP 5.927
   currency:               Number(process.env.ZEN_PV_CURRENCY_ID        || 1001),  // BRL
+  pickingProfile:         Number(process.env.ZEN_PV_PICKING_PROFILE_ID || 1003),  // ORCAMENTO
 };
 
 async function zen(metodo, caminho, corpo) {
@@ -90,7 +95,7 @@ function montarObservacoes(pedido) {
 /**
  * Cria (ou completa) o pedido de venda no ZenERP.
  * @param pedido linha de pedidos_orcamento
- * @returns {{ zenPedidoId: number, itensIncluidos: number }}
+ * @returns {{ zenPedidoId: number, ordemSeparacaoId: number, itensIncluidos: number }}
  */
 export async function criarPedidoVendaZen(pedido) {
   const itens = (pedido.itens || []).filter(i => i.codigo && Number(i.quantidade) > 0);
@@ -98,7 +103,7 @@ export async function criarPedidoVendaZen(pedido) {
   if (!pedido.cliente_cnpj) throw new Error('Pedido sem CNPJ do cliente.');
 
   let zenPedidoId = pedido.zen_pedido_id;
-  const resultado = { zenPedidoId: null, itensIncluidos: 0, criadoAgora: false };
+  const resultado = { zenPedidoId: null, ordemSeparacaoId: null, itensIncluidos: 0, criadoAgora: false };
 
   // 1–2. Cabeçalho
   if (!zenPedidoId) {
@@ -120,28 +125,62 @@ export async function criarPedidoVendaZen(pedido) {
   }
   resultado.zenPedidoId = zenPedidoId;
 
-  // 3. Itens — pula os que já estão no pedido (reenvio)
   try {
-    const existentes = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${zenPedidoId}`)}&max=200`);
-    const jaIncluidos = new Set((existentes || []).map(i => String(i.productPacking?.code || '')));
+    let venda = await zen('GET', `/sale/sale/${zenPedidoId}`);
 
-    for (const item of itens) {
-      if (jaIncluidos.has(String(item.codigo))) continue;
-      const embalagem = await buscarEmbalagem(item.codigo);
-      const corpo = {
-        sale:              { id: zenPedidoId },
-        productPacking:    { id: embalagem.id },
-        taxationOperation: { id: CFG.taxationOperation },
-        quantity:          Number(item.quantidade),
-        unitValue:         Number(item.valor_unitario) || 0,
-        currency:          { id: CFG.currency },
-        discountType:      'NONE',
-      };
-      if (embalagem.product?.fiscalProfileProduct?.id) {
-        corpo.fiscalProfileProduct = { id: embalagem.product.fiscalProfileProduct.id };
+    // 3. Itens — só enquanto o pedido está em preparação
+    if (venda.status === 'PREPARING') {
+      const existentes = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${zenPedidoId}`)}&max=200`);
+      const jaIncluidos = new Set((existentes || []).map(i => String(i.productPacking?.code || '')));
+
+      for (const item of itens) {
+        if (jaIncluidos.has(String(item.codigo))) continue;
+        const embalagem = await buscarEmbalagem(item.codigo);
+        const corpo = {
+          sale:              { id: zenPedidoId },
+          productPacking:    { id: embalagem.id },
+          taxationOperation: { id: CFG.taxationOperation },
+          quantity:          Number(item.quantidade),
+          unitValue:         Number(item.valor_unitario) || 0,
+          currency:          { id: CFG.currency },
+          discountType:      'NONE',
+        };
+        if (embalagem.product?.fiscalProfileProduct?.id) {
+          corpo.fiscalProfileProduct = { id: embalagem.product.fiscalProfileProduct.id };
+        }
+        await zen('POST', '/sale/saleItem', corpo);
+        resultado.itensIncluidos++;
       }
-      await zen('POST', '/sale/saleItem', corpo);
-      resultado.itensIncluidos++;
+
+      // 4. Finalizar preparação
+      await zen('POST', `/sale/saleOpPrepare/${zenPedidoId}`);
+      venda = await zen('GET', `/sale/sale/${zenPedidoId}`);
+    }
+
+    // 5. Aprovar incondicionalmente
+    if (venda.status === 'PREPARED') {
+      await zen('POST', `/sale/saleOpApproveUnconditionally/${zenPedidoId}`);
+      venda = await zen('GET', `/sale/sale/${zenPedidoId}`);
+    }
+
+    // 6. Ordem de separação (ponto final)
+    if (venda.pickingOrder?.id) {
+      resultado.ordemSeparacaoId = venda.pickingOrder.id;
+    } else if (venda.status === 'APPROVED') {
+      const tag = new Date().toISOString().replace(/\D/g, '').substring(2, 14);
+      const ordem = await zen('POST', `/sale/saleOpPickingOrderCreate/${zenPedidoId}`, {
+        pickingProfileId: CFG.pickingProfile,
+        properties: { saleOpPickingOrderCreate_tag: tag },
+      });
+      resultado.ordemSeparacaoId = ordem?.id
+        || (await zen('GET', `/sale/sale/${zenPedidoId}`))?.pickingOrder?.id
+        || null;
+    } else {
+      throw new Error(`Pedido ${zenPedidoId} no Zen está com status ${venda.status} — não dá pra gerar a ordem de separação.`);
+    }
+
+    if (!resultado.ordemSeparacaoId) {
+      throw new Error(`Ordem de separação do pedido ${zenPedidoId} não retornou ID.`);
     }
   } catch (err) {
     err.zenPedidoId = zenPedidoId; // cabeçalho já existe — guardar pra reenvio
