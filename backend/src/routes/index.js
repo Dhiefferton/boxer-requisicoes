@@ -117,13 +117,13 @@ router.post('/necessidades-pecas',                 autenticar, exigirAdminOuSeto
 router.post('/necessidades-pecas/:id/cancelar',     autenticar, exigirAdminOuSetor('Sac / Suporte'), cancelarNecessidade);
 
 // ── Pedidos de Orçamento (v1: só estrutura, admin only por enquanto)
-router.get('/pedidos-orcamento',                autenticar, exigirPerfil('admin'), listarPedidos);
-router.post('/pedidos-orcamento',               autenticar, exigirPerfil('admin'), criarPedido);
-router.patch('/pedidos-orcamento/:id/mover',    autenticar, exigirPerfil('admin'), moverPedido);
-router.patch('/pedidos-orcamento/:id',          autenticar, exigirPerfil('admin'), editarPedido);
-router.post('/pedidos-orcamento/:id/cancelar',  autenticar, exigirPerfil('admin'), cancelarPedido);
+router.get('/pedidos-orcamento',                autenticar, exigirPerfil('operador', 'admin'), listarPedidos);
+router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operador', 'admin'), criarPedido);
+router.patch('/pedidos-orcamento/:id/mover',    autenticar, exigirPerfil('operador', 'admin'), moverPedido);
+router.patch('/pedidos-orcamento/:id',          autenticar, exigirPerfil('operador', 'admin'), editarPedido);
+router.post('/pedidos-orcamento/:id/cancelar',  autenticar, exigirPerfil('operador', 'admin'), cancelarPedido);
 router.get('/pedidos-orcamento/pipefy-pipes',   autenticar, exigirPerfil('admin'), listarPipesPipefy);
-router.post('/pedidos-orcamento/sincronizar-pipefy', autenticar, exigirPerfil('admin'), sincronizarPipefy);
+router.post('/pedidos-orcamento/sincronizar-pipefy', autenticar, exigirPerfil('operador', 'admin'), sincronizarPipefy);
 
 // Em andamento e Aprovado: só admin edita/decide
 router.post('/necessidades-pecas/:id/iniciar-revisao', autenticar, exigirPerfil('admin'), iniciarRevisao);
