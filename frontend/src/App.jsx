@@ -102,7 +102,7 @@ export default function App() {
               <RotaAdminOuSetor setores={['Sac / Suporte']}><NecessidadePecas /></RotaAdminOuSetor>
             } />
             <Route path="/pedidos-orcamento" element={
-              <RotaPerfil perfis={['admin']}><PedidosOrcamento /></RotaPerfil>
+              <RotaPerfil perfis={['operador', 'admin']}><PedidosOrcamento /></RotaPerfil>
             } />
             <Route path="/"  element={<Navigate to="/catalogo" replace />} />
             <Route path="*"  element={<Navigate to="/catalogo" replace />} />
