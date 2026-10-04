@@ -26,7 +26,7 @@ export default function AppLayout({ children }) {
     { to: '/mrp',       icon: BarChart2,       label: 'MRP',        perfis: ['admin'] },
     { to: '/compras',   icon: FileText,        label: 'Compras',    perfis: ['admin'] },
     { to: '/necessidade-pecas', icon: Package, label: 'Nec. Peças', perfis: ['admin'], setores: ['Sac / Suporte'] },
-    { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', perfis: ['admin'] },
+    { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', perfis: ['operador', 'admin'] },
   ].filter(item => {
     if (item.perfis.includes(usuario?.perfil)) return true;
     if (item.setores) {
