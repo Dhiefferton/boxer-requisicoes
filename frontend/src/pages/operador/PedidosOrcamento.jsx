@@ -11,8 +11,8 @@ import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
 const COLUNAS = [
-  { status: 'solicitacao', titulo: 'Solicitação', resumo: 'Solicitações', cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
-  { status: 'separando',   titulo: 'Separando',   resumo: 'Separando',    cor: 'border-amber-500/40',  badge: 'bg-amber-500/15 text-amber-400' },
+  { status: 'solicitacao', titulo: 'Solicitado',  resumo: 'Solicitados',  cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
+  { status: 'separando',   titulo: 'Em Separação', resumo: 'Em Separação', cor: 'border-amber-500/40',  badge: 'bg-amber-500/15 text-amber-400' },
   { status: 'separado',    titulo: 'Separado',    resumo: 'Separados',    cor: 'border-purple-500/40', badge: 'bg-purple-500/15 text-purple-400' },
   { status: 'aprovado_recusado', titulo: 'Aprovado/Recusado', resumo: 'Aprovados/Recusados', cor: 'border-cyan-500/40', badge: 'bg-cyan-500/15 text-cyan-400' },
   { status: 'finalizado',  titulo: 'Finalizado',  resumo: 'Finalizados',  cor: 'border-green-500/40',  badge: 'bg-green-500/15 text-green-400' },
