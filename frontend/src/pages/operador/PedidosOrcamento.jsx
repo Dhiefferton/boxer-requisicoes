@@ -11,11 +11,11 @@ import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
 const COLUNAS = [
-  { status: 'solicitacao', titulo: 'Solicitação', cor: 'border-blue-500/30' },
-  { status: 'separando',   titulo: 'Separando',   cor: 'border-amber-500/30' },
-  { status: 'separado',    titulo: 'Separado',    cor: 'border-purple-500/30' },
-  { status: 'aprovado_recusado', titulo: 'Aprovado/Recusado', cor: 'border-cyan-500/30' },
-  { status: 'finalizado',  titulo: 'Finalizado',  cor: 'border-green-500/30' },
+  { status: 'solicitacao', titulo: 'Solicitação', resumo: 'Solicitações', cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
+  { status: 'separando',   titulo: 'Separando',   resumo: 'Separando',    cor: 'border-amber-500/40',  badge: 'bg-amber-500/15 text-amber-400' },
+  { status: 'separado',    titulo: 'Separado',    resumo: 'Separados',    cor: 'border-purple-500/40', badge: 'bg-purple-500/15 text-purple-400' },
+  { status: 'aprovado_recusado', titulo: 'Aprovado/Recusado', resumo: 'Aprovados/Recusados', cor: 'border-cyan-500/40', badge: 'bg-cyan-500/15 text-cyan-400' },
+  { status: 'finalizado',  titulo: 'Finalizado',  resumo: 'Finalizados',  cor: 'border-green-500/40',  badge: 'bg-green-500/15 text-green-400' },
 ];
 
 const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
@@ -51,6 +51,8 @@ export default function PedidosOrcamento() {
 
   useEffect(() => { carregar(); }, []);
 
+  const ativos = pedidos.filter(p => p.status !== 'finalizado' && p.status !== 'cancelado').length;
+
   async function sincronizarPipefy() {
     setSincronizando(true);
     setMsgSync('');
@@ -67,20 +69,37 @@ export default function PedidosOrcamento() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      {/* ── Cabeçalho ───────────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-bold text-[#e8eaf0]">Pedidos de Orçamento</h1>
+          <p className="text-sm text-[#8b91a8] mt-0.5">
+            {ativos} orçamento{ativos !== 1 ? 's' : ''} ativo{ativos !== 1 ? 's' : ''}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={sincronizarPipefy} disabled={sincronizando}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-[#4f6ef7] text-white hover:bg-[#3d5ce5] disabled:opacity-40 transition-colors">
-            <DownloadCloud size={15} className={sincronizando ? 'animate-pulse' : ''} />
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
+              bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 transition-colors
+              disabled:opacity-40 disabled:cursor-not-allowed">
+            <DownloadCloud size={13} className={sincronizando ? 'animate-pulse' : ''} />
             {sincronizando ? 'Atualizando...' : 'Atualizar'}
           </button>
-          <button onClick={carregar} title="Recarregar" className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors">
-            <RefreshCw size={15} />
+          <button onClick={carregar} disabled={loading} title="Recarregar"
+            className="p-2 rounded-xl text-[#8b91a8] hover:text-[#e8eaf0] hover:bg-[#2e3347] transition-colors">
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
+      </div>
+
+      {/* ── Cards de resumo ──────────────────────────────── */}
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        {COLUNAS.map(({ status, resumo }) => (
+          <div key={status} className="bg-[#1a1d27] border border-[#2e3347] rounded-xl p-3 text-center">
+            <p className="text-xl font-bold text-[#e8eaf0]">{pedidos.filter(p => p.status === status).length}</p>
+            <p className="text-[10px] text-[#8b91a8] mt-0.5">{resumo}</p>
+          </div>
+        ))}
       </div>
 
       {msgSync && <p className="text-xs text-[#8b91a8] bg-[#1a1d27] border border-[#2e3347] rounded-xl px-3 py-2">{msgSync}</p>}
@@ -89,12 +108,14 @@ export default function PedidosOrcamento() {
         <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
       ) : (
         <div className="grid md:grid-cols-3 xl:grid-cols-5 gap-4">
-          {COLUNAS.map(({ status, titulo, cor }) => {
+          {COLUNAS.map(({ status, titulo, cor, badge }) => {
             const itens = pedidos.filter(p => p.status === status);
             return (
-              <Coluna key={status} titulo={titulo} cor={cor} total={itens.length} arquivada={status === 'finalizado'}>
+              <Coluna key={status} titulo={titulo} cor={cor} badge={badge} total={itens.length} arquivada={status === 'finalizado'}>
                 {itens.length === 0 ? (
-                  <p className="text-xs text-[#8b91a8] py-8 text-center bg-[#1a1d27] rounded-xl border border-[#2e3347]">Nenhum pedido aqui.</p>
+                  <div className="border-2 border-dashed border-[#2e3347] rounded-2xl py-8 text-center">
+                    <p className="text-xs text-[#8b91a8]">Sem pedidos</p>
+                  </div>
                 ) : (
                   itens.map(pedido => (
                     <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} />
@@ -109,27 +130,29 @@ export default function PedidosOrcamento() {
   );
 }
 
-function Coluna({ titulo, cor, total, arquivada = false, children }) {
+function Coluna({ titulo, cor, badge, total, arquivada = false, children }) {
   // Finalizado: arquivado — lista fechada, abre na seta
   const [aberta, setAberta] = useState(!arquivada);
+  const pilula = <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>;
   return (
-    <div>
-      <div className={`flex items-center justify-between pb-2 mb-3 border-b-2 ${cor}`}>
+    <div className="space-y-2">
+      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[#1a1d27]`}>
         {arquivada ? (
-          <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1 text-sm font-semibold text-[#e8eaf0] hover:text-white">
+          <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1.5 text-[#8b91a8] hover:text-[#e8eaf0]">
             {aberta ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-            <Archive size={13} className="text-[#8b91a8]" /> {titulo}
+            <Archive size={13} />
+            {pilula}
           </button>
         ) : (
-          <h2 className="text-sm font-semibold text-[#e8eaf0]">{titulo}</h2>
+          <div className="flex items-center gap-2">{pilula}</div>
         )}
-        <span className="text-xs text-[#8b91a8] bg-[#1a1d27] border border-[#2e3347] rounded-full px-2 py-0.5">{total}</span>
+        <span className="text-xs font-bold text-[#8b91a8]">{total}</span>
       </div>
       {aberta ? (
         <div className="space-y-2">{children}</div>
       ) : (
         <button onClick={() => setAberta(true)}
-          className="w-full text-xs text-[#8b91a8] py-3 text-center bg-[#1a1d27] rounded-xl border border-dashed border-[#2e3347] hover:text-[#e8eaf0]">
+          className="w-full text-xs text-[#8b91a8] py-3 text-center rounded-2xl border-2 border-dashed border-[#2e3347] hover:text-[#e8eaf0]">
           {total} arquivado(s) — clique para ver
         </button>
       )}
