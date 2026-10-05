@@ -71,9 +71,21 @@ function hojeSP() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()); // YYYY-MM-DD
 }
 
+// Campo do card do Pipefy (guardado em pipefy_campos na sincronização)
+function campoPipefy(pedido, id, nomeRe) {
+  const campos = Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [];
+  const c = campos.find(x => x.id === id) || campos.find(x => nomeRe.test(String(x.nome || '')));
+  const v = c?.valor;
+  if (v === null || v === undefined) return '';
+  return String(Array.isArray(v) ? v.join(', ') : v).trim();
+}
+
 function montarObservacoes(pedido) {
+  const ns      = pedido.ns_entrada || campoPipefy(pedido, 'ns_entrada_1', /^ns entrada$/i);
+  const remessa = campoPipefy(pedido, 'remessa_de_conserto_n', /^remessa de conserto/i);
   const linhas = [];
-  if (pedido.ns_entrada)     linhas.push(`NS: ${pedido.ns_entrada}`);
+  if (ns)      linhas.push(`NS DE ENTRADA: ${ns}`);
+  if (remessa) linhas.push(`REMESSA DE CONSERTO Nº: ${remessa}`);
   return linhas.join('\n');
 }
 
