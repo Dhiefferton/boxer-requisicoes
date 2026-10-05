@@ -57,6 +57,9 @@ export const necessidadesPecasService = {
   recusar:        (id)               => api.post(`/necessidades-pecas/${id}/recusar`),
   enviar:         (id)               => api.post(`/necessidades-pecas/${id}/enviar`),
   cancelar:       (id)               => api.post(`/necessidades-pecas/${id}/cancelar`),
+  gerarRelatorio:   ()               => api.post('/necessidades-pecas/relatorios'),
+  listarRelatorios: ()               => api.get('/necessidades-pecas/relatorios'),
+  detalharRelatorio:(id)             => api.get(`/necessidades-pecas/relatorios/${id}`),
 };
 
 export const pedidosOrcamentoService = {
