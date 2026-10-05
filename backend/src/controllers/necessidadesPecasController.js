@@ -127,14 +127,22 @@ export async function recusarNecessidade(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// Quantidade aprovada = quantidade solicitada × 6
+const MULTIPLICADOR_APROVACAO = 6;
+
 export async function aprovarNecessidade(req, res, next) {
   try {
     const { id } = req.params;
     const usuarioId = req.usuario.id;
+    // Regra: ao aprovar, a quantidade é multiplicada por 6.
+    // Usa a quantidade que está na tela (se veio) pra não perder uma edição ainda não salva.
+    const qtdTela = parseInt(req.body?.quantidade, 10);
     const result = await query(
-      `UPDATE necessidades_pecas SET status = 'aprovado', aprovado_por = $1, aprovado_em = NOW()
-       WHERE id = $2 AND status = 'em_andamento' RETURNING id`,
-      [usuarioId, parseInt(id)]
+      `UPDATE necessidades_pecas
+          SET status = 'aprovado', aprovado_por = $1, aprovado_em = NOW(),
+              quantidade = COALESCE($3::int, quantidade) * $4
+        WHERE id = $2 AND status = 'em_andamento' RETURNING id, quantidade`,
+      [usuarioId, parseInt(id), qtdTela > 0 ? qtdTela : null, MULTIPLICADOR_APROVACAO]
     );
     if (!result.rows[0]) return res.status(400).json({ erro: 'Item não encontrado ou não está mais em "Em andamento".' });
     res.json({ sucesso: true });
