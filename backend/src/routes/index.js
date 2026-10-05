@@ -27,7 +27,8 @@ import {
 } from '../controllers/comprasController.js';
 import {
   listarNecessidades, criarNecessidade, iniciarRevisao, editarNecessidade,
-  aprovarNecessidade, recusarNecessidade, enviarOutroSistema, cancelarNecessidade
+  aprovarNecessidade, recusarNecessidade, enviarOutroSistema, cancelarNecessidade,
+  gerarRelatorio, listarRelatorios, detalharRelatorio
 } from '../controllers/necessidadesPecasController.js';
 import {
   listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy
@@ -120,6 +121,10 @@ router.post('/compras/processos/:id/itens/:itemId/confirmar-entrega', autenticar
 
 // ── Necessidade de Peças
 // Solicitado: aberto a admin ou setor Sac / Suporte (criar, ver, cancelar)
+// Relatórios da coluna Aprovado (antes das rotas com :id)
+router.get('/necessidades-pecas/relatorios',       autenticar, exigirPerfil('admin'), listarRelatorios);
+router.get('/necessidades-pecas/relatorios/:id',   autenticar, exigirPerfil('admin'), detalharRelatorio);
+router.post('/necessidades-pecas/relatorios',      autenticar, exigirPerfil('admin'), gerarRelatorio);
 router.get('/necessidades-pecas',                  autenticar, exigirAdminOuSetor('Sac / Suporte'), listarNecessidades);
 router.post('/necessidades-pecas',                 autenticar, exigirAdminOuSetor('Sac / Suporte'), criarNecessidade);
 router.post('/necessidades-pecas/:id/cancelar',     autenticar, exigirAdminOuSetor('Sac / Suporte'), cancelarNecessidade);
