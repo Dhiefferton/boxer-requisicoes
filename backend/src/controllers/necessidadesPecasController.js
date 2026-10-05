@@ -7,14 +7,14 @@
 // até a integração real ser plugada).
 
 import { z } from 'zod';
-import { query } from '../config/db.js';
+import { query, transaction } from '../config/db.js';
 
 const BASE_SELECT = `
   SELECT
     n.id, n.material_id, n.quantidade, n.status,
     n.frete_maritimo, n.frete_aereo, n.observacoes,
     n.solicitado_em, n.revisado_em, n.aprovado_em,
-    n.enviado_outro_sistema, n.enviado_em,
+    n.enviado_outro_sistema, n.enviado_em, n.relatorio_id,
     COALESCE(m.codigo, n.codigo_snapshot)       AS codigo,
     COALESCE(m.descricao, n.descricao_snapshot) AS descricao,
     u_sol.nome AS solicitado_por_nome,
@@ -189,5 +189,71 @@ export async function cancelarNecessidade(req, res, next) {
     );
     if (!result.rows[0]) return res.status(400).json({ erro: 'Item já aprovado não pode ser cancelado.' });
     res.json({ sucesso: true });
+  } catch (err) { next(err); }
+}
+
+// ============================================================
+// Relatórios da coluna Aprovado
+// ============================================================
+
+// POST /necessidades-pecas/relatorios — gera um lote com todos os aprovados
+// e arquiva esses itens (status 'relatorio'), pra não entrarem no próximo.
+export async function gerarRelatorio(req, res, next) {
+  try {
+    const usuarioId = req.usuario.id;
+    const relatorioId = await transaction(async (client) => {
+      const pendentes = await client.query(
+        `SELECT id FROM necessidades_pecas WHERE status = 'aprovado' AND relatorio_id IS NULL FOR UPDATE`
+      );
+      if (pendentes.rows.length === 0) return null;
+      const rel = await client.query(
+        `INSERT INTO necessidades_pecas_relatorios (gerado_por, total_itens) VALUES ($1, $2) RETURNING id`,
+        [usuarioId, pendentes.rows.length]
+      );
+      const id = rel.rows[0].id;
+      await client.query(
+        `UPDATE necessidades_pecas SET status = 'relatorio', relatorio_id = $1
+          WHERE id = ANY($2::int[])`,
+        [id, pendentes.rows.map(r => r.id)]
+      );
+      return id;
+    });
+    if (!relatorioId) return res.status(400).json({ erro: 'Não há itens aprovados para o relatório.' });
+    res.json(await dadosRelatorio(relatorioId));
+  } catch (err) { next(err); }
+}
+
+async function dadosRelatorio(id) {
+  const rel = await query(
+    `SELECT r.id, r.gerado_em, r.total_itens, u.nome AS gerado_por_nome
+       FROM necessidades_pecas_relatorios r
+       LEFT JOIN usuarios u ON u.id = r.gerado_por
+      WHERE r.id = $1`,
+    [id]
+  );
+  if (!rel.rows[0]) return null;
+  const itens = await query(`${BASE_SELECT} WHERE n.relatorio_id = $1 ORDER BY n.aprovado_em, n.id`, [id]);
+  return { relatorio: rel.rows[0], itens: itens.rows };
+}
+
+// GET /necessidades-pecas/relatorios — histórico
+export async function listarRelatorios(req, res, next) {
+  try {
+    const r = await query(
+      `SELECT r.id, r.gerado_em, r.total_itens, u.nome AS gerado_por_nome
+         FROM necessidades_pecas_relatorios r
+         LEFT JOIN usuarios u ON u.id = r.gerado_por
+        ORDER BY r.id DESC`
+    );
+    res.json({ relatorios: r.rows });
+  } catch (err) { next(err); }
+}
+
+// GET /necessidades-pecas/relatorios/:id — itens de um lote (pra baixar de novo)
+export async function detalharRelatorio(req, res, next) {
+  try {
+    const dados = await dadosRelatorio(parseInt(req.params.id));
+    if (!dados) return res.status(404).json({ erro: 'Relatório não encontrado.' });
+    res.json(dados);
   } catch (err) { next(err); }
 }
