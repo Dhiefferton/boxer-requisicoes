@@ -1,7 +1,8 @@
 ﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor } from '../controllers/fornecedoresController.js';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { login, me, trocarSenha, alterarSenha } from '../controllers/authController.js';
+import { login, me, trocarSenha, alterarSenha, esqueciSenha, validarTokenSenha, redefinirSenha } from '../controllers/authController.js';
+import rateLimit from 'express-rate-limit';
 import {
   listarMateriais, listarCategorias, detalharMaterial,
   criarMaterial, editarMaterial, atualizarEstoque
@@ -43,6 +44,13 @@ router.post('/auth/login',         login);
 router.get('/auth/me',             autenticar, me);
 router.patch('/auth/trocar-senha', autenticar, trocarSenha);
 router.patch('/auth/alterar-senha', autenticar, alterarSenha);
+
+// ── Recuperação de senha por e-mail (público)
+const limiteRecuperacao = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+  message: { erro: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.' } });
+router.post('/auth/esqueci-senha',          limiteRecuperacao, esqueciSenha);
+router.get('/auth/redefinir-senha/:token',  limiteRecuperacao, validarTokenSenha);
+router.post('/auth/redefinir-senha',        limiteRecuperacao, redefinirSenha);
 
 // ── Catálogo
 router.get('/materiais',               autenticar, listarMateriais);
