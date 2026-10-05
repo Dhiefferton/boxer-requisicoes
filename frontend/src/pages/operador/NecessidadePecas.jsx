@@ -290,10 +290,12 @@ function CardEmAndamento({ item, podeRevisar, onAtualizar }) {
   }
 
   async function aprovar() {
-    if (!confirm('Aprovar esta necessidade de peça?')) return;
+    const qtdTela = parseInt(quantidade, 10);
+    const qtd = qtdTela > 0 ? qtdTela : item.quantidade;
+    if (!confirm(`Aprovar esta necessidade de peça?\n\nA quantidade será multiplicada por 6: ${qtd} → ${qtd * 6}.`)) return;
     setDecidindo(true);
     try {
-      await necessidadesPecasService.aprovar(item.id);
+      await necessidadesPecasService.aprovar(item.id, qtd);
       onAtualizar();
     } catch (err) { alert(err.response?.data?.erro || 'Erro ao aprovar.'); }
     finally { setDecidindo(false); }
