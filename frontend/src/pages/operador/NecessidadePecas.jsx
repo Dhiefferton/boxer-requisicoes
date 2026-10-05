@@ -6,7 +6,8 @@
 // destino ainda não definido, por enquanto só prepara o pacote).
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Ship, Plane, Check, X, Send, RefreshCw, Ban, Package } from 'lucide-react';
+import { Plus, Ship, Plane, Check, X, Send, RefreshCw, Ban, Package, FileDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { necessidadesPecasService, materiaisService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Spinner } from '../../components/ui';
@@ -14,6 +15,32 @@ import { Spinner } from '../../components/ui';
 function formatarData(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function formatarDataHora(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// Monta e baixa o Excel de um relatório (lote) da coluna Aprovado
+function baixarExcelRelatorio({ relatorio, itens }) {
+  const linhas = itens.map(i => ({
+    'Código':        i.codigo,
+    'Descrição':     i.descricao,
+    'Quantidade':    i.quantidade,
+    'Frete':         [i.frete_maritimo && 'Marítimo', i.frete_aereo && 'Aéreo'].filter(Boolean).join(' / ') || '—',
+    'Observações':   i.observacoes || '',
+    'Solicitado por': i.solicitado_por_nome || '',
+    'Solicitado em': formatarData(i.solicitado_em),
+    'Aprovado por':  i.aprovado_por_nome || '',
+    'Aprovado em':   formatarData(i.aprovado_em),
+  }));
+  const ws = XLSX.utils.json_to_sheet(linhas);
+  ws['!cols'] = [{ wch: 16 }, { wch: 45 }, { wch: 11 }, { wch: 16 }, { wch: 35 }, { wch: 22 }, { wch: 13 }, { wch: 22 }, { wch: 13 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, `Relatorio ${relatorio.id}`);
+  const data = new Date(relatorio.gerado_em).toLocaleDateString('pt-BR').replace(/\//g, '-');
+  XLSX.writeFile(wb, `necessidade-pecas-relatorio-${relatorio.id}-${data}.xlsx`);
 }
 
 export default function NecessidadePecas() {
@@ -26,13 +53,40 @@ export default function NecessidadePecas() {
   const [itens,       setItens]       = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [arquivadosAbertos, setArquivadosAbertos] = useState(false);
+  const [relatorios,  setRelatorios]  = useState([]);
+  const [gerando,     setGerando]     = useState(false);
+  const [baixandoId,  setBaixandoId]  = useState(null);
 
   async function carregar() {
     try {
       const { data } = await necessidadesPecasService.listar();
       setItens(data.necessidades);
+      if (podeRevisar) {
+        const r = await necessidadesPecasService.listarRelatorios();
+        setRelatorios(r.data.relatorios);
+      }
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
+  }
+
+  async function gerarRelatorio() {
+    if (!confirm(`Gerar relatório com os ${aprovados.length} item(ns) aprovado(s)?\n\nDepois de gerado, eles saem da coluna Aprovado e ficam arquivados no histórico de relatórios.`)) return;
+    setGerando(true);
+    try {
+      const { data } = await necessidadesPecasService.gerarRelatorio();
+      baixarExcelRelatorio(data);
+      await carregar();
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao gerar o relatório.'); }
+    finally { setGerando(false); }
+  }
+
+  async function baixarDeNovo(id) {
+    setBaixandoId(id);
+    try {
+      const { data } = await necessidadesPecasService.detalharRelatorio(id);
+      baixarExcelRelatorio(data);
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao baixar o relatório.'); }
+    finally { setBaixandoId(null); }
   }
 
   useEffect(() => { carregar(); }, []);
@@ -75,7 +129,15 @@ export default function NecessidadePecas() {
           </Coluna>
 
           <Coluna titulo="Aprovado" cor="border-green-500/30" itens={aprovados}
-            vazio="Nenhum item aprovado ainda.">
+            vazio="Nenhum item aprovado ainda."
+            acao={podeRevisar && aprovados.length > 0 && (
+              <button onClick={gerarRelatorio} disabled={gerando}
+                className="w-full mb-2 flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-lg bg-green-500/15 text-green-400 hover:bg-green-500/25 disabled:opacity-40">
+                {gerando
+                  ? <><RefreshCw size={13} className="animate-spin" /> Gerando relatório...</>
+                  : <><FileDown size={13} /> Gerar relatório ({aprovados.length})</>}
+              </button>
+            )}>
             {aprovados.map(item => (
               <CardAprovado key={item.id} item={item} podeRevisar={podeRevisar} onAtualizar={carregar} />
             ))}
@@ -87,10 +149,31 @@ export default function NecessidadePecas() {
         <div className="pt-2">
           <button onClick={() => setArquivadosAbertos(!arquivadosAbertos)}
             className="flex items-center gap-1.5 text-xs text-[#8b91a8] hover:text-[#e8eaf0] transition-colors">
-            {arquivadosAbertos ? '▾' : '▸'} Arquivados ({recusados.length})
+            {arquivadosAbertos ? '▾' : '▸'} Arquivados ({recusados.length + relatorios.length})
           </button>
           {arquivadosAbertos && (
             <div className="mt-2 space-y-1.5">
+              {podeRevisar && (
+                <>
+                  <p className="text-[11px] font-semibold text-[#8b91a8] uppercase tracking-wide pt-1">Relatórios gerados</p>
+                  {relatorios.length === 0 ? (
+                    <p className="text-xs text-[#8b91a8] py-4 text-center bg-[#1a1d27] rounded-xl border border-[#2e3347]">Nenhum relatório gerado ainda.</p>
+                  ) : relatorios.map(r => (
+                    <div key={r.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#1a1d27] border border-[#2e3347] text-xs">
+                      <div>
+                        <span className="font-semibold text-green-400 mr-2">Relatório #{r.id}</span>
+                        <span className="text-[#e8eaf0]">{r.total_itens} item(ns)</span>
+                        <span className="text-[#8b91a8]"> · {formatarDataHora(r.gerado_em)} por {r.gerado_por_nome || '—'}</span>
+                      </div>
+                      <button onClick={() => baixarDeNovo(r.id)} disabled={baixandoId === r.id}
+                        className="shrink-0 ml-2 flex items-center gap-1 text-[#4f6ef7] hover:underline disabled:opacity-40">
+                        <FileDown size={12} /> {baixandoId === r.id ? 'Baixando...' : 'Baixar'}
+                      </button>
+                    </div>
+                  ))}
+                  <p className="text-[11px] font-semibold text-[#8b91a8] uppercase tracking-wide pt-2">Recusados</p>
+                </>
+              )}
               {recusados.length === 0 ? (
                 <p className="text-xs text-[#8b91a8] py-4 text-center bg-[#1a1d27] rounded-xl border border-[#2e3347]">Nenhum item recusado.</p>
               ) : (
@@ -193,13 +276,14 @@ function FormNovaSolicitacao({ onCriado }) {
 // ============================================================
 // Coluna do kanban
 // ============================================================
-function Coluna({ titulo, cor, itens, vazio, children }) {
+function Coluna({ titulo, cor, itens, vazio, acao, children }) {
   return (
     <div>
       <div className={`flex items-center justify-between pb-2 mb-3 border-b-2 ${cor}`}>
         <h2 className="text-sm font-semibold text-[#e8eaf0]">{titulo}</h2>
         <span className="text-xs text-[#8b91a8] bg-[#1a1d27] border border-[#2e3347] rounded-full px-2 py-0.5">{itens.length}</span>
       </div>
+      {acao}
       {itens.length === 0 ? (
         <p className="text-xs text-[#8b91a8] py-8 text-center bg-[#1a1d27] rounded-xl border border-[#2e3347]">{vazio}</p>
       ) : (
