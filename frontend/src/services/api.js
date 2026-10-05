@@ -36,6 +36,9 @@ export const authService = {
   me:          ()                          => api.get('/auth/me'),
   trocarSenha: (senha_nova)                => api.patch('/auth/trocar-senha', { senha_nova }),
   alterarSenha: (senha_atual, senha_nova)  => api.patch('/auth/alterar-senha', { senha_atual, senha_nova }),
+  esqueciSenha:   (email)                  => api.post('/auth/esqueci-senha', { email }),
+  validarReset:   (token)                  => api.get(`/auth/redefinir-senha/${encodeURIComponent(token)}`),
+  redefinirSenha: (token, senha_nova)      => api.post('/auth/redefinir-senha', { token, senha_nova }),
 };
 
 export const materiaisService = {
