@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { Package, Eye, EyeOff, Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui';
-import api from '../services/api';
+import api, { authService } from '../services/api';
 
 export default function Login() {
   const [buscaNome,   setBuscaNome]   = useState('');
@@ -18,6 +18,8 @@ export default function Login() {
   const [erro,        setErro]        = useState('');
   const [loading,     setLoading]     = useState(false);
   const [buscando,    setBuscando]    = useState(false);
+  const [aviso,       setAviso]       = useState('');
+  const [enviandoReset, setEnviandoReset] = useState(false);
 
   const { login } = useAuth();
   const navigate  = useNavigate();
@@ -59,6 +61,26 @@ export default function Login() {
     if (e.key === 'Enter' && sugestoes.length > 0) {
       e.preventDefault();
       selecionarUsuario(sugestoes[0]);
+    }
+  }
+
+  function mascararEmail(e) {
+    const [u, d] = String(e).split('@');
+    if (!d) return e;
+    return `${u.slice(0, 2)}${'*'.repeat(Math.max(u.length - 2, 3))}@${d}`;
+  }
+
+  async function esqueciSenha() {
+    setErro(''); setAviso('');
+    if (!email) { setErro('Digite seu nome e selecione seu usuário para receber o link de recuperação.'); return; }
+    setEnviandoReset(true);
+    try {
+      await authService.esqueciSenha(email);
+      setAviso(`Enviamos um link para ${mascararEmail(email)}. Abra seu e-mail e clique em "Criar nova senha" (vale por 30 minutos).`);
+    } catch (err) {
+      setErro(err.response?.data?.erro || 'Não foi possível enviar o e-mail. Tente novamente.');
+    } finally {
+      setEnviandoReset(false);
     }
   }
 
@@ -178,9 +200,23 @@ export default function Login() {
               </div>
             </div>
 
+              <button
+                type="button"
+                onClick={esqueciSenha}
+                disabled={enviandoReset}
+                className="self-end text-xs text-[#4f6ef7] hover:underline disabled:opacity-50"
+              >
+                {enviandoReset ? 'Enviando link…' : 'Esqueci minha senha'}
+              </button>
             {erro && (
               <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-sm px-4 py-3 rounded-xl">
                 {erro}
+              </div>
+            )}
+
+            {aviso && (
+              <div className="bg-green-500/10 border border-green-500/20 text-green-400 text-sm px-4 py-3 rounded-xl">
+                {aviso}
               </div>
             )}
 
