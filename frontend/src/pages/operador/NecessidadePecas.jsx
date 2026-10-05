@@ -6,7 +6,7 @@
 // destino ainda não definido, por enquanto só prepara o pacote).
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Ship, Plane, Check, X, Send, RefreshCw, Ban, Package, FileDown } from 'lucide-react';
+import { Plus, Ship, Plane, Check, X, RefreshCw, Ban, Package, FileDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { necessidadesPecasService, materiaisService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -95,17 +95,38 @@ export default function NecessidadePecas() {
   const emAndamento  = itens.filter(i => i.status === 'em_andamento');
   const aprovados    = itens.filter(i => i.status === 'aprovado');
   const recusados    = itens.filter(i => i.status === 'recusado');
+  const ativas       = solicitados.length + emAndamento.length + aprovados.length;
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      {/* ── Cabeçalho ───────────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-bold text-[#e8eaf0]">Necessidade de Peças</h1>
-          <p className="text-sm text-[#8b91a8] mt-0.5">Registro, revisão e aprovação de necessidade de peças</p>
+          <p className="text-sm text-[#8b91a8] mt-0.5">
+            {ativas} necessidade{ativas !== 1 ? 's' : ''} ativa{ativas !== 1 ? 's' : ''}
+          </p>
         </div>
-        <button onClick={carregar} className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors">
-          <RefreshCw size={15} />
+        <button onClick={carregar} disabled={loading} title="Atualizar"
+          className="p-2 rounded-xl text-[#8b91a8] hover:text-[#e8eaf0] hover:bg-[#2e3347] transition-colors">
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
+      </div>
+
+      {/* ── Cards de resumo ──────────────────────────────── */}
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        {[
+          { label: 'Solicitados',   total: solicitados.length },
+          { label: 'Em andamento',  total: emAndamento.length },
+          { label: 'Aprovados',     total: aprovados.length },
+          { label: 'Relatórios',    total: relatorios.length },
+          { label: 'Recusados',     total: recusados.length },
+        ].map(({ label, total }) => (
+          <div key={label} className="bg-[#1a1d27] border border-[#2e3347] rounded-xl p-3 text-center">
+            <p className="text-xl font-bold text-[#e8eaf0]">{total}</p>
+            <p className="text-[10px] text-[#8b91a8] mt-0.5">{label}</p>
+          </div>
+        ))}
       </div>
 
       <FormNovaSolicitacao onCriado={carregar} />
@@ -114,32 +135,32 @@ export default function NecessidadePecas() {
         <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
       ) : (
         <div className="grid lg:grid-cols-3 gap-4">
-          <Coluna titulo="Solicitados" cor="border-blue-500/30" itens={solicitados}
+          <Coluna titulo="Solicitados" cor="border-blue-500/40" badge="bg-blue-500/15 text-blue-400" itens={solicitados}
             vazio="Nenhuma solicitação aberta.">
             {solicitados.map(item => (
               <CardSolicitado key={item.id} item={item} podeRevisar={podeRevisar} onAtualizar={carregar} />
             ))}
           </Coluna>
 
-          <Coluna titulo="Em andamento" cor="border-amber-500/30" itens={emAndamento}
+          <Coluna titulo="Em andamento" cor="border-amber-500/40" badge="bg-amber-500/15 text-amber-400" itens={emAndamento}
             vazio="Nenhum item em revisão.">
             {emAndamento.map(item => (
               <CardEmAndamento key={item.id} item={item} podeRevisar={podeRevisar} onAtualizar={carregar} />
             ))}
           </Coluna>
 
-          <Coluna titulo="Aprovado" cor="border-green-500/30" itens={aprovados}
+          <Coluna titulo="Aprovado" cor="border-green-500/40" badge="bg-green-500/15 text-green-400" itens={aprovados}
             vazio="Nenhum item aprovado ainda."
             acao={podeRevisar && aprovados.length > 0 && (
               <button onClick={gerarRelatorio} disabled={gerando}
-                className="w-full mb-2 flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-lg bg-green-500/15 text-green-400 hover:bg-green-500/25 disabled:opacity-40">
+                className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-lg bg-green-500/15 text-green-400 hover:bg-green-500/25 disabled:opacity-40">
                 {gerando
                   ? <><RefreshCw size={13} className="animate-spin" /> Gerando relatório...</>
                   : <><FileDown size={13} /> Gerar relatório ({aprovados.length})</>}
               </button>
             )}>
             {aprovados.map(item => (
-              <CardAprovado key={item.id} item={item} podeRevisar={podeRevisar} onAtualizar={carregar} />
+              <CardAprovado key={item.id} item={item} />
             ))}
           </Coluna>
         </div>
@@ -276,16 +297,18 @@ function FormNovaSolicitacao({ onCriado }) {
 // ============================================================
 // Coluna do kanban
 // ============================================================
-function Coluna({ titulo, cor, itens, vazio, acao, children }) {
+function Coluna({ titulo, cor, badge, itens, vazio, acao, children }) {
   return (
-    <div>
-      <div className={`flex items-center justify-between pb-2 mb-3 border-b-2 ${cor}`}>
-        <h2 className="text-sm font-semibold text-[#e8eaf0]">{titulo}</h2>
-        <span className="text-xs text-[#8b91a8] bg-[#1a1d27] border border-[#2e3347] rounded-full px-2 py-0.5">{itens.length}</span>
+    <div className="space-y-2">
+      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[#1a1d27]`}>
+        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>
+        <span className="text-xs font-bold text-[#8b91a8]">{itens.length}</span>
       </div>
       {acao}
       {itens.length === 0 ? (
-        <p className="text-xs text-[#8b91a8] py-8 text-center bg-[#1a1d27] rounded-xl border border-[#2e3347]">{vazio}</p>
+        <div className="border-2 border-dashed border-[#2e3347] rounded-2xl py-8 text-center">
+          <p className="text-xs text-[#8b91a8]">{vazio}</p>
+        </div>
       ) : (
         <div className="space-y-2">{children}</div>
       )}
@@ -450,23 +473,9 @@ function CardEmAndamento({ item, podeRevisar, onAtualizar }) {
 }
 
 // ============================================================
-// Card — Aprovado (botão de enviar pro outro sistema)
+// Card — Aprovado
 // ============================================================
-function CardAprovado({ item, podeRevisar, onAtualizar }) {
-  const [enviando, setEnviando] = useState(false);
-  const [aviso,    setAviso]    = useState('');
-
-  async function enviar() {
-    setEnviando(true);
-    setAviso('');
-    try {
-      const { data } = await necessidadesPecasService.enviar(item.id);
-      setAviso(data.aviso || 'Enviado.');
-      onAtualizar();
-    } catch (err) { alert(err.response?.data?.erro || 'Erro ao enviar.'); }
-    finally { setEnviando(false); }
-  }
-
+function CardAprovado({ item }) {
   return (
     <div className="p-3 rounded-xl border border-green-500/20 bg-[#1a1d27] space-y-2">
       <CabecalhoCard item={item} />
@@ -474,19 +483,6 @@ function CardAprovado({ item, podeRevisar, onAtualizar }) {
         {item.frete_maritimo && <span className="flex items-center gap-1"><Ship size={12} /> Marítimo</span>}
         {item.frete_aereo && <span className="flex items-center gap-1"><Plane size={12} /> Aéreo</span>}
       </div>
-
-      {item.enviado_outro_sistema ? (
-        <div className="text-[11px] text-green-400 flex items-center gap-1.5 py-1">
-          <Check size={13} /> Enviado em {formatarData(item.enviado_em)}
-        </div>
-      ) : podeRevisar ? (
-        <button onClick={enviar} disabled={enviando}
-          className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 disabled:opacity-40">
-          <Send size={13} /> {enviando ? 'Enviando...' : 'Enviar'}
-        </button>
-      ) : null}
-
-      {aviso && <p className="text-[10px] text-amber-400">{aviso}</p>}
     </div>
   );
 }
