@@ -7,6 +7,7 @@ import { Package, Eye, EyeOff, Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui';
 import api, { authService } from '../services/api';
+import BotaoTema from '../components/ui/BotaoTema';
 
 export default function Login() {
   const [buscaNome,   setBuscaNome]   = useState('');
@@ -100,31 +101,32 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f1117] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-[var(--c-fundo)] flex items-center justify-center px-4 relative">
+      <BotaoTema className="absolute top-4 right-4" />
       <div className="w-full max-w-sm">
 
         {/* Logo */}
         <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-[#4f6ef7] flex items-center justify-center shadow-lg shadow-[#4f6ef7]/20">
+          <div className="w-14 h-14 rounded-2xl bg-[var(--c-destaque)] flex items-center justify-center shadow-lg shadow-[var(--c-destaque)]/20">
             <Package size={28} className="text-white" />
           </div>
           <div className="text-center">
-            <h1 className="text-xl font-bold text-[#e8eaf0]">Boxer Requisições</h1>
-            <p className="text-sm text-[#8b91a8] mt-0.5">Sistema interno de materiais</p>
+            <h1 className="text-xl font-bold text-[var(--c-texto)]">Boxer Requisições</h1>
+            <p className="text-sm text-[var(--c-suave)] mt-0.5">Sistema interno de materiais</p>
           </div>
         </div>
 
         {/* Card de login */}
-        <div className="bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-6">
-          <h2 className="text-base font-semibold text-[#e8eaf0] mb-5">Entrar na sua conta</h2>
+        <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-6">
+          <h2 className="text-base font-semibold text-[var(--c-texto)] mb-5">Entrar na sua conta</h2>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
             {/* Campo de busca por nome */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm text-[#8b91a8] font-medium">Usuário</label>
+              <label className="text-sm text-[var(--c-suave)] font-medium">Usuário</label>
               <div className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
                 <input
                   type="text"
                   placeholder="Digite seu nome..."
@@ -137,31 +139,31 @@ export default function Login() {
                   onKeyDown={aoPressionarTeclaBusca}
                   autoComplete="off"
                   className="
-                    w-full bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl
-                    pl-9 pr-4 py-2.5 placeholder:text-[#8b91a8] text-sm
-                    focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]/30
+                    w-full bg-[var(--c-borda)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl
+                    pl-9 pr-4 py-2.5 placeholder:text-[var(--c-suave)] text-sm
+                    focus:outline-none focus:border-[var(--c-destaque)] focus:ring-1 focus:ring-[var(--c-destaque)]/30
                     transition-colors
                   "
                 />
                 {buscando && (
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <div className="w-3 h-3 border-2 border-[#4f6ef7] border-t-transparent rounded-full animate-spin" />
+                    <div className="w-3 h-3 border-2 border-[var(--c-destaque)] border-t-transparent rounded-full animate-spin" />
                   </div>
                 )}
 
                 {/* Sugestões */}
                 {sugestoes.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-[#21253a] border border-[#2e3347] rounded-xl overflow-hidden shadow-xl">
+                  <div className="absolute z-10 w-full mt-1 bg-[var(--c-cartao)] border border-[var(--c-borda)] rounded-xl overflow-hidden shadow-xl">
                     {sugestoes.map((u, i) => (
                       <button
                         key={i}
                         type="button"
                         onClick={() => selecionarUsuario(u)}
-                        className="w-full text-left px-4 py-3 hover:bg-[#2e3347] transition-colors"
+                        className="w-full text-left px-4 py-3 hover:bg-[var(--c-borda)] transition-colors"
                       >
-                        <p className="text-sm text-[#e8eaf0] font-medium">{u.nome}</p>
+                        <p className="text-sm text-[var(--c-texto)] font-medium">{u.nome}</p>
                         {u.departamento_nome && (
-                          <p className="text-xs text-[#8b91a8]">{u.departamento_nome}</p>
+                          <p className="text-xs text-[var(--c-suave)]">{u.departamento_nome}</p>
                         )}
                       </button>
                     ))}
@@ -175,7 +177,7 @@ export default function Login() {
 
             {/* Senha */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm text-[#8b91a8] font-medium">Senha</label>
+              <label className="text-sm text-[var(--c-suave)] font-medium">Senha</label>
               <div className="relative">
                 <input
                   type={verSenha ? 'text' : 'password'}
@@ -184,16 +186,16 @@ export default function Login() {
                   onChange={e => setSenha(e.target.value)}
                   autoComplete="current-password"
                   className="
-                    w-full bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl
-                    px-4 py-2.5 pr-11 placeholder:text-[#8b91a8] text-sm
-                    focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]/30
+                    w-full bg-[var(--c-borda)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl
+                    px-4 py-2.5 pr-11 placeholder:text-[var(--c-suave)] text-sm
+                    focus:outline-none focus:border-[var(--c-destaque)] focus:ring-1 focus:ring-[var(--c-destaque)]/30
                     transition-colors
                   "
                 />
                 <button
                   type="button"
                   onClick={() => setVerSenha(!verSenha)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b91a8] hover:text-[#e8eaf0] transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)] transition-colors"
                 >
                   {verSenha ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -204,7 +206,7 @@ export default function Login() {
                 type="button"
                 onClick={esqueciSenha}
                 disabled={enviandoReset}
-                className="self-end text-xs text-[#4f6ef7] hover:underline disabled:opacity-50"
+                className="self-end text-xs text-[var(--c-destaque)] hover:underline disabled:opacity-50"
               >
                 {enviandoReset ? 'Enviando link…' : 'Esqueci minha senha'}
               </button>
@@ -226,7 +228,7 @@ export default function Login() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-[#8b91a8] mt-6">
+        <p className="text-center text-xs text-[var(--c-suave)] mt-6">
           Problemas com acesso? Fale com o administrador.
         </p>
       </div>

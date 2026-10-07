@@ -62,21 +62,21 @@ export default function Catalogo() {
       {/* ── Título + botão carrinho ─────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-[#e8eaf0]">Catálogo de Materiais</h1>
-          <p className="text-sm text-[#8b91a8] mt-0.5">
+          <h1 className="text-lg font-bold text-[var(--c-texto)]">Catálogo de Materiais</h1>
+          <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {loading ? 'Carregando…' : `${total} ${total === 1 ? 'item disponível' : 'itens disponíveis'}`}
           </p>
         </div>
 
         <button
           onClick={() => setCartOpen(true)}
-          className="relative flex items-center gap-2 bg-[#4f6ef7]/15 hover:bg-[#4f6ef7]/25
-            text-[#4f6ef7] px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
+          className="relative flex items-center gap-2 bg-[var(--c-destaque)]/15 hover:bg-[var(--c-destaque)]/25
+            text-[var(--c-destaque)] px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200"
         >
           <ShoppingCart size={18} />
           <span className="hidden sm:block">Carrinho</span>
           {totalItens > 0 && (
-            <span className="bg-[#4f6ef7] text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+            <span className="bg-[var(--c-destaque)] text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
               {totalItens}
             </span>
           )}
@@ -85,23 +85,23 @@ export default function Catalogo() {
 
       {/* ── Busca ───────────────────────────────────────── */}
       <div className="relative">
-        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
+        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
         <input
           type="search"
           placeholder="Buscar por nome ou código…"
           value={busca}
           onChange={e => setBusca(e.target.value)}
           className="
-            w-full bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl
-            pl-10 pr-4 py-3 placeholder:text-[#8b91a8] text-sm
-            focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]/30
+            w-full bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl
+            pl-10 pr-4 py-3 placeholder:text-[var(--c-suave)] text-sm
+            focus:outline-none focus:border-[var(--c-destaque)] focus:ring-1 focus:ring-[var(--c-destaque)]/30
             transition-colors
           "
         />
         {busca && (
           <button
             onClick={() => setBusca('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[#8b91a8] hover:text-[#e8eaf0]"
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[var(--c-suave)] hover:text-[var(--c-texto)]"
           >
             <X size={15} />
           </button>
@@ -110,7 +110,7 @@ export default function Catalogo() {
 
       {/* ── Filtro por categorias ────────────────────────── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <div className="shrink-0 flex items-center gap-1.5 text-xs text-[#8b91a8]">
+        <div className="shrink-0 flex items-center gap-1.5 text-xs text-[var(--c-suave)]">
           <SlidersHorizontal size={13} />
           Categoria:
         </div>
@@ -118,8 +118,8 @@ export default function Catalogo() {
           onClick={() => setCategoriaId('')}
           className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors
             ${!categoriaId
-              ? 'bg-[#4f6ef7] text-white'
-              : 'bg-[#1a1d27] border border-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0]'
+              ? 'bg-[var(--c-destaque)] text-white'
+              : 'bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'
             }`}
         >
           Todos
@@ -130,8 +130,8 @@ export default function Catalogo() {
             onClick={() => setCategoriaId(cat.id === categoriaId ? '' : cat.id)}
             className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors
               ${categoriaId === cat.id
-                ? 'bg-[#4f6ef7] text-white'
-                : 'bg-[#1a1d27] border border-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0]'
+                ? 'bg-[var(--c-destaque)] text-white'
+                : 'bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'
               }`}
           >
             {cat.nome}
@@ -142,7 +142,7 @@ export default function Catalogo() {
       {/* ── Resultado ───────────────────────────────────── */}
       {loading ? (
         <div className="flex justify-center py-16">
-          <Spinner size={28} className="text-[#4f6ef7]" />
+          <Spinner size={28} className="text-[var(--c-destaque)]" />
         </div>
       ) : materiais.length === 0 ? (
         <Empty
@@ -157,10 +157,10 @@ export default function Catalogo() {
         <>
           {temFiltro && (
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[#8b91a8]">{materiais.length} resultado(s)</span>
+              <span className="text-xs text-[var(--c-suave)]">{materiais.length} resultado(s)</span>
               <button
                 onClick={limparFiltros}
-                className="text-xs text-[#4f6ef7] hover:underline flex items-center gap-1"
+                className="text-xs text-[var(--c-destaque)] hover:underline flex items-center gap-1"
               >
                 <X size={12} /> Limpar filtros
               </button>

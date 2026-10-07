@@ -30,7 +30,7 @@ export default function Revisao() {
   if (itens.length === 0 && !sucesso) {
     return (
       <div className="max-w-lg mx-auto space-y-4">
-        <button onClick={() => navigate('/catalogo')} className="flex items-center gap-2 text-sm text-[#8b91a8] hover:text-[#e8eaf0] transition-colors">
+        <button onClick={() => navigate('/catalogo')} className="flex items-center gap-2 text-sm text-[var(--c-suave)] hover:text-[var(--c-texto)] transition-colors">
           <ArrowLeft size={16} /> Voltar ao catálogo
         </button>
         <Empty icon={ShoppingCart} titulo="Carrinho vazio" descricao="Adicione itens ao carrinho antes de revisar" />
@@ -46,8 +46,8 @@ export default function Revisao() {
           <CheckCircle size={32} className="text-green-400" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-[#e8eaf0]">Requisição enviada!</h2>
-          <p className="text-sm text-[#8b91a8] mt-1">
+          <h2 className="text-lg font-bold text-[var(--c-texto)]">Requisição enviada!</h2>
+          <p className="text-sm text-[var(--c-suave)] mt-1">
             Sua requisição #{requisicaoId} foi registrada e será processada em breve.
           </p>
         </div>
@@ -92,35 +92,35 @@ export default function Revisao() {
   return (
     <div className="max-w-2xl mx-auto space-y-5">
 
-      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-[#8b91a8] hover:text-[#e8eaf0] transition-colors">
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm text-[var(--c-suave)] hover:text-[var(--c-texto)] transition-colors">
         <ArrowLeft size={16} /> Voltar
       </button>
 
       <div>
-        <h1 className="text-lg font-bold text-[#e8eaf0]">Revisar requisição</h1>
-        <p className="text-sm text-[#8b91a8] mt-0.5">Confira os dados antes de enviar</p>
+        <h1 className="text-lg font-bold text-[var(--c-texto)]">Revisar requisição</h1>
+        <p className="text-sm text-[var(--c-suave)] mt-0.5">Confira os dados antes de enviar</p>
       </div>
 
       {/* Dados do solicitante */}
-      <div className="bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-5 space-y-3">
-        <h3 className="text-sm font-semibold text-[#e8eaf0]">Solicitante</h3>
+      <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-3">
+        <h3 className="text-sm font-semibold text-[var(--c-texto)]">Solicitante</h3>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <p className="text-[#8b91a8]">Nome</p>
-            <p className="text-[#e8eaf0] font-medium mt-0.5">{usuario?.nome}</p>
+            <p className="text-[var(--c-suave)]">Nome</p>
+            <p className="text-[var(--c-texto)] font-medium mt-0.5">{usuario?.nome}</p>
           </div>
           <div>
-            <p className="text-[#8b91a8]">Departamento</p>
-            <p className="text-[#e8eaf0] font-medium mt-0.5">{usuario?.departamento_nome || '—'}</p>
+            <p className="text-[var(--c-suave)]">Departamento</p>
+            <p className="text-[var(--c-texto)] font-medium mt-0.5">{usuario?.departamento_nome || '—'}</p>
           </div>
         </div>
       </div>
 
       {/* Data de necessidade — obrigatória e preenchida automaticamente */}
-      <div className="bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-5 space-y-3">
+      <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-3">
         <div className="flex items-center gap-2">
-          <Calendar size={16} className="text-[#4f6ef7]" />
-          <h3 className="text-sm font-semibold text-[#e8eaf0]">Data de necessidade</h3>
+          <Calendar size={16} className="text-[var(--c-destaque)]" />
+          <h3 className="text-sm font-semibold text-[var(--c-texto)]">Data de necessidade</h3>
           <span className="text-xs text-red-400 font-medium">obrigatório</span>
         </div>
         <input
@@ -130,46 +130,46 @@ export default function Revisao() {
           min={hoje()}
           required
           className="
-            bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-4 py-2.5
-            text-sm w-full focus:outline-none focus:border-[#4f6ef7] focus:ring-1
-            focus:ring-[#4f6ef7]/30 transition-colors
+            bg-[var(--c-borda)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-4 py-2.5
+            text-sm w-full focus:outline-none focus:border-[var(--c-destaque)] focus:ring-1
+            focus:ring-[var(--c-destaque)]/30 transition-colors
           "
         />
-        <p className="text-xs text-[#8b91a8]">Preenchido com a data de hoje. Altere se necessário.</p>
+        <p className="text-xs text-[var(--c-suave)]">Preenchido com a data de hoje. Altere se necessário.</p>
       </div>
 
       {/* Itens do carrinho */}
-      <div className="bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-5 space-y-3">
+      <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-[#e8eaf0]">Itens solicitados</h3>
-          <span className="text-xs text-[#8b91a8]">{totalItens} {totalItens === 1 ? 'item' : 'itens'}</span>
+          <h3 className="text-sm font-semibold text-[var(--c-texto)]">Itens solicitados</h3>
+          <span className="text-xs text-[var(--c-suave)]">{totalItens} {totalItens === 1 ? 'item' : 'itens'}</span>
         </div>
         <div className="space-y-2">
           {itens.map(({ material, quantidade }) => (
-            <div key={material.id} className="flex items-center justify-between py-2.5 border-b border-[#2e3347] last:border-0">
+            <div key={material.id} className="flex items-center justify-between py-2.5 border-b border-[var(--c-borda)] last:border-0">
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-[#4f6ef7] font-medium">{material.codigo}</p>
-                <p className="text-sm text-[#e8eaf0] truncate">{material.descricao}</p>
-                <p className="text-xs text-[#8b91a8]">{material.unidade}</p>
+                <p className="text-xs text-[var(--c-destaque)] font-medium">{material.codigo}</p>
+                <p className="text-sm text-[var(--c-texto)] truncate">{material.descricao}</p>
+                <p className="text-xs text-[var(--c-suave)]">{material.unidade}</p>
               </div>
               <div className="text-right shrink-0 ml-4">
-                <span className="text-sm font-semibold text-[#e8eaf0]">{quantidade}</span>
-                <p className="text-xs text-[#8b91a8]">{material.unidade}</p>
+                <span className="text-sm font-semibold text-[var(--c-texto)]">{quantidade}</span>
+                <p className="text-xs text-[var(--c-suave)]">{material.unidade}</p>
               </div>
             </div>
           ))}
         </div>
-        <button onClick={() => navigate('/catalogo')} className="text-xs text-[#4f6ef7] hover:underline">
+        <button onClick={() => navigate('/catalogo')} className="text-xs text-[var(--c-destaque)] hover:underline">
           Editar itens no catálogo
         </button>
       </div>
 
       {/* Observações */}
-      <div className="bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-5 space-y-3">
+      <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-3">
         <div className="flex items-center gap-2">
-          <MessageSquare size={16} className="text-[#4f6ef7]" />
-          <h3 className="text-sm font-semibold text-[#e8eaf0]">Observações</h3>
-          <span className="text-xs text-[#8b91a8]">(opcional)</span>
+          <MessageSquare size={16} className="text-[var(--c-destaque)]" />
+          <h3 className="text-sm font-semibold text-[var(--c-texto)]">Observações</h3>
+          <span className="text-xs text-[var(--c-suave)]">(opcional)</span>
         </div>
         <Textarea
           placeholder="Ex: Materiais urgentes para evento de sexta-feira…"
