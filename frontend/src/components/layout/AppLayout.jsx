@@ -7,6 +7,7 @@ import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, La
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
+import { podeVerOrcamentos } from '../../utils/acessoOrcamentos';
 
 export default function AppLayout({ children }) {
   const { usuario, logout } = useAuth();
@@ -26,9 +27,10 @@ export default function AppLayout({ children }) {
     { to: '/mrp',       icon: BarChart2,       label: 'MRP',        perfis: ['admin'] },
     { to: '/compras',   icon: FileText,        label: 'Compras',    perfis: ['admin'] },
     { to: '/necessidade-pecas', icon: Package, label: 'Nec. Peças', perfis: ['admin'], setores: ['Sac / Suporte'] },
-    { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', perfis: ['operador', 'admin'] },
+    { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', perfis: ['operador', 'admin'], permitir: podeVerOrcamentos },
   ].filter(item => {
     if (item.perfis.includes(usuario?.perfil)) return true;
+    if (item.permitir?.(usuario)) return true;
     if (item.setores) {
       const setoresNormalizados = item.setores.map(s => s.trim().toLowerCase());
       return setoresNormalizados.includes((usuario?.departamento_nome || '').trim().toLowerCase());
