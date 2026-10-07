@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Boxer Requisições</title>
+    <script>
+      // Aplica o tema salvo antes de desenhar a tela (evita piscar)
+      try { if (localStorage.getItem('boxer_tema') === 'claro') document.documentElement.dataset.tema = 'claro'; } catch (e) {}
+    </script>
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.json" />
