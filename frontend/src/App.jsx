@@ -19,6 +19,7 @@ import MRP             from './pages/operador/MRP';
 import Compras         from './pages/operador/Compras';
 import NecessidadePecas from './pages/operador/NecessidadePecas';
 import PedidosOrcamento from './pages/operador/PedidosOrcamento';
+import { podeVerOrcamentos } from './utils/acessoOrcamentos';
 import { Spinner } from './components/ui';
 
 function RotaProtegida({ children }) {
@@ -31,6 +32,19 @@ function RotaProtegida({ children }) {
   if (!usuario) return <Navigate to="/login" replace />;
   // Redireciona para troca de senha obrigatória
   if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
+  return <AppLayout>{children}</AppLayout>;
+}
+
+function RotaOrcamentos({ children }) {
+  const { usuario, carregando } = useAuth();
+  if (carregando) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Spinner size={32} className="text-[#4f6ef7]" />
+    </div>
+  );
+  if (!usuario) return <Navigate to="/login" replace />;
+  if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
+  if (!podeVerOrcamentos(usuario)) return <Navigate to="/catalogo" replace />;
   return <AppLayout>{children}</AppLayout>;
 }
 
@@ -104,7 +118,7 @@ export default function App() {
               <RotaAdminOuSetor setores={['Sac / Suporte']}><NecessidadePecas /></RotaAdminOuSetor>
             } />
             <Route path="/pedidos-orcamento" element={
-              <RotaPerfil perfis={['operador', 'admin']}><PedidosOrcamento /></RotaPerfil>
+              <RotaOrcamentos><PedidosOrcamento /></RotaOrcamentos>
             } />
             <Route path="/"  element={<Navigate to="/catalogo" replace />} />
             <Route path="*"  element={<Navigate to="/catalogo" replace />} />
