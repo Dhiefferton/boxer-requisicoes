@@ -3,9 +3,9 @@
 export function Button({ children, variant = 'primary', size = 'md', loading, className = '', ...props }) {
   const base = 'inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed';
   const variants = {
-    primary:  'bg-[#4f6ef7] hover:bg-[#3d5ce5] text-white',
-    secondary:'bg-[#2e3347] hover:bg-[#383d54] text-[#e8eaf0]',
-    ghost:    'bg-transparent hover:bg-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0]',
+    primary:  'bg-[var(--c-destaque)] hover:bg-[var(--c-destaque-h)] text-white',
+    secondary:'bg-[var(--c-borda)] hover:bg-[var(--c-borda-forte)] text-[var(--c-texto)]',
+    ghost:    'bg-transparent hover:bg-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]',
     danger:   'bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-[#ef4444]',
   };
   const sizes = { sm: 'px-3 py-1.5 text-sm', md: 'px-4 py-2.5 text-sm', lg: 'px-6 py-3 text-base' };
@@ -47,8 +47,8 @@ export function StatusBadge({ status }) {
 export function Input({ label, error, className = '', ...props }) {
   return (
     <div className="flex flex-col gap-1.5">
-      {label && <label className="text-sm text-[#8b91a8] font-medium">{label}</label>}
-      <input className={`bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-4 py-2.5 placeholder:text-[#8b91a8] text-sm focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]/30 transition-colors ${error ? 'border-red-500' : ''} ${className}`} {...props} />
+      {label && <label className="text-sm text-[var(--c-suave)] font-medium">{label}</label>}
+      <input className={`bg-[var(--c-borda)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-4 py-2.5 placeholder:text-[var(--c-suave)] text-sm focus:outline-none focus:border-[var(--c-destaque)] focus:ring-1 focus:ring-[var(--c-destaque)]/30 transition-colors ${error ? 'border-red-500' : ''} ${className}`} {...props} />
       {error && <span className="text-xs text-red-400">{error}</span>}
     </div>
   );
@@ -57,8 +57,8 @@ export function Input({ label, error, className = '', ...props }) {
 export function Textarea({ label, error, className = '', ...props }) {
   return (
     <div className="flex flex-col gap-1.5">
-      {label && <label className="text-sm text-[#8b91a8] font-medium">{label}</label>}
-      <textarea rows={3} className={`bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-4 py-2.5 placeholder:text-[#8b91a8] text-sm resize-none focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]/30 transition-colors ${error ? 'border-red-500' : ''} ${className}`} {...props} />
+      {label && <label className="text-sm text-[var(--c-suave)] font-medium">{label}</label>}
+      <textarea rows={3} className={`bg-[var(--c-borda)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-4 py-2.5 placeholder:text-[var(--c-suave)] text-sm resize-none focus:outline-none focus:border-[var(--c-destaque)] focus:ring-1 focus:ring-[var(--c-destaque)]/30 transition-colors ${error ? 'border-red-500' : ''} ${className}`} {...props} />
       {error && <span className="text-xs text-red-400">{error}</span>}
     </div>
   );
@@ -74,15 +74,15 @@ export function Spinner({ size = 20, className = '' }) {
 }
 
 export function Card({ children, className = '', ...props }) {
-  return <div className={`bg-[#1a1d27] border border-[#2e3347] rounded-2xl ${className}`} {...props}>{children}</div>;
+  return <div className={`bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl ${className}`} {...props}>{children}</div>;
 }
 
 export function Empty({ icon: Icon, titulo, descricao }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
-      {Icon && <Icon size={40} className="text-[#2e3347]" strokeWidth={1.5} />}
-      <p className="text-[#e8eaf0] font-medium">{titulo}</p>
-      {descricao && <p className="text-sm text-[#8b91a8] max-w-xs">{descricao}</p>}
+      {Icon && <Icon size={40} className="text-[var(--c-borda)]" strokeWidth={1.5} />}
+      <p className="text-[var(--c-texto)] font-medium">{titulo}</p>
+      {descricao && <p className="text-sm text-[var(--c-suave)] max-w-xs">{descricao}</p>}
     </div>
   );
 }
