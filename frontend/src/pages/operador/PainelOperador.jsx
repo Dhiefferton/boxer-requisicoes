@@ -77,8 +77,8 @@ export default function PainelOperador() {
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[#e8eaf0]">Painel do Operador</h1>
-          <p className="text-sm text-[#8b91a8] mt-0.5">
+          <h1 className="text-lg font-bold text-[var(--c-texto)]">Painel do Operador</h1>
+          <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {ativas.length} requisição{ativas.length !== 1 ? 'ões' : ''} ativa{ativas.length !== 1 ? 's' : ''}
           </p>
         </div>
@@ -100,18 +100,18 @@ export default function PainelOperador() {
           </button>
 
           {/* Alternar modo */}
-          <div className="flex bg-[#1a1d27] border border-[#2e3347] rounded-xl p-0.5">
+          <div className="flex bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-0.5">
             <button
               onClick={() => setModo('kanban')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-                ${modo === 'kanban' ? 'bg-[#4f6ef7] text-white' : 'text-[#8b91a8] hover:text-[#e8eaf0]'}`}
+                ${modo === 'kanban' ? 'bg-[var(--c-destaque)] text-white' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}
             >
               <LayoutGrid size={13} /> Kanban
             </button>
             <button
               onClick={() => setModo('lista')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
-                ${modo === 'lista' ? 'bg-[#4f6ef7] text-white' : 'text-[#8b91a8] hover:text-[#e8eaf0]'}`}
+                ${modo === 'lista' ? 'bg-[var(--c-destaque)] text-white' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}
             >
               <List size={13} /> Lista
             </button>
@@ -121,7 +121,7 @@ export default function PainelOperador() {
           <button
             onClick={recarregar}
             disabled={loading}
-            className="p-2 rounded-xl text-[#8b91a8] hover:text-[#e8eaf0] hover:bg-[#2e3347] transition-colors"
+            className="p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)] transition-colors"
             title="Atualizar"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -138,9 +138,9 @@ export default function PainelOperador() {
           { key: 'entregue',     label: 'Entregues'   },
           { key: 'cancelado',    label: 'Cancelados'  },
         ].map(({ key, label }) => (
-          <div key={key} className="bg-[#1a1d27] border border-[#2e3347] rounded-xl p-3 text-center">
-            <p className="text-xl font-bold text-[#e8eaf0]">{contadores[key]}</p>
-            <p className="text-[10px] text-[#8b91a8] mt-0.5">{label}</p>
+          <div key={key} className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-3 text-center">
+            <p className="text-xl font-bold text-[var(--c-texto)]">{contadores[key]}</p>
+            <p className="text-[10px] text-[var(--c-suave)] mt-0.5">{label}</p>
           </div>
         ))}
       </div>
@@ -148,7 +148,7 @@ export default function PainelOperador() {
       {/* ── Estado de carregamento / erro ────────────────── */}
       {loading && (
         <div className="flex justify-center py-10">
-          <Spinner size={28} className="text-[#4f6ef7]" />
+          <Spinner size={28} className="text-[var(--c-destaque)]" />
         </div>
       )}
 
@@ -173,15 +173,15 @@ export default function PainelOperador() {
                 const itens = ativas.filter(r => r.status === col.status);
                 return (
                   <div key={col.status} className="space-y-2">
-                    <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${col.cor} bg-[#1a1d27]`}>
+                    <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${col.cor} bg-[var(--c-superficie)]`}>
                       <div className="flex items-center gap-2">
                         <StatusBadge status={col.status} />
                       </div>
-                      <span className="text-xs font-bold text-[#8b91a8]">{itens.length}</span>
+                      <span className="text-xs font-bold text-[var(--c-suave)]">{itens.length}</span>
                     </div>
                     {itens.length === 0 ? (
-                      <div className="border-2 border-dashed border-[#2e3347] rounded-2xl py-8 text-center">
-                        <p className="text-xs text-[#8b91a8]">Sem requisições</p>
+                      <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
+                        <p className="text-xs text-[var(--c-suave)]">Sem requisições</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -204,7 +204,7 @@ export default function PainelOperador() {
             <div className="mt-4">
               <button
                 onClick={() => setVerArquivado(!verArquivado)}
-                className="flex items-center gap-2 text-sm text-[#8b91a8] hover:text-[#e8eaf0] transition-colors"
+                className="flex items-center gap-2 text-sm text-[var(--c-suave)] hover:text-[var(--c-texto)] transition-colors"
               >
                 <span className={`transition-transform ${verArquivado ? 'rotate-90' : ''}`}>▶</span>
                 Arquivados ({arquivadas.length})

@@ -202,15 +202,15 @@ export default function MRP() {
     <div className="space-y-5">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[#e8eaf0]">MRP — Necessidade de Estoque</h1>
-          <p className="text-sm text-[#8b91a8] mt-0.5">
+          <h1 className="text-lg font-bold text-[var(--c-texto)]">MRP — Necessidade de Estoque</h1>
+          <p className="text-sm text-[var(--c-suave)] mt-0.5">
             Análise de consumo e previsão de compras mensais
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Período */}
           <select value={meses} onChange={e => setMeses(parseInt(e.target.value))}
-            className="bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#4f6ef7]">
+            className="bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[var(--c-destaque)]">
             <option value={1}>Último mês</option>
             <option value={2}>Últimos 2 meses</option>
             <option value={3}>Últimos 3 meses</option>
@@ -218,19 +218,19 @@ export default function MRP() {
           </select>
           {/* Categoria */}
           <select value={categoria} onChange={e => setCategoria(e.target.value)}
-            className="bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#4f6ef7]">
+            className="bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[var(--c-destaque)]">
             <option value="">Todas categorias</option>
             {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
-          <button onClick={baixarModelo} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0] transition-colors">
+          <button onClick={baixarModelo} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)] transition-colors">
             <FileDown size={13} /> Baixar modelo
           </button>
           <button onClick={() => inputImportRef.current?.click()} disabled={importando}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 transition-colors disabled:opacity-40">
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 transition-colors disabled:opacity-40">
             {importando ? <><RefreshCw size={13} className="animate-spin" /> Importando...</> : <><Upload size={13} /> Importar planilha</>}
           </button>
           <input ref={inputImportRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImportar} className="hidden" />
-          <button onClick={carregar} className="p-2 rounded-xl text-[#8b91a8] hover:bg-[#2e3347] transition-colors">
+          <button onClick={carregar} className="p-2 rounded-xl text-[var(--c-suave)] hover:bg-[var(--c-borda)] transition-colors">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
           {precisamCompra > 0 && (
@@ -252,13 +252,13 @@ export default function MRP() {
               <button key={status}
                 onClick={() => setFiltroStatus(filtroStatus === status ? '' : status)}
                 className={`flex items-center gap-3 p-4 rounded-2xl border transition-all
-                  ${filtroStatus === status ? `${cfg.bg} ${cfg.borda}` : 'bg-[#1a1d27] border-[#2e3347] hover:border-[#3a3f55]'}`}>
+                  ${filtroStatus === status ? `${cfg.bg} ${cfg.borda}` : 'bg-[var(--c-superficie)] border-[var(--c-borda)] hover:border-[var(--c-borda-forte)]'}`}>
                 <div className={`w-9 h-9 rounded-xl ${cfg.bg} flex items-center justify-center shrink-0`}>
                   <Icon size={17} className={cfg.cor} />
                 </div>
                 <div className="text-left">
                   <p className={`text-lg font-bold ${cfg.cor}`}>{count}</p>
-                  <p className="text-xs text-[#8b91a8]">{cfg.label}</p>
+                  <p className="text-xs text-[var(--c-suave)]">{cfg.label}</p>
                 </div>
               </button>
             );
@@ -277,7 +277,7 @@ export default function MRP() {
 
       {/* Info período */}
       {periodo && (
-        <div className="flex items-center gap-2 text-xs text-[#8b91a8]">
+        <div className="flex items-center gap-2 text-xs text-[var(--c-suave)]">
           <TrendingDown size={13} />
           Análise dos últimos {periodo.meses} meses ·
           {precisamCompra > 0
@@ -290,14 +290,14 @@ export default function MRP() {
       {/* Busca e filtros */}
       <div className="flex gap-2 flex-wrap">
         <div className="relative flex-1 min-w-48">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8b91a8]" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
           <input type="search" placeholder="Buscar produto..." value={busca} onChange={e => setBusca(e.target.value)}
-            className="w-full bg-[#1a1d27] border border-[#2e3347] text-[#e8eaf0] rounded-xl pl-8 pr-4 py-2 text-sm placeholder:text-[#8b91a8] focus:outline-none focus:border-[#4f6ef7] transition-colors" />
-          {busca && <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b91a8]"><X size={13} /></button>}
+            className="w-full bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl pl-8 pr-4 py-2 text-sm placeholder:text-[var(--c-suave)] focus:outline-none focus:border-[var(--c-destaque)] transition-colors" />
+          {busca && <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)]"><X size={13} /></button>}
         </div>
         {filtroStatus && (
           <button onClick={() => setFiltroStatus('')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs bg-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0]">
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs bg-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]">
             <X size={12} /> Limpar filtro
           </button>
         )}
@@ -305,12 +305,12 @@ export default function MRP() {
 
       {/* Barra de seleção em lote */}
       {selecionados.size > 0 && (
-        <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[#4f6ef7]/10 border border-[#4f6ef7]/30">
-          <p className="text-xs text-[#e8eaf0]">{selecionados.size} item(ns) selecionado(s)</p>
+        <div className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-[var(--c-destaque)]/10 border border-[var(--c-destaque)]/30">
+          <p className="text-xs text-[var(--c-texto)]">{selecionados.size} item(ns) selecionado(s)</p>
           <div className="flex items-center gap-2">
-            <button onClick={() => setSelecionados(new Set())} className="text-xs text-[#8b91a8] hover:text-[#e8eaf0]">Limpar</button>
+            <button onClick={() => setSelecionados(new Set())} className="text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">Limpar</button>
             <button onClick={solicitarCotacaoEmLote} disabled={enviandoLote}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#4f6ef7] text-white hover:bg-[#3d5ce0] disabled:opacity-40">
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white hover:bg-[var(--c-destaque-h)] disabled:opacity-40">
               {enviandoLote ? 'Enviando...' : `Solicitar cotação (${selecionados.size}) →`}
             </button>
           </div>
@@ -319,9 +319,9 @@ export default function MRP() {
 
       {/* Tabela */}
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
+        <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : itensFiltrados.length === 0 ? (
-        <div className="text-center py-16 text-[#8b91a8] text-sm">
+        <div className="text-center py-16 text-[var(--c-suave)] text-sm">
           {itens.length === 0
             ? 'Nenhum dado de consumo encontrado no período selecionado.'
             : 'Nenhum produto encontrado com os filtros aplicados.'
@@ -330,7 +330,7 @@ export default function MRP() {
       ) : (
         <div className="space-y-2">
           {/* Header */}
-          <div className="hidden sm:grid grid-cols-12 gap-2 px-4 py-2 text-xs text-[#8b91a8] font-medium">
+          <div className="hidden sm:grid grid-cols-12 gap-2 px-4 py-2 text-xs text-[var(--c-suave)] font-medium">
             <div className="col-span-4">Produto</div>
             <div className="col-span-1 text-center">Estoque</div>
             <div className="col-span-1 text-center">Saída</div>
@@ -345,47 +345,47 @@ export default function MRP() {
             const Icon = cfg.icon;
             return (
               <div key={item.id}
-                className={`grid grid-cols-12 gap-2 items-center px-4 py-3 rounded-xl border bg-[#1a1d27]
-                  ${item.status_mrp !== 'ok' ? cfg.borda : 'border-[#2e3347]'}`}>
+                className={`grid grid-cols-12 gap-2 items-center px-4 py-3 rounded-xl border bg-[var(--c-superficie)]
+                  ${item.status_mrp !== 'ok' ? cfg.borda : 'border-[var(--c-borda)]'}`}>
                 {/* Produto */}
                 <div className="col-span-12 sm:col-span-4">
                   <div className="flex items-center gap-2">
                     {item.quantidade_comprar > 0 && (
                       <input type="checkbox" checked={selecionados.has(item.id)}
                         onChange={() => alternarSelecao(item.id)}
-                        className="w-3.5 h-3.5 rounded accent-[#4f6ef7] shrink-0" />
+                        className="w-3.5 h-3.5 rounded accent-[var(--c-destaque)] shrink-0" />
                     )}
-                    <span className="text-[10px] font-mono text-[#4f6ef7]">{item.codigo}</span>
-                    <span className="text-[10px] text-[#8b91a8]">{item.unidade}</span>
+                    <span className="text-[10px] font-mono text-[var(--c-destaque)]">{item.codigo}</span>
+                    <span className="text-[10px] text-[var(--c-suave)]">{item.unidade}</span>
                   </div>
-                  <p className="text-sm text-[#e8eaf0] truncate">{item.descricao}</p>
-                  <p className="text-[10px] text-[#8b91a8]">{item.categoria_nome}</p>
+                  <p className="text-sm text-[var(--c-texto)] truncate">{item.descricao}</p>
+                  <p className="text-[10px] text-[var(--c-suave)]">{item.categoria_nome}</p>
                 </div>
 
                 {/* Estoque atual */}
                 <div className="col-span-3 sm:col-span-1 text-center">
-                  <p className={`text-sm font-bold ${item.estoque_atual === 0 ? 'text-red-400' : 'text-[#e8eaf0]'}`}>
+                  <p className={`text-sm font-bold ${item.estoque_atual === 0 ? 'text-red-400' : 'text-[var(--c-texto)]'}`}>
                     {item.estoque_atual}
                   </p>
-                  <p className="text-[10px] text-[#8b91a8] sm:hidden">estoque</p>
+                  <p className="text-[10px] text-[var(--c-suave)] sm:hidden">estoque</p>
                 </div>
 
                 {/* Saída */}
                 <div className="col-span-3 sm:col-span-1 text-center">
                   <p className="text-sm text-red-400 font-medium">-{item.total_saida}</p>
-                  <p className="text-[10px] text-[#8b91a8] sm:hidden">saída</p>
+                  <p className="text-[10px] text-[var(--c-suave)] sm:hidden">saída</p>
                 </div>
 
                 {/* Entrada */}
                 <div className="col-span-3 sm:col-span-1 text-center">
                   <p className="text-sm text-green-400 font-medium">+{item.total_entrada}</p>
-                  <p className="text-[10px] text-[#8b91a8] sm:hidden">entrada</p>
+                  <p className="text-[10px] text-[var(--c-suave)] sm:hidden">entrada</p>
                 </div>
 
                 {/* Média mensal */}
                 <div className="col-span-3 sm:col-span-2 text-center">
-                  <p className="text-sm text-[#4f6ef7] font-medium">{item.media_mensal}</p>
-                  <p className="text-[10px] text-[#8b91a8]">/{item.unidade}/mês</p>
+                  <p className="text-sm text-[var(--c-destaque)] font-medium">{item.media_mensal}</p>
+                  <p className="text-[10px] text-[var(--c-suave)]">/{item.unidade}/mês</p>
                 </div>
 
                 {/* Quantidade a comprar */}
@@ -396,7 +396,7 @@ export default function MRP() {
                       <p className={`text-[10px] ${cfg.cor}`}>{item.unidade}</p>
                     </div>
                   ) : (
-                    <p className="text-xs text-[#8b91a8]">—</p>
+                    <p className="text-xs text-[var(--c-suave)]">—</p>
                   )}
                 </div>
 
@@ -410,11 +410,11 @@ export default function MRP() {
 
                 {/* Ação: solicitar cotação (só quando há necessidade de compra) */}
                 {item.quantidade_comprar > 0 && (
-                  <div className="col-span-12 pt-2 mt-1 border-t border-[#2e3347]/60 flex justify-end">
+                  <div className="col-span-12 pt-2 mt-1 border-t border-[var(--c-borda)]/60 flex justify-end">
                     <button
                       onClick={() => solicitarCotacao(item)}
                       disabled={solicitando === item.id}
-                      className="text-[11px] font-medium text-[#4f6ef7] hover:text-[#7c93fb] transition-colors disabled:opacity-40">
+                      className="text-[11px] font-medium text-[var(--c-destaque)] hover:text-[var(--c-destaque-claro)] transition-colors disabled:opacity-40">
                       {solicitando === item.id ? 'Solicitando...' : 'Solicitar cotação →'}
                     </button>
                   </div>

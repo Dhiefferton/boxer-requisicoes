@@ -102,13 +102,13 @@ export default function NecessidadePecas() {
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[#e8eaf0]">Necessidade de Peças</h1>
-          <p className="text-sm text-[#8b91a8] mt-0.5">
+          <h1 className="text-lg font-bold text-[var(--c-texto)]">Necessidade de Peças</h1>
+          <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {ativas} necessidade{ativas !== 1 ? 's' : ''} ativa{ativas !== 1 ? 's' : ''}
           </p>
         </div>
         <button onClick={carregar} disabled={loading} title="Atualizar"
-          className="p-2 rounded-xl text-[#8b91a8] hover:text-[#e8eaf0] hover:bg-[#2e3347] transition-colors">
+          className="p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)] transition-colors">
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
@@ -122,9 +122,9 @@ export default function NecessidadePecas() {
           { label: 'Relatórios',    total: relatorios.length },
           { label: 'Recusados',     total: recusados.length },
         ].map(({ label, total }) => (
-          <div key={label} className="bg-[#1a1d27] border border-[#2e3347] rounded-xl p-3 text-center">
-            <p className="text-xl font-bold text-[#e8eaf0]">{total}</p>
-            <p className="text-[10px] text-[#8b91a8] mt-0.5">{label}</p>
+          <div key={label} className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-3 text-center">
+            <p className="text-xl font-bold text-[var(--c-texto)]">{total}</p>
+            <p className="text-[10px] text-[var(--c-suave)] mt-0.5">{label}</p>
           </div>
         ))}
       </div>
@@ -132,7 +132,7 @@ export default function NecessidadePecas() {
       <FormNovaSolicitacao onCriado={carregar} />
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
+        <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
         <div className="grid lg:grid-cols-3 gap-4">
           <Coluna titulo="Solicitados" cor="border-blue-500/40" badge="bg-blue-500/15 text-blue-400" itens={solicitados}
@@ -169,43 +169,43 @@ export default function NecessidadePecas() {
       {!loading && (
         <div className="pt-2">
           <button onClick={() => setArquivadosAbertos(!arquivadosAbertos)}
-            className="flex items-center gap-1.5 text-xs text-[#8b91a8] hover:text-[#e8eaf0] transition-colors">
+            className="flex items-center gap-1.5 text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)] transition-colors">
             {arquivadosAbertos ? '▾' : '▸'} Arquivados ({recusados.length + relatorios.length})
           </button>
           {arquivadosAbertos && (
             <div className="mt-2 space-y-1.5">
               {podeRevisar && (
                 <>
-                  <p className="text-[11px] font-semibold text-[#8b91a8] uppercase tracking-wide pt-1">Relatórios gerados</p>
+                  <p className="text-[11px] font-semibold text-[var(--c-suave)] uppercase tracking-wide pt-1">Relatórios gerados</p>
                   {relatorios.length === 0 ? (
-                    <p className="text-xs text-[#8b91a8] py-4 text-center bg-[#1a1d27] rounded-xl border border-[#2e3347]">Nenhum relatório gerado ainda.</p>
+                    <p className="text-xs text-[var(--c-suave)] py-4 text-center bg-[var(--c-superficie)] rounded-xl border border-[var(--c-borda)]">Nenhum relatório gerado ainda.</p>
                   ) : relatorios.map(r => (
-                    <div key={r.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#1a1d27] border border-[#2e3347] text-xs">
+                    <div key={r.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--c-superficie)] border border-[var(--c-borda)] text-xs">
                       <div>
                         <span className="font-semibold text-green-400 mr-2">Relatório #{r.id}</span>
-                        <span className="text-[#e8eaf0]">{r.total_itens} item(ns)</span>
-                        <span className="text-[#8b91a8]"> · {formatarDataHora(r.gerado_em)} por {r.gerado_por_nome || '—'}</span>
+                        <span className="text-[var(--c-texto)]">{r.total_itens} item(ns)</span>
+                        <span className="text-[var(--c-suave)]"> · {formatarDataHora(r.gerado_em)} por {r.gerado_por_nome || '—'}</span>
                       </div>
                       <button onClick={() => baixarDeNovo(r.id)} disabled={baixandoId === r.id}
-                        className="shrink-0 ml-2 flex items-center gap-1 text-[#4f6ef7] hover:underline disabled:opacity-40">
+                        className="shrink-0 ml-2 flex items-center gap-1 text-[var(--c-destaque)] hover:underline disabled:opacity-40">
                         <FileDown size={12} /> {baixandoId === r.id ? 'Baixando...' : 'Baixar'}
                       </button>
                     </div>
                   ))}
-                  <p className="text-[11px] font-semibold text-[#8b91a8] uppercase tracking-wide pt-2">Recusados</p>
+                  <p className="text-[11px] font-semibold text-[var(--c-suave)] uppercase tracking-wide pt-2">Recusados</p>
                 </>
               )}
               {recusados.length === 0 ? (
-                <p className="text-xs text-[#8b91a8] py-4 text-center bg-[#1a1d27] rounded-xl border border-[#2e3347]">Nenhum item recusado.</p>
+                <p className="text-xs text-[var(--c-suave)] py-4 text-center bg-[var(--c-superficie)] rounded-xl border border-[var(--c-borda)]">Nenhum item recusado.</p>
               ) : (
                 recusados.map(item => (
-                  <div key={item.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#1a1d27] border border-[#2e3347] text-xs">
+                  <div key={item.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--c-superficie)] border border-[var(--c-borda)] text-xs">
                     <div>
-                      <span className="font-mono text-[#4f6ef7] mr-2">{item.codigo}</span>
-                      <span className="text-[#e8eaf0]">{item.descricao}</span>
-                      <span className="text-[#8b91a8]"> · Qtd: {item.quantidade}</span>
+                      <span className="font-mono text-[var(--c-destaque)] mr-2">{item.codigo}</span>
+                      <span className="text-[var(--c-texto)]">{item.descricao}</span>
+                      <span className="text-[var(--c-suave)]"> · Qtd: {item.quantidade}</span>
                     </div>
-                    <span className="text-[#8b91a8] shrink-0 ml-2">recusado em {formatarData(item.revisado_em)} por {item.revisado_por_nome || '—'}</span>
+                    <span className="text-[var(--c-suave)] shrink-0 ml-2">recusado em {formatarData(item.revisado_em)} por {item.revisado_por_nome || '—'}</span>
                   </div>
                 ))
               )}
@@ -265,27 +265,27 @@ function FormNovaSolicitacao({ onCriado }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="p-4 rounded-2xl border border-[#2e3347] bg-[#1a1d27] space-y-2">
-      <p className="text-xs font-medium text-[#8b91a8]">Registrar nova necessidade</p>
+    <form onSubmit={handleSubmit} className="p-4 rounded-2xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2">
+      <p className="text-xs font-medium text-[var(--c-suave)]">Registrar nova necessidade</p>
       <div className="grid sm:grid-cols-[180px_120px_1fr_auto] gap-2 items-start">
         <div>
           <input type="text" placeholder="Código" value={codigo} onChange={e => setCodigo(e.target.value)}
-            className="w-full bg-[#0f1117] border border-[#2e3347] text-[#e8eaf0] rounded-lg px-3 py-2 text-sm" />
+            className="w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-lg px-3 py-2 text-sm" />
           {codigo.trim() && (
             <p className="text-[10px] mt-1">
-              {buscando ? <span className="text-[#8b91a8]">buscando...</span>
+              {buscando ? <span className="text-[var(--c-suave)]">buscando...</span>
                 : sugestao ? <span className="text-green-400">✓ {sugestao.descricao}</span>
                 : <span className="text-red-400">código não encontrado no catálogo</span>}
             </p>
           )}
         </div>
         <input type="number" min="1" placeholder="Quantidade" value={quantidade} onChange={e => setQuantidade(e.target.value)}
-          className="bg-[#0f1117] border border-[#2e3347] text-[#e8eaf0] rounded-lg px-3 py-2 text-sm" />
-        <div className="flex items-center text-xs text-[#8b91a8] px-1 py-2">
+          className="bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-lg px-3 py-2 text-sm" />
+        <div className="flex items-center text-xs text-[var(--c-suave)] px-1 py-2">
           Descrição e data são preenchidas automaticamente
         </div>
         <button type="submit" disabled={enviando || !sugestao}
-          className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-[#4f6ef7] text-white hover:bg-[#3d5ce5] disabled:opacity-40 transition-colors whitespace-nowrap">
+          className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-[var(--c-destaque)] text-white hover:bg-[var(--c-destaque-h)] disabled:opacity-40 transition-colors whitespace-nowrap">
           <Plus size={15} /> {enviando ? 'Enviando...' : 'Registrar'}
         </button>
       </div>
@@ -300,14 +300,14 @@ function FormNovaSolicitacao({ onCriado }) {
 function Coluna({ titulo, cor, badge, itens, vazio, acao, children }) {
   return (
     <div className="space-y-2">
-      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[#1a1d27]`}>
+      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[var(--c-superficie)]`}>
         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>
-        <span className="text-xs font-bold text-[#8b91a8]">{itens.length}</span>
+        <span className="text-xs font-bold text-[var(--c-suave)]">{itens.length}</span>
       </div>
       {acao}
       {itens.length === 0 ? (
-        <div className="border-2 border-dashed border-[#2e3347] rounded-2xl py-8 text-center">
-          <p className="text-xs text-[#8b91a8]">{vazio}</p>
+        <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
+          <p className="text-xs text-[var(--c-suave)]">{vazio}</p>
         </div>
       ) : (
         <div className="space-y-2">{children}</div>
@@ -320,10 +320,10 @@ function CabecalhoCard({ item }) {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-mono text-[#4f6ef7]">{item.codigo}</span>
+        <span className="text-[10px] font-mono text-[var(--c-destaque)]">{item.codigo}</span>
       </div>
-      <p className="text-sm text-[#e8eaf0]">{item.descricao}</p>
-      <p className="text-[11px] text-[#8b91a8]">Qtd: {item.quantidade} · {formatarData(item.solicitado_em)} · por {item.solicitado_por_nome || '—'}</p>
+      <p className="text-sm text-[var(--c-texto)]">{item.descricao}</p>
+      <p className="text-[11px] text-[var(--c-suave)]">Qtd: {item.quantidade} · {formatarData(item.solicitado_em)} · por {item.solicitado_por_nome || '—'}</p>
     </div>
   );
 }
@@ -352,7 +352,7 @@ function CardSolicitado({ item, podeRevisar, onAtualizar }) {
   }
 
   return (
-    <div className="p-3 rounded-xl border border-[#2e3347] bg-[#1a1d27] space-y-2">
+    <div className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2">
       <CabecalhoCard item={item} />
       <div className="flex gap-2 pt-1">
         {podeRevisar && (
@@ -361,7 +361,7 @@ function CardSolicitado({ item, podeRevisar, onAtualizar }) {
             {carregando ? 'Abrindo...' : 'Iniciar revisão →'}
           </button>
         )}
-        <button onClick={cancelar} title="Cancelar" className="p-1.5 rounded-lg text-[#8b91a8] hover:text-red-400 hover:bg-red-500/10">
+        <button onClick={cancelar} title="Cancelar" className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-red-400 hover:bg-red-500/10">
           <Ban size={14} />
         </button>
       </div>
@@ -419,26 +419,26 @@ function CardEmAndamento({ item, podeRevisar, onAtualizar }) {
   }
 
   return (
-    <div className="p-3 rounded-xl border border-amber-500/20 bg-[#1a1d27] space-y-2">
+    <div className="p-3 rounded-xl border border-amber-500/20 bg-[var(--c-superficie)] space-y-2">
       <CabecalhoCard item={item} />
 
       {podeRevisar ? (
         <>
           <div className="flex items-center gap-2">
-            <label className="text-[11px] text-[#8b91a8] shrink-0">Quantidade:</label>
+            <label className="text-[11px] text-[var(--c-suave)] shrink-0">Quantidade:</label>
             <input type="number" min="1" value={quantidade}
               onChange={e => setQuantidade(e.target.value)}
               onBlur={salvarQuantidade}
-              className="w-20 bg-[#0f1117] border border-[#2e3347] text-[#e8eaf0] rounded-lg px-2 py-1 text-xs" />
+              className="w-20 bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-lg px-2 py-1 text-xs" />
           </div>
 
           <div className="flex gap-2">
             <button onClick={() => { setMaritimo(!maritimo); salvar({ frete_maritimo: !maritimo }); }}
-              className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-medium py-1.5 rounded-lg border transition-colors ${maritimo ? 'bg-blue-500/15 border-blue-500/30 text-blue-400' : 'border-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0]'}`}>
+              className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-medium py-1.5 rounded-lg border transition-colors ${maritimo ? 'bg-blue-500/15 border-blue-500/30 text-blue-400' : 'border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
               <Ship size={13} /> Marítimo
             </button>
             <button onClick={() => { setAereo(!aereo); salvar({ frete_aereo: !aereo }); }}
-              className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-medium py-1.5 rounded-lg border transition-colors ${aereo ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400' : 'border-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0]'}`}>
+              className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] font-medium py-1.5 rounded-lg border transition-colors ${aereo ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400' : 'border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
               <Plane size={13} /> Aéreo
             </button>
           </div>
@@ -447,7 +447,7 @@ function CardEmAndamento({ item, podeRevisar, onAtualizar }) {
             onChange={e => setObs(e.target.value)}
             onBlur={() => salvar({ observacoes: obs })}
             rows={2}
-            className="w-full bg-[#0f1117] border border-[#2e3347] text-[#e8eaf0] rounded-lg px-2.5 py-1.5 text-xs resize-none" />
+            className="w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-lg px-2.5 py-1.5 text-xs resize-none" />
 
           <div className="flex gap-2">
             <button onClick={aprovar} disabled={decidindo}
@@ -461,13 +461,13 @@ function CardEmAndamento({ item, podeRevisar, onAtualizar }) {
           </div>
         </>
       ) : (
-        <div className="flex gap-2 text-[11px] text-[#8b91a8]">
+        <div className="flex gap-2 text-[11px] text-[var(--c-suave)]">
           {item.frete_maritimo && <span className="flex items-center gap-1"><Ship size={12} /> Marítimo</span>}
           {item.frete_aereo && <span className="flex items-center gap-1"><Plane size={12} /> Aéreo</span>}
           {!item.frete_maritimo && !item.frete_aereo && <span>Em revisão...</span>}
         </div>
       )}
-      {salvando && <p className="text-[10px] text-[#8b91a8]">salvando...</p>}
+      {salvando && <p className="text-[10px] text-[var(--c-suave)]">salvando...</p>}
     </div>
   );
 }
@@ -477,9 +477,9 @@ function CardEmAndamento({ item, podeRevisar, onAtualizar }) {
 // ============================================================
 function CardAprovado({ item }) {
   return (
-    <div className="p-3 rounded-xl border border-green-500/20 bg-[#1a1d27] space-y-2">
+    <div className="p-3 rounded-xl border border-green-500/20 bg-[var(--c-superficie)] space-y-2">
       <CabecalhoCard item={item} />
-      <div className="flex gap-2 text-[11px] text-[#8b91a8]">
+      <div className="flex gap-2 text-[11px] text-[var(--c-suave)]">
         {item.frete_maritimo && <span className="flex items-center gap-1"><Ship size={12} /> Marítimo</span>}
         {item.frete_aereo && <span className="flex items-center gap-1"><Plane size={12} /> Aéreo</span>}
       </div>

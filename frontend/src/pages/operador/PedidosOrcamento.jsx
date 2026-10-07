@@ -76,8 +76,8 @@ export default function PedidosOrcamento() {
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[#e8eaf0]">Pedidos de Orçamento</h1>
-          <p className="text-sm text-[#8b91a8] mt-0.5">
+          <h1 className="text-lg font-bold text-[var(--c-texto)]">Pedidos de Orçamento</h1>
+          <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {ativos} orçamento{ativos !== 1 ? 's' : ''} ativo{ativos !== 1 ? 's' : ''}
           </p>
         </div>
@@ -85,14 +85,14 @@ export default function PedidosOrcamento() {
           {podeEditar && (
           <button onClick={sincronizarPipefy} disabled={sincronizando}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
-              bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 transition-colors
+              bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 transition-colors
               disabled:opacity-40 disabled:cursor-not-allowed">
             <DownloadCloud size={13} className={sincronizando ? 'animate-pulse' : ''} />
             {sincronizando ? 'Atualizando...' : 'Atualizar'}
           </button>
           )}
           <button onClick={carregar} disabled={loading} title="Recarregar"
-            className="p-2 rounded-xl text-[#8b91a8] hover:text-[#e8eaf0] hover:bg-[#2e3347] transition-colors">
+            className="p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)] transition-colors">
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
@@ -101,17 +101,17 @@ export default function PedidosOrcamento() {
       {/* ── Cards de resumo ──────────────────────────────── */}
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
         {COLUNAS.map(({ status, resumo }) => (
-          <div key={status} className="bg-[#1a1d27] border border-[#2e3347] rounded-xl p-3 text-center">
-            <p className="text-xl font-bold text-[#e8eaf0]">{pedidos.filter(p => p.status === status).length}</p>
-            <p className="text-[10px] text-[#8b91a8] mt-0.5">{resumo}</p>
+          <div key={status} className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-3 text-center">
+            <p className="text-xl font-bold text-[var(--c-texto)]">{pedidos.filter(p => p.status === status).length}</p>
+            <p className="text-[10px] text-[var(--c-suave)] mt-0.5">{resumo}</p>
           </div>
         ))}
       </div>
 
-      {msgSync && <p className="text-xs text-[#8b91a8] bg-[#1a1d27] border border-[#2e3347] rounded-xl px-3 py-2">{msgSync}</p>}
+      {msgSync && <p className="text-xs text-[var(--c-suave)] bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-3 py-2">{msgSync}</p>}
 
       {loading ? (
-        <div className="flex justify-center py-16"><Spinner className="text-[#4f6ef7]" /></div>
+        <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
         <div className="grid md:grid-cols-3 xl:grid-cols-5 gap-4">
           {COLUNAS.map(({ status, titulo, cor, badge }) => {
@@ -119,8 +119,8 @@ export default function PedidosOrcamento() {
             return (
               <Coluna key={status} titulo={titulo} cor={cor} badge={badge} total={itens.length} arquivada={status === 'finalizado'}>
                 {itens.length === 0 ? (
-                  <div className="border-2 border-dashed border-[#2e3347] rounded-2xl py-8 text-center">
-                    <p className="text-xs text-[#8b91a8]">Sem pedidos</p>
+                  <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
+                    <p className="text-xs text-[var(--c-suave)]">Sem pedidos</p>
                   </div>
                 ) : (
                   itens.map(pedido => (
@@ -142,9 +142,9 @@ function Coluna({ titulo, cor, badge, total, arquivada = false, children }) {
   const pilula = <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>;
   return (
     <div className="space-y-2">
-      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[#1a1d27]`}>
+      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[var(--c-superficie)]`}>
         {arquivada ? (
-          <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1.5 text-[#8b91a8] hover:text-[#e8eaf0]">
+          <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1.5 text-[var(--c-suave)] hover:text-[var(--c-texto)]">
             {aberta ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
             <Archive size={13} />
             {pilula}
@@ -152,13 +152,13 @@ function Coluna({ titulo, cor, badge, total, arquivada = false, children }) {
         ) : (
           <div className="flex items-center gap-2">{pilula}</div>
         )}
-        <span className="text-xs font-bold text-[#8b91a8]">{total}</span>
+        <span className="text-xs font-bold text-[var(--c-suave)]">{total}</span>
       </div>
       {aberta ? (
         <div className="space-y-2">{children}</div>
       ) : (
         <button onClick={() => setAberta(true)}
-          className="w-full text-xs text-[#8b91a8] py-3 text-center rounded-2xl border-2 border-dashed border-[#2e3347] hover:text-[#e8eaf0]">
+          className="w-full text-xs text-[var(--c-suave)] py-3 text-center rounded-2xl border-2 border-dashed border-[var(--c-borda)] hover:text-[var(--c-texto)]">
           {total} arquivado(s) — clique para ver
         </button>
       )}
@@ -194,23 +194,23 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
   }
 
   return (
-    <div className="p-3 rounded-xl border border-[#2e3347] bg-[#1a1d27] space-y-2">
+    <div className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2">
       <div className="flex items-center gap-1.5">
-        <FileText size={13} className="text-[#4f6ef7] shrink-0" />
-        <p className="text-sm text-[#e8eaf0] font-medium flex-1">{pedido.cliente_nome || pedido.referencia}</p>
+        <FileText size={13} className="text-[var(--c-destaque)] shrink-0" />
+        <p className="text-sm text-[var(--c-texto)] font-medium flex-1">{pedido.cliente_nome || pedido.referencia}</p>
         {pedido.pipefy_url && (
           <a href={pedido.pipefy_url} target="_blank" rel="noreferrer" title="Abrir no Pipefy"
-            className="text-[#8b91a8] hover:text-[#4f6ef7]"><ExternalLink size={13} /></a>
+            className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
         )}
       </div>
       {pedido.aprovacao && (
         <span className={`inline-block mr-1 text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${
           aprovacao.startsWith('aprov') ? 'text-green-300 bg-green-500/20'
           : aprovacao.startsWith('recus') ? 'text-red-300 bg-red-500/20'
-          : 'text-[#8b91a8] bg-[#2e3347]'}`}>{pedido.aprovacao}</span>
+          : 'text-[var(--c-suave)] bg-[var(--c-borda)]'}`}>{pedido.aprovacao}</span>
       )}
       {pedido.pipefy_card_id && (
-        <span className="inline-block text-[10px] font-semibold text-[#4f6ef7] bg-[#4f6ef7]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
+        <span className="inline-block text-[10px] font-semibold text-[var(--c-destaque)] bg-[var(--c-destaque)]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
       )}
       {pedido.zen_pedido_id && (
         <a href={`${ZEN_APP_URL}/sale/sale?q=id==${pedido.zen_pedido_id}`} target="_blank" rel="noreferrer" title="Abrir pedido no Zen"
@@ -243,9 +243,9 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
         </dl>
       )}
       {itens.length > 0 && (
-        <div className="rounded-lg border border-[#2e3347] overflow-hidden">
+        <div className="rounded-lg border border-[var(--c-borda)] overflow-hidden">
           <table className="w-full text-xs">
-            <thead className="bg-[#0f1117] text-[#8b91a8]">
+            <thead className="bg-[var(--c-fundo)] text-[var(--c-suave)]">
               <tr>
                 <th className="text-left font-medium px-2 py-1">Peça</th>
                 <th className="text-right font-medium px-2 py-1">Qtd</th>
@@ -254,9 +254,9 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
             </thead>
             <tbody>
               {itens.map((it, i) => (
-                <tr key={i} className="border-t border-[#2e3347] text-[#e8eaf0]">
+                <tr key={i} className="border-t border-[var(--c-borda)] text-[var(--c-texto)]">
                   <td className="px-2 py-1">
-                    {it.codigo && <span className="font-mono text-[#4f6ef7] mr-1">{it.codigo}</span>}
+                    {it.codigo && <span className="font-mono text-[var(--c-destaque)] mr-1">{it.codigo}</span>}
                     {it.descricao}
                   </td>
                   <td className="px-2 py-1 text-right">{it.quantidade ?? '—'}</td>
@@ -265,7 +265,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t border-[#2e3347] text-[#e8eaf0] font-semibold">
+              <tr className="border-t border-[var(--c-borda)] text-[var(--c-texto)] font-semibold">
                 <td className="px-2 py-1" colSpan={2}>Total peças</td>
                 <td className="px-2 py-1 text-right whitespace-nowrap">{brl(totalItens)}</td>
               </tr>
@@ -273,18 +273,18 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
           </table>
         </div>
       )}
-      {pedido.observacoes && <p className="text-xs text-[#8b91a8]">{pedido.observacoes}</p>}
-      <p className="text-[11px] text-[#8b91a8]">{formatarData(pedido.created_at)} · por {pedido.criado_por_nome || '—'}</p>
+      {pedido.observacoes && <p className="text-xs text-[var(--c-suave)]">{pedido.observacoes}</p>}
+      <p className="text-[11px] text-[var(--c-suave)]">{formatarData(pedido.created_at)} · por {pedido.criado_por_nome || '—'}</p>
 
       {podeEditar && (
       <div className="flex gap-2 pt-1">
         {proxima && (
           <button onClick={avancar} disabled={mudando}
-            className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 disabled:opacity-40">
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 disabled:opacity-40">
             {mudando ? (proxima.status === 'separando' ? 'Criando pedido no Zen...' : proxima.status === 'finalizado' ? 'Finalizando no Zen...' : 'Movendo...') : <>Mover p/ {proxima.titulo} <ArrowRight size={13} /></>}
           </button>
         )}
-        <button onClick={cancelar} title="Cancelar" className="p-1.5 rounded-lg text-[#8b91a8] hover:text-red-400 hover:bg-red-500/10">
+        <button onClick={cancelar} title="Cancelar" className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-red-400 hover:bg-red-500/10">
           <Ban size={14} />
         </button>
       </div>
@@ -296,8 +296,8 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
 function Info({ rotulo, valor }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[#8b91a8]">{rotulo}</dt>
-      <dd className="text-[#e8eaf0] truncate" title={valor || ''}>{valor || '—'}</dd>
+      <dt className="text-[var(--c-suave)]">{rotulo}</dt>
+      <dd className="text-[var(--c-texto)] truncate" title={valor || ''}>{valor || '—'}</dd>
     </div>
   );
 }
