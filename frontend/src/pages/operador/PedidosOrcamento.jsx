@@ -9,6 +9,8 @@ import { useState, useEffect } from 'react';
 import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
+import { useAuth } from '../../context/AuthContext';
+import { podeEditarOrcamentos } from '../../utils/acessoOrcamentos';
 
 const COLUNAS = [
   { status: 'solicitacao', titulo: 'Solicitado',  resumo: 'Solicitados',  cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
@@ -36,6 +38,8 @@ function formatarData(iso) {
 }
 
 export default function PedidosOrcamento() {
+  const { usuario } = useAuth();
+  const podeEditar = podeEditarOrcamentos(usuario); // senão: somente visualização
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sincronizando, setSincronizando] = useState(false);
@@ -78,6 +82,7 @@ export default function PedidosOrcamento() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {podeEditar && (
           <button onClick={sincronizarPipefy} disabled={sincronizando}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
               bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 transition-colors
@@ -85,6 +90,7 @@ export default function PedidosOrcamento() {
             <DownloadCloud size={13} className={sincronizando ? 'animate-pulse' : ''} />
             {sincronizando ? 'Atualizando...' : 'Atualizar'}
           </button>
+          )}
           <button onClick={carregar} disabled={loading} title="Recarregar"
             className="p-2 rounded-xl text-[#8b91a8] hover:text-[#e8eaf0] hover:bg-[#2e3347] transition-colors">
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -118,7 +124,7 @@ export default function PedidosOrcamento() {
                   </div>
                 ) : (
                   itens.map(pedido => (
-                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} />
+                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} podeEditar={podeEditar} />
                   ))
                 )}
               </Coluna>
@@ -160,7 +166,7 @@ function Coluna({ titulo, cor, badge, total, arquivada = false, children }) {
   );
 }
 
-function CardPedido({ pedido, onAtualizar }) {
+function CardPedido({ pedido, onAtualizar, podeEditar }) {
   const [mudando, setMudando] = useState(false);
   const itens = pedido.itens || [];
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
@@ -270,6 +276,7 @@ function CardPedido({ pedido, onAtualizar }) {
       {pedido.observacoes && <p className="text-xs text-[#8b91a8]">{pedido.observacoes}</p>}
       <p className="text-[11px] text-[#8b91a8]">{formatarData(pedido.created_at)} · por {pedido.criado_por_nome || '—'}</p>
 
+      {podeEditar && (
       <div className="flex gap-2 pt-1">
         {proxima && (
           <button onClick={avancar} disabled={mudando}
@@ -281,6 +288,7 @@ function CardPedido({ pedido, onAtualizar }) {
           <Ban size={14} />
         </button>
       </div>
+      )}
     </div>
   );
 }
