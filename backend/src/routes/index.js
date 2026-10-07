@@ -34,6 +34,7 @@ import {
   listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy
 } from '../controllers/pedidosOrcamentoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
+import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
 
 const router = Router();
 
@@ -130,7 +131,7 @@ router.post('/necessidades-pecas',                 autenticar, exigirAdminOuSeto
 router.post('/necessidades-pecas/:id/cancelar',     autenticar, exigirAdminOuSetor('Sac / Suporte'), cancelarNecessidade);
 
 // ── Pedidos de Orçamento (v1: só estrutura, admin only por enquanto)
-router.get('/pedidos-orcamento',                autenticar, exigirPerfil('operador', 'admin'), listarPedidos);
+router.get('/pedidos-orcamento',                autenticar, exigirLeituraOrcamentos, listarPedidos);
 router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operador', 'admin'), criarPedido);
 router.patch('/pedidos-orcamento/:id/mover',    autenticar, exigirPerfil('operador', 'admin'), moverPedido);
 router.patch('/pedidos-orcamento/:id',          autenticar, exigirPerfil('operador', 'admin'), editarPedido);
