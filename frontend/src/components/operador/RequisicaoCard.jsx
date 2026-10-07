@@ -74,11 +74,11 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
   return (
     <>
       <div className={`
-        bg-[#1a1d27] border rounded-2xl overflow-hidden transition-colors
+        bg-[var(--c-superficie)] border rounded-2xl overflow-hidden transition-colors
         ${processando ? 'opacity-60 pointer-events-none' : ''}
         ${requisicao.status === 'em_separacao' ? 'border-amber-500/30' :
           requisicao.status === 'separado'     ? 'border-purple-500/30' :
-          'border-[#2e3347]'}
+          'border-[var(--c-borda)]'}
       `}>
 
         {/* ── Cabeçalho do card ─────────────────────────── */}
@@ -88,24 +88,24 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
             {/* Número e status */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-bold text-[#e8eaf0]">#{requisicao.id}</span>
+                <span className="text-sm font-bold text-[var(--c-texto)]">#{requisicao.id}</span>
                 <StatusBadge status={requisicao.status} />
-                {processando && <Loader2 size={13} className="animate-spin text-[#4f6ef7]" />}
+                {processando && <Loader2 size={13} className="animate-spin text-[var(--c-destaque)]" />}
               </div>
 
               {/* Solicitante */}
               <div className="mt-2 space-y-1">
-                <div className="flex items-center gap-1.5 text-xs text-[#8b91a8]">
+                <div className="flex items-center gap-1.5 text-xs text-[var(--c-suave)]">
                   <User size={12} />
-                  <span className="text-[#e8eaf0] font-medium">{requisicao.solicitante_nome}</span>
+                  <span className="text-[var(--c-texto)] font-medium">{requisicao.solicitante_nome}</span>
                 </div>
                 {requisicao.departamento_nome && (
-                  <div className="flex items-center gap-1.5 text-xs text-[#8b91a8]">
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--c-suave)]">
                     <Building2 size={12} />
                     {requisicao.departamento_nome}
                   </div>
                 )}
-                <div className="flex items-center gap-1.5 text-xs text-[#8b91a8]">
+                <div className="flex items-center gap-1.5 text-xs text-[var(--c-suave)]">
                   <Calendar size={12} />
                   {formatarData(requisicao.created_at)}
                   {dataNecessidade && (
@@ -118,9 +118,9 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
             </div>
 
             {/* Contagem de itens */}
-            <div className="shrink-0 text-center bg-[#2e3347] rounded-xl px-3 py-2">
-              <p className="text-lg font-bold text-[#e8eaf0] leading-none">{requisicao.total_itens}</p>
-              <p className="text-[10px] text-[#8b91a8] mt-0.5">itens</p>
+            <div className="shrink-0 text-center bg-[var(--c-borda)] rounded-xl px-3 py-2">
+              <p className="text-lg font-bold text-[var(--c-texto)] leading-none">{requisicao.total_itens}</p>
+              <p className="text-[10px] text-[var(--c-suave)] mt-0.5">itens</p>
             </div>
           </div>
 
@@ -131,7 +131,7 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
                 key={p.value}
                 onClick={() => setObsModal({ status: p.value, label: p.label })}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold
-                           bg-[#4f6ef7]/15 text-[#4f6ef7] hover:bg-[#4f6ef7]/25 transition-colors active:scale-95"
+                           bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 transition-colors active:scale-95"
               >
                 <ArrowRight size={13} />
                 {p.label}
@@ -150,7 +150,7 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
 
             <button
               onClick={toggleDetalhe}
-              className="ml-auto flex items-center gap-1 text-xs text-[#8b91a8] hover:text-[#e8eaf0] transition-colors"
+              className="ml-auto flex items-center gap-1 text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)] transition-colors"
             >
               {expandido ? <><ChevronUp size={14} /> Fechar</> : <><ChevronDown size={14} /> Detalhes</>}
             </button>
@@ -159,30 +159,30 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
 
         {/* ── Detalhes expandidos ───────────────────────── */}
         {expandido && (
-          <div className="border-t border-[#2e3347] px-4 py-4 space-y-4 bg-[#21253a]/50">
+          <div className="border-t border-[var(--c-borda)] px-4 py-4 space-y-4 bg-[var(--c-cartao)]/50">
             {carregando ? (
               <div className="flex justify-center py-4">
-                <Loader2 size={20} className="animate-spin text-[#4f6ef7]" />
+                <Loader2 size={20} className="animate-spin text-[var(--c-destaque)]" />
               </div>
             ) : detalhe ? (
               <>
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#8b91a8] mb-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--c-suave)] mb-2">
                     Itens solicitados
                   </p>
                   <div className="space-y-2">
                     {detalhe.itens.map(item => (
                       <div key={item.id} className="flex items-center gap-3">
-                        <div className="w-7 h-7 rounded-lg bg-[#2e3347] flex items-center justify-center shrink-0">
-                          <Package size={13} className="text-[#4f6ef7]" />
+                        <div className="w-7 h-7 rounded-lg bg-[var(--c-borda)] flex items-center justify-center shrink-0">
+                          <Package size={13} className="text-[var(--c-destaque)]" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className="text-[10px] font-mono text-[#4f6ef7]">{item.codigo_snapshot}</span>
-                          <p className="text-sm text-[#e8eaf0] truncate">{item.descricao_snapshot}</p>
+                          <span className="text-[10px] font-mono text-[var(--c-destaque)]">{item.codigo_snapshot}</span>
+                          <p className="text-sm text-[var(--c-texto)] truncate">{item.descricao_snapshot}</p>
                         </div>
-                        <span className="shrink-0 text-sm font-semibold text-[#e8eaf0]">
+                        <span className="shrink-0 text-sm font-semibold text-[var(--c-texto)]">
                           {item.quantidade}
-                          <span className="text-[#8b91a8] font-normal text-xs ml-1">{item.unidade_snapshot}</span>
+                          <span className="text-[var(--c-suave)] font-normal text-xs ml-1">{item.unidade_snapshot}</span>
                         </span>
                       </div>
                     ))}
@@ -191,26 +191,26 @@ export default function RequisicaoCard({ requisicao, onMudarStatus }) {
 
                 {detalhe.observacoes && (
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#8b91a8] mb-1">Observações</p>
-                    <div className="flex items-start gap-2 bg-[#2e3347] rounded-xl p-3">
-                      <MessageSquare size={13} className="text-[#8b91a8] shrink-0 mt-0.5" />
-                      <p className="text-sm text-[#e8eaf0]">{detalhe.observacoes}</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--c-suave)] mb-1">Observações</p>
+                    <div className="flex items-start gap-2 bg-[var(--c-borda)] rounded-xl p-3">
+                      <MessageSquare size={13} className="text-[var(--c-suave)] shrink-0 mt-0.5" />
+                      <p className="text-sm text-[var(--c-texto)]">{detalhe.observacoes}</p>
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#8b91a8] mb-2">Histórico</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--c-suave)] mb-2">Histórico</p>
                   <div className="space-y-1.5">
                     {detalhe.historico?.map((h, i) => (
                       <div key={i} className="flex items-center gap-2 text-xs">
                         <StatusBadge status={h.status_novo} />
-                        <span className="text-[#8b91a8]">
+                        <span className="text-[var(--c-suave)]">
                           {formatarData(h.created_at)}
                           {h.usuario_nome && ` · ${h.usuario_nome}`}
                         </span>
                         {h.observacao && (
-                          <span className="text-[#8b91a8] italic">— {h.observacao}</span>
+                          <span className="text-[var(--c-suave)] italic">— {h.observacao}</span>
                         )}
                       </div>
                     ))}
@@ -245,12 +245,12 @@ function ModalConfirmacao({ label, status, onConfirmar, onCancelar }) {
       onClick={onCancelar}
     >
       <div
-        className="w-full max-w-sm bg-[#1a1d27] border border-[#2e3347] rounded-2xl p-5 space-y-4"
+        className="w-full max-w-sm bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-4"
         onClick={e => e.stopPropagation()}
       >
         <div>
-          <h3 className="font-semibold text-[#e8eaf0]">{label}</h3>
-          <p className="text-sm text-[#8b91a8] mt-0.5">
+          <h3 className="font-semibold text-[var(--c-texto)]">{label}</h3>
+          <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {isCancelamento
               ? 'Esta ação não pode ser desfeita.'
               : 'Confirme para prosseguir com a atualização.'
@@ -263,15 +263,15 @@ function ModalConfirmacao({ label, status, onConfirmar, onCancelar }) {
           onChange={e => setObs(e.target.value)}
           placeholder={isCancelamento ? 'Motivo do cancelamento (obrigatório)…' : 'Observação (opcional)…'}
           rows={2}
-          className="w-full bg-[#2e3347] border border-[#2e3347] text-[#e8eaf0] rounded-xl px-4 py-2.5
-                     text-sm placeholder:text-[#8b91a8] resize-none
-                     focus:outline-none focus:border-[#4f6ef7] focus:ring-1 focus:ring-[#4f6ef7]/30"
+          className="w-full bg-[var(--c-borda)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-4 py-2.5
+                     text-sm placeholder:text-[var(--c-suave)] resize-none
+                     focus:outline-none focus:border-[var(--c-destaque)] focus:ring-1 focus:ring-[var(--c-destaque)]/30"
         />
 
         <div className="flex gap-2">
           <button
             onClick={onCancelar}
-            className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[#2e3347] text-[#8b91a8] hover:text-[#e8eaf0] transition-colors"
+            className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)] transition-colors"
           >
             Voltar
           </button>
@@ -284,7 +284,7 @@ function ModalConfirmacao({ label, status, onConfirmar, onCancelar }) {
             className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors active:scale-95 disabled:opacity-40
               ${isCancelamento
                 ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
-                : 'bg-[#4f6ef7] text-white hover:bg-[#3d5ce5]'
+                : 'bg-[var(--c-destaque)] text-white hover:bg-[var(--c-destaque-h)]'
               }`}
           >
             Confirmar
