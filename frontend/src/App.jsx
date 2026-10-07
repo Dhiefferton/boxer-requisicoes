@@ -26,7 +26,7 @@ function RotaProtegida({ children }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
     <div className="min-h-screen flex items-center justify-center">
-      <Spinner size={32} className="text-[#4f6ef7]" />
+      <Spinner size={32} className="text-[var(--c-destaque)]" />
     </div>
   );
   if (!usuario) return <Navigate to="/login" replace />;
@@ -39,7 +39,7 @@ function RotaOrcamentos({ children }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
     <div className="min-h-screen flex items-center justify-center">
-      <Spinner size={32} className="text-[#4f6ef7]" />
+      <Spinner size={32} className="text-[var(--c-destaque)]" />
     </div>
   );
   if (!usuario) return <Navigate to="/login" replace />;
@@ -52,7 +52,7 @@ function RotaPerfil({ perfis, children }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
     <div className="min-h-screen flex items-center justify-center">
-      <Spinner size={32} className="text-[#4f6ef7]" />
+      <Spinner size={32} className="text-[var(--c-destaque)]" />
     </div>
   );
   if (!usuario) return <Navigate to="/login" replace />;
@@ -67,7 +67,7 @@ function RotaAdminOuSetor({ setores, children }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
     <div className="min-h-screen flex items-center justify-center">
-      <Spinner size={32} className="text-[#4f6ef7]" />
+      <Spinner size={32} className="text-[var(--c-destaque)]" />
     </div>
   );
   if (!usuario) return <Navigate to="/login" replace />;
