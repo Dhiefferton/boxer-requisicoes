@@ -3,11 +3,13 @@
 // a partir de um Pedido de Orçamento (card do Pipefy)
 // ============================================================
 // Disparado ao mover o pedido de "Solicitação" para "Separando".
-//   1. Cliente do pedido no Zen é sempre a Tekweld (a própria empresa);
-//      o cliente real (nome/CNPJ do Pipefy) aparece só no card
-//   2. Cria o pedido (POST /sale/sale) — perfil ORCAMENTO, Baixa estoque
+//   1. Cliente do pedido = cliente do card do Pipefy, buscado no Zen pelo
+//      CNPJ/CPF (GET /catalog/person/person?q=documentNumber==...)
+//   2. Cria o pedido (POST /sale/sale) — perfil de venda "Venda padrão",
+//      perfil fiscal de operação "Venda"
 //   3. Para cada peça: busca a embalagem pelo código e inclui o item
-//      (POST /sale/saleItem) com CFOP 5.927
+//      (POST /sale/saleItem) com o CFOP conforme o cliente:
+//      SP 5.102 · fora de SP com IE 6.102 · fora de SP sem IE 6.108
 //   4. Finaliza a preparação     (POST /sale/saleOpPrepare/{id})
 //   5. Aprova incondicionalmente (POST /sale/saleOpApproveUnconditionally/{id})
 //   6. Inclui a ordem de separação, perfil ORCAMENTO
@@ -24,11 +26,13 @@ const ZEN_TENANT   = 'boxer';
 // IDs fixos (configuráveis por variável de ambiente)
 const CFG = {
   company:                Number(process.env.ZEN_PV_COMPANY_ID         || 1009),  // TEKSP
-  saleProfile:            Number(process.env.ZEN_PV_SALE_PROFILE_ID    || 1002),  // ORCAMENTO
-  fiscalProfileOperation: Number(process.env.ZEN_PV_FISCAL_OP_ID       || 1003),  // Baixa estoque
-  person:                 Number(process.env.ZEN_PV_PERSON_ID          || 1001),  // Tekweld (cliente fixo)
+  saleProfile:            Number(process.env.ZEN_PV_SALE_PROFILE_ID    || 1001),  // DEFAULT — Venda padrão
+  fiscalProfileOperation: Number(process.env.ZEN_PV_FISCAL_OP_ID       || 1061),  // Venda
   salesperson:            Number(process.env.ZEN_PV_SALESPERSON_ID     || 62770), // Daiani
-  taxationOperation:      Number(process.env.ZEN_PV_TAXATION_OP_ID     || 1392),  // CFOP 5.927
+  ufEmpresa:              process.env.ZEN_PV_UF_EMPRESA || 'SP',                  // TEKSP
+  cfopDentroEstado:       Number(process.env.ZEN_PV_CFOP_INTERNO_ID    || 1260),  // 5.102
+  cfopForaEstado:         Number(process.env.ZEN_PV_CFOP_INTERESTADUAL_ID || 1401), // 6.102
+  cfopNaoContribuinte:    Number(process.env.ZEN_PV_CFOP_NAO_CONTRIB_ID || 1407), // 6.108
   currency:               Number(process.env.ZEN_PV_CURRENCY_ID        || 1001),  // BRL
   pickingProfile:         Number(process.env.ZEN_PV_PICKING_PROFILE_ID || 1003),  // ORCAMENTO
   paymentMethods:         process.env.ZEN_PV_PAYMENT_METHODS || '0',              // prazo: 0 = à vista
@@ -65,6 +69,35 @@ async function buscarEmbalagem(codigo) {
   }
   // detalhe completo pra pegar o perfil fiscal do produto
   return zen('GET', `/catalog/product/productPacking/${lista[0].id}`);
+}
+
+// ---------- Cliente (pelo CNPJ/CPF do card) ----------
+function mascararDocumento(doc) {
+  const d = String(doc || '').replace(/\D/g, '');
+  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+  return null;
+}
+
+async function buscarClienteZen(documento) {
+  const mascarado = mascararDocumento(documento);
+  if (!mascarado) throw new Error(`CNPJ/CPF do cliente inválido ou vazio no card ("${documento || ''}").`);
+  const digitos = mascarado.replace(/\D/g, '');
+  for (const valor of [mascarado, digitos]) {
+    const lista = await zen('GET', `/catalog/person/person?q=${q(`documentNumber=="${valor}"`)}&max=2`);
+    if (Array.isArray(lista) && lista.length > 0) {
+      return zen('GET', `/catalog/person/person/${lista[0].id}`);
+    }
+  }
+  throw new Error(`Cliente ${mascarado} não está cadastrado no Zen. Cadastre o cliente no Zen e tente de novo.`);
+}
+
+// CFOP conforme o cliente: SP 5.102 · fora de SP com IE 6.102 · fora de SP sem IE 6.108
+function cfopDoCliente(pessoa) {
+  const uf = String(pessoa?.city?.state?.code || '').toUpperCase();
+  if (!uf || uf === CFG.ufEmpresa) return CFG.cfopDentroEstado;
+  const temIE = /\d/.test(String(pessoa?.document2Number || ''));
+  return temIE ? CFG.cfopForaEstado : CFG.cfopNaoContribuinte;
 }
 
 function hojeSP() {
@@ -112,13 +145,17 @@ export async function criarPedidoVendaZen(pedido) {
 
   const resultado = { zenPedidoId: null, ordemSeparacaoId: null, itensIncluidos: 0, criadoAgora: false };
 
+  // 1. Cliente do card (no reenvio, usa o cliente que já está no pedido)
+  let cliente = null;
+
   // 1–2. Cabeçalho
   if (!zenPedidoId) {
+    cliente = await buscarClienteZen(pedido.cliente_cnpj);
     const venda = await zen('POST', '/sale/sale', {
       company:                { id: CFG.company },
       saleProfile:            { id: CFG.saleProfile },
       fiscalProfileOperation: { id: CFG.fiscalProfileOperation },
-      person:                 { id: CFG.person },
+      person:                 { id: cliente.id },
       personSalesperson:      { id: CFG.salesperson },
       freightType:            'NONE',
       currency:               { id: CFG.currency },
@@ -136,6 +173,8 @@ export async function criarPedidoVendaZen(pedido) {
 
     // 3. Itens — só enquanto o pedido está em preparação
     if (venda.status === 'PREPARING') {
+      if (!cliente) cliente = await zen('GET', `/catalog/person/person/${venda.person.id}`);
+      const cfop = cfopDoCliente(cliente);
       const existentes = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${zenPedidoId}`)}&max=200`);
       const jaIncluidos = new Set((existentes || []).map(i => String(i.productPacking?.code || '')));
 
@@ -145,7 +184,7 @@ export async function criarPedidoVendaZen(pedido) {
         const corpo = {
           sale:              { id: zenPedidoId },
           productPacking:    { id: embalagem.id },
-          taxationOperation: { id: CFG.taxationOperation },
+          taxationOperation: { id: cfop },
           quantity:          Number(item.quantidade),
           unitValue:         Number(item.valor_unitario) || 0,
           currency:          { id: CFG.currency },
