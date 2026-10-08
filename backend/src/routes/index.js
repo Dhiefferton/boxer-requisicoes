@@ -31,7 +31,7 @@ import {
   gerarRelatorio, listarRelatorios, detalharRelatorio
 } from '../controllers/necessidadesPecasController.js';
 import {
-  listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy
+  listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy, retirarRecusadas
 } from '../controllers/pedidosOrcamentoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
@@ -136,6 +136,7 @@ router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operad
 router.patch('/pedidos-orcamento/:id/mover',    autenticar, exigirPerfil('operador', 'admin'), moverPedido);
 router.patch('/pedidos-orcamento/:id',          autenticar, exigirPerfil('operador', 'admin'), editarPedido);
 router.post('/pedidos-orcamento/:id/cancelar',  autenticar, exigirPerfil('operador', 'admin'), cancelarPedido);
+router.post('/pedidos-orcamento/:id/retirar-recusadas', autenticar, exigirPerfil('operador', 'admin'), retirarRecusadas);
 router.get('/pedidos-orcamento/pipefy-pipes',   autenticar, exigirPerfil('admin'), listarPipesPipefy);
 router.post('/pedidos-orcamento/sincronizar-pipefy', autenticar, exigirPerfil('operador', 'admin'), sincronizarPipefy);
 
