@@ -337,27 +337,30 @@ async function cancelarOrdemSeparacao(saleId, ordemId) {
       throw new Error(`O romaneio ${romaneio.id} já foi finalizado (nota fiscal criada). Cancele a nota no Zen antes de retirar peças.`);
     }
 
+    // Sequência do Zen (igual à feita à mão na tela):
+    //   romaneio SEPARADO -> EMBALADO (outgoingListOpPacked) — o Zen só reverte
+    //   a finalização da reserva com o romaneio embalado;
+    //   reserva FINALIZADA -> INICIADA -> APROVADA; depois o pedido de venda
+    //   aceita a reversão da ordem de separação (topo do laço).
     const candidatos = [];
-    if (romaneio?.status === 'PACKED') candidatos.push(`/material/outgoingListOpPackedRevert/${romaneio.id}`);
-    if (ordem?.status && !['PREPARING', 'PREPARED', 'APPROVED', 'DISTRIBUTED'].includes(ordem.status)) {
+    if (ordem?.status === 'RESERVATION_FINISHED') {
       candidatos.push(`/material/pickingOrderOpReservationFinishRevert/${ordemId}`);
     }
     if (reserva) {
       const r = reserva.status;
-      if (r === 'FINISHED')  candidatos.push(`/material/reservationOpFinishRevert/${reserva.id}`);
+      if (r === 'FINISHED') {
+        if (romaneio?.status === 'PICKED') candidatos.push(`/material/outgoingListOpPacked/${romaneio.id}`);
+        candidatos.push(`/material/reservationOpFinishRevert/${reserva.id}`);
+      }
       if (r === 'STARTED')   candidatos.push(`/material/reservationOpStartRevert/${reserva.id}`);
       if (r === 'ALLOCATED') candidatos.push(`/material/reservationOpAllocateRevert/${reserva.id}`);
+      // Reserva APROVADA já deveria liberar a reversão no pedido; se não liberar, recua mais
       if (r === 'APPROVED')  candidatos.push(`/material/reservationOpApproveRevert/${reserva.id}`);
       if (r === 'PREPARED')  candidatos.push(`/material/reservationOpPrepareRevert/${reserva.id}`);
     }
     if (ordem?.status === 'DISTRIBUTED') candidatos.push(`/material/pickingOrderOpDistributeRevert/${ordemId}`);
     if (ordem?.status === 'APPROVED')    candidatos.push(`/material/pickingOrderOpApproveRevert/${ordemId}`);
     if (ordem?.status === 'PREPARED')    candidatos.push(`/material/pickingOrderOpPrepareRevert/${ordemId}`);
-    // O Zen não desfaz a reserva enquanto existe romaneio PICKED/PACKED:
-    // último recurso é excluir o romaneio da ordem que está sendo cancelada
-    if (romaneio && ['PICKING', 'PICKED'].includes(romaneio.status)) {
-      candidatos.push(['DELETE', `/material/outgoingList/${romaneio.id}`]);
-    }
 
     let avancou = false;
     for (const item of candidatos) {
