@@ -6,7 +6,7 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive } from 'lucide-react';
+import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -173,8 +173,15 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
   const indiceAtual = COLUNAS.findIndex(c => c.status === pedido.status);
   // Automáticos (via "Atualizar"): Separando -> Separado (reserva finalizada no Zen)
   // e -> Aprovado/Recusado (fase do card no Pipefy)
-  const proxima = ['separando', 'separado'].includes(pedido.status) ? null : COLUNAS[indiceAtual + 1];
   const aprovacao = String(pedido.aprovacao || '').toLowerCase();
+  // Aprovado Parcial: as peças do campo "Peças Recusadas" saem do pedido no Zen
+  const parcial = aprovacao.includes('parcial');
+  const codigosRecusados = separarCodigos(pedido.pecas_recusadas);
+  const recusadosSet = new Set(codigosRecusados);
+  const precisaRetirar = parcial && pedido.status === 'aprovado_recusado' && !pedido.recusadas_retiradas_em;
+  const itensRetirados = Array.isArray(pedido.itens_recusados) ? pedido.itens_recusados : [];
+  const [retirando, setRetirando] = useState(false);
+  const proxima = ['separando', 'separado'].includes(pedido.status) || precisaRetirar ? null : COLUNAS[indiceAtual + 1];
 
   async function avancar() {
     setMudando(true);
@@ -183,6 +190,23 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
       onAtualizar();
     } catch (err) { alert(err.response?.data?.erro || 'Erro ao mover.'); onAtualizar(); }
     finally { setMudando(false); }
+  }
+
+  async function retirarRecusadas() {
+    const lista = codigosRecusados.join(', ');
+    if (!confirm(
+      `Retirar as peças recusadas (${lista}) do pedido no Zen?\n\n` +
+      'A ordem de separação atual será cancelada (as peças voltam pro estoque), ' +
+      'o pedido será aprovado de novo e uma nova ordem de separação será gerada só com as peças aprovadas. ' +
+      'O card volta para "Em Separação".'
+    )) return;
+    setRetirando(true);
+    try {
+      const { data } = await pedidosOrcamentoService.retirarRecusadas(pedido.id);
+      alert(`Pronto! Peças retiradas: ${(data.itens_retirados || []).join(', ') || lista}.\nNova ordem de separação: #${data.zen_ordem_separacao_id}.`);
+      onAtualizar();
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao retirar as peças no Zen.'); onAtualizar(); }
+    finally { setRetirando(false); }
   }
 
   async function cancelar() {
@@ -205,7 +229,8 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
       </div>
       {pedido.aprovacao && (
         <span className={`inline-block mr-1 text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${
-          aprovacao.startsWith('aprov') ? 'text-green-300 bg-green-500/20'
+          parcial ? 'text-amber-300 bg-amber-500/20'
+          : aprovacao.startsWith('aprov') ? 'text-green-300 bg-green-500/20'
           : aprovacao.startsWith('recus') ? 'text-red-300 bg-red-500/20'
           : 'text-[var(--c-suave)] bg-[var(--c-borda)]'}`}>{pedido.aprovacao}</span>
       )}
@@ -229,6 +254,24 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
           className="inline-flex items-center gap-1 ml-1 text-[10px] font-semibold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 rounded px-1.5 py-0.5">
           Nota fiscal #{pedido.zen_nota_id} <ExternalLink size={10} />
         </a>
+      )}
+      {parcial && !pedido.recusadas_retiradas_em && (
+        <div className="text-[11px] rounded-lg px-2 py-1.5 bg-amber-500/10 border border-amber-500/30 text-[var(--c-texto)]">
+          <p className="font-semibold text-amber-400 mb-0.5">Peças recusadas</p>
+          {codigosRecusados.length
+            ? <p className="font-mono break-words">{codigosRecusados.join(', ')}</p>
+            : <p className="text-[var(--c-suave)]">Campo "Peças Recusadas" vazio no Pipefy.</p>}
+        </div>
+      )}
+      {pedido.recusadas_retiradas_em && (
+        <div className="text-[11px] rounded-lg px-2 py-1.5 bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-suave)]">
+          <p className="font-semibold text-[var(--c-texto)] mb-0.5">Peças recusadas retiradas do Zen em {formatarData(pedido.recusadas_retiradas_em)}</p>
+          {(itensRetirados.length ? itensRetirados : codigosRecusados.map(c => ({ codigo: c }))).map((it, i) => (
+            <p key={i} className="line-through">
+              <span className="font-mono mr-1">{it.codigo}</span>{it.descricao} {it.quantidade != null && `(${it.quantidade})`}
+            </p>
+          ))}
+        </div>
       )}
       {pedido.zen_erro && (
         <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg px-2 py-1 break-words">ZenERP: {pedido.zen_erro}</p>
@@ -254,7 +297,9 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
             </thead>
             <tbody>
               {itens.map((it, i) => (
-                <tr key={i} className="border-t border-[var(--c-borda)] text-[var(--c-texto)]">
+                <tr key={i} className={`border-t border-[var(--c-borda)] ${
+                  !pedido.recusadas_retiradas_em && recusadosSet.has(String(it.codigo || '').trim().toUpperCase())
+                    ? 'text-red-400 line-through' : 'text-[var(--c-texto)]'}`}>
                   <td className="px-2 py-1">
                     {it.codigo && <span className="font-mono text-[var(--c-destaque)] mr-1">{it.codigo}</span>}
                     {it.descricao}
@@ -278,6 +323,12 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
 
       {podeEditar && (
       <div className="flex gap-2 pt-1">
+        {precisaRetirar && (
+          <button onClick={retirarRecusadas} disabled={retirando || codigosRecusados.length === 0}
+            className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 disabled:opacity-40">
+            {retirando ? 'Retirando no Zen...' : <><Scissors size={13} /> Retirar peças recusadas no Zen</>}
+          </button>
+        )}
         {proxima && (
           <button onClick={avancar} disabled={mudando}
             className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 disabled:opacity-40">
@@ -291,6 +342,11 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
       )}
     </div>
   );
+}
+
+// "123, 456\n789" -> ['123', '456', '789'] (mesma regra do backend)
+function separarCodigos(texto) {
+  return [...new Set(String(texto || '').split(/[\s,;|]+/).map(c => c.trim().toUpperCase()).filter(Boolean))];
 }
 
 function Info({ rotulo, valor }) {
