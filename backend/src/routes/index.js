@@ -137,7 +137,7 @@ router.patch('/pedidos-orcamento/:id/mover',    autenticar, exigirPerfil('operad
 router.patch('/pedidos-orcamento/:id',          autenticar, exigirPerfil('operador', 'admin'), editarPedido);
 router.post('/pedidos-orcamento/:id/cancelar',  autenticar, exigirPerfil('operador', 'admin'), cancelarPedido);
 router.post('/pedidos-orcamento/:id/retirar-recusadas', autenticar, exigirPerfil('operador', 'admin'), retirarRecusadas);
-router.post('/pedidos-orcamento/:id/atualizar-itens-zen', autenticar, exigirPerfil('operador', 'admin'), atualizarItensZen);
+router.post('/pedidos-orcamento/:id/atualizar-itens-zen', autenticar, exigirPerfil('admin'), atualizarItensZen);
 router.get('/pedidos-orcamento/pipefy-pipes',   autenticar, exigirPerfil('admin'), listarPipesPipefy);
 router.post('/pedidos-orcamento/sincronizar-pipefy', autenticar, exigirPerfil('operador', 'admin'), sincronizarPipefy);
 
