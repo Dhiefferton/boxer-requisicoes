@@ -3,7 +3,7 @@
 // ============================================================
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
@@ -39,12 +39,23 @@ export default function AppLayout({ children }) {
     return false;
   });
 
+  // Nav inferior (celular): até 5 atalhos; com mais telas, 4 atalhos + "Mais" (abre o menu)
+  const temCarrinho = usuario?.perfil === 'colaborador';
+  const limiteNav = temCarrinho ? 4 : 5;
+  // Telas de uso diário primeiro na barra de baixo (o resto fica em "Mais")
+  const PRIORIDADE = ['/operador', '/pedidos-orcamento', '/compras', '/necessidade-pecas', '/catalogo', '/historico'];
+  const ordemNav = (to) => { const i = PRIORIDADE.indexOf(to); return i === -1 ? 99 : i; };
+  const navInferior = navItems.length > limiteNav
+    ? [...navItems].sort((a, b) => ordemNav(a.to) - ordemNav(b.to)).slice(0, limiteNav - 1)
+    : navItems;
+  const temMais = navItems.length > limiteNav;
+
   return (
-    <div className="min-h-screen bg-[var(--c-fundo)] flex flex-col">
+    <div className="min-h-screen min-h-[100dvh] bg-[var(--c-fundo)] flex flex-col overflow-x-clip">
 
       {/* ── Header ──────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 bg-[var(--c-fundo)]/95 backdrop-blur border-b border-[var(--c-borda)]">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
 
           <div className="flex items-center gap-2.5 shrink-0">
             <div className="w-7 h-7 rounded-lg bg-[var(--c-destaque)] flex items-center justify-center">
@@ -113,7 +124,7 @@ export default function AppLayout({ children }) {
 
         {/* Menu mobile dropdown */}
         {menuOpen && (
-          <div className="md:hidden border-t border-[var(--c-borda)] bg-[var(--c-fundo)] px-4 py-3 flex flex-col gap-1">
+          <div className="md:hidden border-t border-[var(--c-borda)] bg-[var(--c-fundo)] px-4 py-3 flex flex-col gap-1 max-h-[calc(100dvh-3.5rem)] overflow-y-auto">
             {navItems.map(({ to, icon: Icon, label }) => (
               <NavLink key={to} to={to} onClick={() => setMenuOpen(false)}
                 className={({ isActive }) =>
@@ -125,12 +136,12 @@ export default function AppLayout({ children }) {
                 <ChevronRight size={16} className="opacity-40" />
               </NavLink>
             ))}
-            <div className="mt-2 pt-2 border-t border-[var(--c-borda)] flex items-center justify-between px-3">
-              <div>
-                <p className="text-sm font-medium text-[var(--c-texto)]">{usuario?.nome}</p>
-                <p className="text-xs text-[var(--c-suave)] capitalize">{usuario?.perfil} · {usuario?.departamento_nome}</p>
+            <div className="mt-2 pt-2 border-t border-[var(--c-borda)] flex items-center justify-between gap-2 px-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[var(--c-texto)] truncate">{usuario?.nome}</p>
+                <p className="text-xs text-[var(--c-suave)] capitalize truncate">{usuario?.perfil} · {usuario?.departamento_nome}</p>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 <BotaoTema />
                 <button onClick={() => { setMenuOpen(false); navigate('/minha-senha'); }} className="p-2 rounded-xl text-[var(--c-suave)] hover:bg-[var(--c-borda)]" title="Trocar senha">
                   <Lock size={16} />
@@ -144,33 +155,41 @@ export default function AppLayout({ children }) {
         )}
       </header>
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6">{children}</main>
+      <main className="flex-1 max-w-7xl mx-auto w-full min-w-0 px-3 sm:px-4 py-4 sm:py-6">{children}</main>
 
       {/* Nav inferior mobile */}
-      <nav className="md:hidden sticky bottom-0 z-40 bg-[var(--c-fundo)]/95 backdrop-blur border-t border-[var(--c-borda)]">
-        <div className="flex items-center justify-around px-2 py-2">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink key={to} to={to}
+      <nav className="md:hidden sticky bottom-0 z-40 bg-[var(--c-fundo)]/95 backdrop-blur border-t border-[var(--c-borda)] pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-stretch px-1 py-1.5">
+          {navInferior.map(({ to, icon: Icon, label }) => (
+            <NavLink key={to} to={to} onClick={() => setMenuOpen(false)}
               className={({ isActive }) =>
-                `flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-xs transition-colors
+                `flex-1 min-w-0 flex flex-col items-center gap-0.5 px-1 py-1.5 rounded-xl text-[11px] transition-colors
                  ${isActive ? 'text-[var(--c-destaque)]' : 'text-[var(--c-suave)]'}`
               }
             >
-              <Icon size={20} />{label}
+              <Icon size={20} className="shrink-0" /><span className="w-full truncate text-center">{label}</span>
             </NavLink>
           ))}
-          {usuario?.perfil === 'colaborador' && (
+          {temCarrinho && (
             <button
               onClick={() => setCartOpen(true)}
-              className={`relative flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-xs transition-colors ${totalItens > 0 ? 'text-[var(--c-destaque)]' : 'text-[var(--c-suave)]'}`}
+              className={`relative flex-1 min-w-0 flex flex-col items-center gap-0.5 px-1 py-1.5 rounded-xl text-[11px] transition-colors ${totalItens > 0 ? 'text-[var(--c-destaque)]' : 'text-[var(--c-suave)]'}`}
             >
-              <ShoppingCart size={20} />
+              <ShoppingCart size={20} className="shrink-0" />
               {totalItens > 0 && (
-                <span className="absolute top-0.5 right-1 w-4 h-4 bg-[var(--c-destaque)] rounded-full text-white text-[10px] font-bold flex items-center justify-center">
+                <span className="absolute top-0.5 left-1/2 ml-1.5 w-4 h-4 bg-[var(--c-destaque)] rounded-full text-white text-[10px] font-bold flex items-center justify-center">
                   {totalItens > 9 ? '9+' : totalItens}
                 </span>
               )}
-              Carrinho
+              <span className="w-full truncate text-center">Carrinho</span>
+            </button>
+          )}
+          {temMais && (
+            <button
+              onClick={() => { setMenuOpen(v => !v); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              className={`flex-1 min-w-0 flex flex-col items-center gap-0.5 px-1 py-1.5 rounded-xl text-[11px] transition-colors ${menuOpen ? 'text-[var(--c-destaque)]' : 'text-[var(--c-suave)]'}`}
+            >
+              <MoreHorizontal size={20} className="shrink-0" /><span className="w-full truncate text-center">Mais</span>
             </button>
           )}
         </div>
