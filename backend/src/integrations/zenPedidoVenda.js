@@ -514,3 +514,72 @@ export async function excluirPedidoVendaZen(pedido) {
   }
   return { excluido: true, ordemCancelada };
 }
+
+// ============================================================
+// Peças mudaram no Pipefy -> acerta o pedido no Zen
+// ============================================================
+//   1. Compara os itens do card com os do pedido de venda; se já batem, não mexe
+//   2. Desfaz a ordem de separação (mesma sequência do Aprovado Parcial)
+//   3. Volta o pedido pra preparação, exclui os itens que saíram ou mudaram
+//      de quantidade
+//   4. criarPedidoVendaZen inclui os que faltam, prepara, aprova e gera a
+//      nova ordem de separação
+export async function atualizarItensPedidoZen(pedido) {
+  const saleId = pedido.zen_pedido_id;
+  if (!saleId) throw new Error('Pedido sem pedido de venda no Zen.');
+
+  const desejados = new Map();
+  for (const i of pedido.itens || []) {
+    const cod = normCodigo(i.codigo);
+    if (!cod || !(Number(i.quantidade) > 0) || desejados.has(cod)) continue;
+    desejados.set(cod, i);
+  }
+  if (desejados.size === 0) throw new Error('O card ficou sem peças — nesse caso cancele o pedido.');
+
+  let venda = await zen('GET', `/sale/sale/${saleId}`);
+  if (venda.status === 'CANCELED') throw new Error(`Pedido ${saleId} está cancelado no Zen.`);
+
+  const itensAtuais = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${saleId}`)}&max=200`) || [];
+  const noZen = new Map(itensAtuais.map(i => [normCodigo(i.productPacking?.code), i]));
+  const removidos = [], alterados = [], adicionados = [];
+  for (const [cod, item] of noZen) {
+    const quer = desejados.get(cod);
+    if (!quer) removidos.push(cod);
+    else if (Number(item.quantity) !== Number(quer.quantidade)) alterados.push(cod);
+  }
+  for (const cod of desejados.keys()) if (!noZen.has(cod)) adicionados.push(cod);
+
+  if (!removidos.length && !alterados.length && !adicionados.length) {
+    return { semAlteracao: true, ordemSeparacaoId: venda.pickingOrder?.id || null };
+  }
+
+  // Desfaz a separação e volta pra preparação
+  if (venda.pickingOrder?.id) {
+    await cancelarOrdemSeparacao(saleId, venda.pickingOrder.id);
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  }
+  if (venda.status === 'APPROVED') {
+    await zen('POST', `/sale/saleOpApproveRevert/${saleId}`);
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  }
+  if (venda.status === 'PREPARED') {
+    await zen('POST', `/sale/saleOpPrepareRevert/${saleId}`);
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  }
+  if (venda.status !== 'PREPARING') {
+    throw new Error(`Pedido ${saleId} no Zen ficou com status ${venda.status} — não consegui voltar pra preparação.`);
+  }
+
+  // Tira os que saíram ou mudaram de quantidade (os de quantidade nova entram de novo abaixo)
+  const itensPrep = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${saleId}`)}&max=200`) || [];
+  for (const item of itensPrep) {
+    const cod = normCodigo(item.productPacking?.code);
+    const quer = desejados.get(cod);
+    if (!quer || Number(item.quantity) !== Number(quer.quantidade)) {
+      await zen('DELETE', `/sale/saleItem/${item.id}`);
+    }
+  }
+
+  const novo = await criarPedidoVendaZen({ ...pedido, zen_pedido_id: saleId, itens: [...desejados.values()] });
+  return { zenPedidoId: saleId, ordemSeparacaoId: novo.ordemSeparacaoId, adicionados, removidos, alterados };
+}
