@@ -52,9 +52,112 @@ function garantirColunas() {
         );
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
+      await garantirTabelaMovimentos();
     })().catch(err => { colunasOk = null; throw err; });
   }
   return colunasOk;
+}
+
+// ── Movimentação (relatório) ─────────────────────────────────
+// Toda ação na tela de Orçamentos vira uma linha aqui: mudança de coluna,
+// pedido/ordem/nota no Zen, erros do Zen, sincronização com o Pipefy, peças
+// alteradas, peças recusadas, cancelamento... Nunca derruba a ação principal.
+async function garantirTabelaMovimentos() {
+  const existe = await query(`SELECT to_regclass('public.pedidos_orcamento_movimentos') AS t`);
+  if (existe.rows[0].t) return;
+  await query(`
+    CREATE TABLE IF NOT EXISTS pedidos_orcamento_movimentos (
+      id           SERIAL PRIMARY KEY,
+      pedido_id    INTEGER REFERENCES pedidos_orcamento(id) ON DELETE SET NULL,
+      tipo         TEXT NOT NULL,
+      de_status    TEXT,
+      para_status  TEXT,
+      descricao    TEXT,
+      detalhes     JSONB,
+      usuario_id   INTEGER,
+      usuario_nome TEXT,
+      origem       TEXT NOT NULL DEFAULT 'usuario',
+      criado_em    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_po_mov_criado ON pedidos_orcamento_movimentos (criado_em DESC)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_po_mov_pedido ON pedidos_orcamento_movimentos (pedido_id, criado_em)`);
+  await query(`ALTER TABLE pedidos_orcamento_movimentos ENABLE ROW LEVEL SECURITY`).catch(() => {});
+
+  // Histórico do que já aconteceu antes do relatório existir (montado com as datas gravadas)
+  await query(`
+    INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, para_status, descricao, usuario_nome, origem, criado_em)
+    SELECT id, 'importado', 'solicitacao', 'Card importado do Pipefy', 'Sistema', 'historico', created_at
+      FROM pedidos_orcamento`);
+  await query(`
+    INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, de_status, para_status, descricao, detalhes, usuario_nome, origem, criado_em)
+    SELECT id, 'zen_pedido_criado', 'solicitacao', 'separando',
+           'Pedido de venda #' || zen_pedido_id || ' criado no Zen',
+           jsonb_build_object('zen_pedido_id', zen_pedido_id, 'ordem_separacao', zen_ordem_separacao_id),
+           'Sistema', 'historico', zen_enviado_em
+      FROM pedidos_orcamento WHERE zen_enviado_em IS NOT NULL AND zen_pedido_id IS NOT NULL`);
+  await query(`
+    INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, de_status, para_status, descricao, detalhes, usuario_nome, origem, criado_em)
+    SELECT id, 'pecas_recusadas_retiradas', 'aprovado_recusado', 'separando',
+           'Peças recusadas retiradas no Zen: ' || COALESCE(pecas_recusadas, ''),
+           jsonb_build_object('ordem_separacao', zen_ordem_separacao_id),
+           'Sistema', 'historico', recusadas_retiradas_em
+      FROM pedidos_orcamento WHERE recusadas_retiradas_em IS NOT NULL`);
+  await query(`
+    INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, de_status, para_status, descricao, detalhes, usuario_nome, origem, criado_em)
+    SELECT id, 'finalizado', 'aprovado_recusado', 'finalizado',
+           'Finalizado — nota fiscal #' || zen_nota_id || ' criada no Zen',
+           jsonb_build_object('romaneio', zen_romaneio_id, 'nota', zen_nota_id),
+           'Sistema', 'historico', atualizado_em
+      FROM pedidos_orcamento WHERE status = 'finalizado'`);
+  await query(`
+    INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, de_status, para_status, descricao, usuario_nome, origem, criado_em)
+    SELECT id, 'cancelado', cancelado_status, 'cancelado', 'Pedido cancelado', 'Sistema', 'historico', atualizado_em
+      FROM pedidos_orcamento WHERE status = 'cancelado'`);
+  console.log('✅ pedidos_orcamento_movimentos criada (com histórico)');
+}
+
+async function registrarMovimento(pedidoId, tipo, { de = null, para = null, descricao = null, detalhes = null, usuario = null, origem = 'usuario' } = {}) {
+  try {
+    await query(
+      `INSERT INTO pedidos_orcamento_movimentos
+         (pedido_id, tipo, de_status, para_status, descricao, detalhes, usuario_id, usuario_nome, origem)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)`,
+      [pedidoId || null, tipo, de, para, descricao, detalhes ? JSON.stringify(detalhes) : null,
+       usuario?.id || null, usuario?.nome || (origem === 'usuario' ? null : 'Sistema'), origem]
+    );
+  } catch (err) {
+    console.error('⚠️ Não consegui registrar a movimentação:', err.message);
+  }
+}
+
+const NOME_STATUS = {
+  solicitacao: 'Solicitado', separando: 'Em Separação', separado: 'Separado',
+  aprovado_recusado: 'Aprovado/Recusado', finalizado: 'Finalizado', cancelado: 'Cancelado',
+};
+
+// GET /pedidos-orcamento/movimentos?de=AAAA-MM-DD&ate=AAAA-MM-DD&pedido=ID
+export async function listarMovimentos(req, res, next) {
+  try {
+    await garantirColunas();
+    const filtros = [];
+    const valores = [];
+    if (req.query.de)     { valores.push(req.query.de);  filtros.push(`m.criado_em >= ($${valores.length}::date AT TIME ZONE 'America/Sao_Paulo')`); }
+    if (req.query.ate)    { valores.push(req.query.ate); filtros.push(`m.criado_em <  (($${valores.length}::date + 1) AT TIME ZONE 'America/Sao_Paulo')`); }
+    if (req.query.pedido) { valores.push(parseInt(req.query.pedido)); filtros.push(`m.pedido_id = $${valores.length}`); }
+    const r = await query(
+      `SELECT m.id, m.pedido_id, m.tipo, m.de_status, m.para_status, m.descricao, m.detalhes,
+              m.usuario_id, m.usuario_nome, m.origem, m.criado_em,
+              p.cliente_nome, p.referencia, p.ns_entrada, p.pipefy_card_id, p.pipefy_url,
+              p.zen_pedido_id, p.status AS status_atual
+         FROM pedidos_orcamento_movimentos m
+         LEFT JOIN pedidos_orcamento p ON p.id = m.pedido_id
+        ${filtros.length ? 'WHERE ' + filtros.join(' AND ') : ''}
+        ORDER BY m.criado_em DESC, m.id DESC
+        LIMIT 5000`,
+      valores
+    );
+    res.json({ movimentos: r.rows });
+  } catch (err) { next(err); }
 }
 
 const criarSchema = z.object({
@@ -77,10 +180,14 @@ export async function criarPedido(req, res, next) {
     const dados = criarSchema.parse(req.body);
     const usuarioId = req.usuario.id;
 
+    await garantirColunas();
     const result = await query(
       `INSERT INTO pedidos_orcamento (referencia, observacoes, criado_por) VALUES ($1, $2, $3) RETURNING id`,
       [dados.referencia.trim(), dados.observacoes || null, usuarioId]
     );
+    await registrarMovimento(result.rows[0].id, 'criado_manual', {
+      para: 'solicitacao', descricao: `Pedido criado manualmente: ${dados.referencia.trim()}`, usuario: req.usuario,
+    });
 
     res.status(201).json({ id: result.rows[0].id });
   } catch (err) {
@@ -98,12 +205,14 @@ export async function moverPedido(req, res, next) {
     if (!STATUS_VALIDOS.includes(status)) {
       return res.status(400).json({ erro: `Status inválido. Use: ${STATUS_VALIDOS.join(', ')}` });
     }
+    await garantirColunas();
     const atual = await query(
       `SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`,
       [parseInt(id)]
     );
     const pedido = atual.rows[0];
     if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    const detalhesMov = {};
 
     // Solicitação -> Separando: cria o pedido de venda no ZenERP antes de mover.
     // Se o Zen falhar, o card fica onde está e o erro aparece na tela.
@@ -115,12 +224,24 @@ export async function moverPedido(req, res, next) {
           `UPDATE pedidos_orcamento SET zen_pedido_id = $1, zen_ordem_separacao_id = $2, zen_erro = NULL, zen_enviado_em = NOW() WHERE id = $3`,
           [zen.zenPedidoId, zen.ordemSeparacaoId, pedido.id]
         );
+        detalhesMov.zen_pedido_id = zen.zenPedidoId;
+        detalhesMov.ordem_separacao = zen.ordemSeparacaoId;
+        detalhesMov.itens_incluidos = zen.itensIncluidos;
+        await registrarMovimento(pedido.id, 'zen_pedido_criado', {
+          de: pedido.status, para: status, usuario: req.usuario, detalhes: { ...detalhesMov },
+          descricao: `Pedido de venda #${zen.zenPedidoId} ${zen.criadoAgora ? 'criado' : 'completado'} no Zen — ordem de separação #${zen.ordemSeparacaoId}`,
+        });
       } catch (err) {
         console.error(`❌ ZenERP pedido orçamento #${pedido.id}:`, err.message);
         await query(
           `UPDATE pedidos_orcamento SET zen_pedido_id = COALESCE($1, zen_pedido_id), zen_erro = $2, atualizado_em = NOW() WHERE id = $3`,
           [err.zenPedidoId || null, err.message.slice(0, 1000), pedido.id]
         );
+        await registrarMovimento(pedido.id, 'erro_zen', {
+          de: pedido.status, para: status, usuario: req.usuario,
+          descricao: `Falha ao criar o pedido no Zen: ${err.message.slice(0, 500)}`,
+          detalhes: { acao: 'criar_pedido', zen_pedido_id: err.zenPedidoId || null },
+        });
         return res.status(502).json({ erro: `Não foi possível criar o pedido no ZenERP: ${err.message}` });
       }
     }
@@ -133,12 +254,19 @@ export async function moverPedido(req, res, next) {
           `UPDATE pedidos_orcamento SET zen_romaneio_id = $1, zen_nota_id = $2, zen_erro = NULL WHERE id = $3`,
           [fim.romaneioId, fim.notaId, pedido.id]
         );
+        detalhesMov.romaneio = fim.romaneioId;
+        detalhesMov.nota = fim.notaId;
       } catch (err) {
         console.error(`❌ ZenERP finalizar pedido orçamento #${pedido.id}:`, err.message);
         await query(
           `UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`,
           [err.message.slice(0, 1000), pedido.id]
         );
+        await registrarMovimento(pedido.id, 'erro_zen', {
+          de: pedido.status, para: status, usuario: req.usuario,
+          descricao: `Falha ao finalizar no Zen: ${err.message.slice(0, 500)}`,
+          detalhes: { acao: 'finalizar' },
+        });
         return res.status(502).json({ erro: `Não foi possível finalizar no ZenERP: ${err.message}` });
       }
     }
@@ -147,6 +275,13 @@ export async function moverPedido(req, res, next) {
       `UPDATE pedidos_orcamento SET status = $1, atualizado_em = NOW() WHERE id = $2`,
       [status, pedido.id]
     );
+    await registrarMovimento(pedido.id, status === 'finalizado' ? 'finalizado' : 'movido', {
+      de: pedido.status, para: status, usuario: req.usuario,
+      detalhes: Object.keys(detalhesMov).length ? detalhesMov : null,
+      descricao: status === 'finalizado' && detalhesMov.nota
+        ? `Finalizado — romaneio #${detalhesMov.romaneio} fechado e nota fiscal #${detalhesMov.nota} criada no Zen`
+        : `Movido de ${NOME_STATUS[pedido.status] || pedido.status} para ${NOME_STATUS[status] || status}`,
+    });
     res.json({
       sucesso: true,
       zen_pedido_id: zen?.zenPedidoId || pedido.zen_pedido_id || null,
@@ -175,6 +310,11 @@ export async function editarPedido(req, res, next) {
       valores
     );
     if (!result.rows[0]) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    await garantirColunas();
+    await registrarMovimento(result.rows[0].id, 'editado', {
+      usuario: req.usuario, descricao: 'Referência/observações editadas',
+      detalhes: { referencia: referencia ?? undefined, observacoes: observacoes ?? undefined },
+    });
     res.json({ sucesso: true });
   } catch (err) { next(err); }
 }
@@ -232,6 +372,12 @@ export async function sincronizarPipefy(req, res, next) {
         [cards.map(c => String(c.id))]
       );
       reativados = r.rowCount;
+      for (const row of r.rows) {
+        await registrarMovimento(row.id, 'reaberto', {
+          de: 'cancelado', para: 'solicitacao', usuario: req.usuario, origem: 'sincronizacao',
+          descricao: 'Card voltou para "Requisitar Peças" no Pipefy — reaberto como pedido novo',
+        });
+      }
     }
 
     // Card já em andamento que voltou pra "Requisitar Peças" com as peças mudadas
@@ -242,7 +388,8 @@ export async function sincronizarPipefy(req, res, next) {
     const existentes = new Map();
     if (cards.length) {
       const ex = await query(
-        `SELECT id, pipefy_card_id, status, itens, zen_pedido_id, recusadas_retiradas_em
+        `SELECT id, pipefy_card_id, status, itens, zen_pedido_id, recusadas_retiradas_em,
+                cliente_nome, cliente_cnpj, tecnico, frete_por_conta, entregue_por, ns_entrada
            FROM pedidos_orcamento WHERE pipefy_card_id = ANY($1::text[])`,
         [cards.map(c => String(c.id))]
       );
@@ -253,11 +400,31 @@ export async function sincronizarPipefy(req, res, next) {
     for (const card of cards) {
       const d = extrairDadosOrcamento(card);
       const antes = existentes.get(String(card.id));
-      if (antes && antes.zen_pedido_id && !antes.recusadas_retiradas_em
-          && ['separando', 'separado', 'aprovado_recusado'].includes(antes.status)
-          && assinatura(antes.itens) !== assinatura(d.itens)) {
-        await query(`UPDATE pedidos_orcamento SET itens_alterados_em = NOW() WHERE id = $1`, [antes.id]);
-        alterados++;
+      const pecasMudaram = antes && !antes.recusadas_retiradas_em && assinatura(antes.itens) !== assinatura(d.itens);
+      if (pecasMudaram) {
+        const listaAntes  = assinatura(antes.itens).replace(/\|/g, ', ') || '—';
+        const listaDepois = assinatura(d.itens).replace(/\|/g, ', ') || '—';
+        const pendenteZen = antes.zen_pedido_id && ['separando', 'separado', 'aprovado_recusado'].includes(antes.status);
+        if (pendenteZen) {
+          await query(`UPDATE pedidos_orcamento SET itens_alterados_em = NOW() WHERE id = $1`, [antes.id]);
+          alterados++;
+        }
+        await registrarMovimento(antes.id, 'pecas_alteradas_pipefy', {
+          usuario: req.usuario, origem: 'sincronizacao',
+          descricao: `Peças alteradas no Pipefy${pendenteZen ? ' — pedido do Zen precisa ser atualizado' : ''}`,
+          detalhes: { antes: listaAntes, depois: listaDepois },
+        });
+      }
+      if (antes) {
+        const mudou = ['cliente_nome', 'cliente_cnpj', 'tecnico', 'frete_por_conta', 'entregue_por', 'ns_entrada']
+          .filter(c => String(antes[c] ?? '') !== String(d[c] ?? ''));
+        if (mudou.length) {
+          await registrarMovimento(antes.id, 'dados_alterados_pipefy', {
+            usuario: req.usuario, origem: 'sincronizacao',
+            descricao: `Dados do card alterados no Pipefy: ${mudou.join(', ')}`,
+            detalhes: Object.fromEntries(mudou.map(c => [c, { antes: antes[c] ?? null, depois: d[c] ?? null }])),
+          });
+        }
       }
       const result = await query(
         `INSERT INTO pedidos_orcamento
@@ -279,7 +446,7 @@ export async function sincronizarPipefy(req, res, next) {
                        itens           = CASE WHEN pedidos_orcamento.recusadas_retiradas_em IS NULL
                                               THEN EXCLUDED.itens ELSE pedidos_orcamento.itens END,
                        pipefy_sincronizado_em = NOW()
-         RETURNING (xmax = 0) AS inserido`,
+         RETURNING id, (xmax = 0) AS inserido`,
         [
           (d.cliente_nome || card.titulo || `Card ${card.id}`).slice(0, 255),
           card.id,
@@ -296,7 +463,14 @@ export async function sincronizarPipefy(req, res, next) {
           card.criadoEm || null,
         ]
       );
-      if (result.rows[0]?.inserido) novos++; else atualizados++;
+      if (result.rows[0]?.inserido) {
+        novos++;
+        await registrarMovimento(result.rows[0].id, 'importado', {
+          para: 'solicitacao', usuario: req.usuario, origem: 'sincronizacao',
+          descricao: `Card importado do Pipefy (${(d.itens || []).length} peça(s))`,
+          detalhes: { pipefy_card_id: card.id, pecas: assinatura(d.itens).replace(/\|/g, ', ') },
+        });
+      } else atualizados++;
     }
 
     // Separando -> Separado: quando a reserva da ordem de separação é finalizada no Zen
@@ -309,10 +483,17 @@ export async function sincronizarPipefy(req, res, next) {
       try {
         const situacao = await consultarOrdemSeparacao(p.zen_ordem_separacao_id);
         if (situacao.separado) {
-          await query(
-            `UPDATE pedidos_orcamento SET status = 'separado', atualizado_em = NOW() WHERE id = $1 AND status = 'separando'`,
+          const up = await query(
+            `UPDATE pedidos_orcamento SET status = 'separado', atualizado_em = NOW() WHERE id = $1 AND status = 'separando' RETURNING id`,
             [p.id]
           );
+          if (up.rowCount) {
+            await registrarMovimento(p.id, 'separado_automatico', {
+              de: 'separando', para: 'separado', origem: 'sistema',
+              descricao: `Separação concluída no Zen (ordem #${p.zen_ordem_separacao_id}, reserva finalizada)`,
+              detalhes: { ordem_separacao: p.zen_ordem_separacao_id },
+            });
+          }
           separados++;
         }
       } catch (err) {
@@ -326,7 +507,7 @@ export async function sincronizarPipefy(req, res, next) {
     // retiradas volta pra "Em Separação" e só segue depois de separado de novo.
     let aprovadosRecusados = 0;
     const acompanhados = await query(
-      `SELECT id, pipefy_card_id FROM pedidos_orcamento
+      `SELECT id, pipefy_card_id, status, aprovacao FROM pedidos_orcamento
         WHERE pipefy_card_id IS NOT NULL
           AND status NOT IN ('finalizado', 'cancelado')
           AND NOT (recusadas_retiradas_em IS NOT NULL AND status IN ('solicitacao', 'separando'))
@@ -347,6 +528,19 @@ export async function sincronizarPipefy(req, res, next) {
                 WHERE id = $3`,
               [s.aprovacao, s.pecasRecusadas, p.id]
             );
+            if (p.status !== 'aprovado_recusado') {
+              await registrarMovimento(p.id, 'aprovacao_pipefy', {
+                de: p.status, para: 'aprovado_recusado', origem: 'sincronizacao', usuario: req.usuario,
+                descricao: `Card chegou em "Aprovado/Recusado" no Pipefy${s.aprovacao ? ` — ${s.aprovacao}` : ''}`,
+                detalhes: { aprovacao: s.aprovacao || null, pecas_recusadas: s.pecasRecusadas || null },
+              });
+            } else if (s.aprovacao && s.aprovacao !== p.aprovacao) {
+              await registrarMovimento(p.id, 'aprovacao_pipefy', {
+                de: p.status, para: p.status, origem: 'sincronizacao', usuario: req.usuario,
+                descricao: `Aprovação definida no Pipefy: ${s.aprovacao}`,
+                detalhes: { aprovacao: s.aprovacao, pecas_recusadas: s.pecasRecusadas || null },
+              });
+            }
             aprovadosRecusados++;
           }
         }
@@ -355,6 +549,11 @@ export async function sincronizarPipefy(req, res, next) {
       }
     }
 
+    await registrarMovimento(null, 'sincronizacao', {
+      usuario: req.usuario, origem: 'sincronizacao',
+      descricao: `Atualizar (Pipefy/Zen): ${cards.length} card(s) em "Requisitar Peças" — ${novos} novo(s), ${reativados} reaberto(s), ${alterados} com peças alteradas, ${separados} separado(s), ${aprovadosRecusados} em Aprovado/Recusado`,
+      detalhes: { total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados },
+    });
     res.json({ total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados });
   } catch (err) { next(err); }
 }
@@ -384,11 +583,19 @@ export async function atualizarItensZen(req, res, next) {
       console.error(`❌ ZenERP atualizar itens #${pedido.id}:`, err.message);
       await query(`UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`,
         [err.message.slice(0, 1000), pedido.id]);
+      await registrarMovimento(pedido.id, 'erro_zen', {
+        de: pedido.status, usuario: req.usuario, detalhes: { acao: 'atualizar_pecas' },
+        descricao: `Falha ao atualizar as peças no Zen: ${err.message.slice(0, 500)}`,
+      });
       return res.status(502).json({ erro: `Não foi possível atualizar as peças no ZenERP: ${err.message}` });
     }
 
     if (r.semAlteracao) {
       await query(`UPDATE pedidos_orcamento SET itens_alterados_em = NULL, zen_erro = NULL WHERE id = $1`, [pedido.id]);
+      await registrarMovimento(pedido.id, 'pecas_conferidas_zen', {
+        de: pedido.status, para: pedido.status, usuario: req.usuario,
+        descricao: `Peças conferidas: pedido #${pedido.zen_pedido_id} no Zen já estava igual ao card`,
+      });
       return res.json({ sucesso: true, sem_alteracao: true });
     }
 
@@ -400,6 +607,18 @@ export async function atualizarItensZen(req, res, next) {
         WHERE id = $2`,
       [r.ordemSeparacaoId, pedido.id]
     );
+    {
+      const partes = [];
+      if (r.adicionados?.length) partes.push(`incluídas ${r.adicionados.join(', ')}`);
+      if (r.alterados?.length)   partes.push(`quantidade corrigida ${r.alterados.join(', ')}`);
+      if (r.removidos?.length)   partes.push(`retiradas ${r.removidos.join(', ')}`);
+      await registrarMovimento(pedido.id, 'pecas_atualizadas_zen', {
+        de: pedido.status, para: 'separando', usuario: req.usuario,
+        descricao: `Peças do pedido #${pedido.zen_pedido_id} atualizadas no Zen (${partes.join('; ')}) — nova ordem de separação #${r.ordemSeparacaoId}`,
+        detalhes: { adicionados: r.adicionados, alterados: r.alterados, removidos: r.removidos,
+                    ordem_anterior: pedido.zen_ordem_separacao_id, ordem_nova: r.ordemSeparacaoId },
+      });
+    }
     res.json({
       sucesso: true,
       zen_ordem_separacao_id: r.ordemSeparacaoId,
@@ -465,6 +684,10 @@ export async function retirarRecusadas(req, res, next) {
         `UPDATE pedidos_orcamento SET zen_erro = $1, pecas_recusadas = $2, atualizado_em = NOW() WHERE id = $3`,
         [err.message.slice(0, 1000), pecasRecusadas, pedido.id]
       );
+      await registrarMovimento(pedido.id, 'erro_zen', {
+        de: pedido.status, usuario: req.usuario, detalhes: { acao: 'retirar_recusadas', codigos },
+        descricao: `Falha ao retirar as peças recusadas no Zen: ${err.message.slice(0, 500)}`,
+      });
       return res.status(502).json({ erro: `Não foi possível retirar as peças no ZenERP: ${err.message}` });
     }
 
@@ -479,6 +702,13 @@ export async function retirarRecusadas(req, res, next) {
         WHERE id = $5`,
       [JSON.stringify(r.itensAprovados), JSON.stringify(itensRecusados), pecasRecusadas, r.ordemSeparacaoId, pedido.id]
     );
+    await registrarMovimento(pedido.id, 'pecas_recusadas_retiradas', {
+      de: 'aprovado_recusado', para: 'separando', usuario: req.usuario,
+      descricao: r.jaFeitoNoZen
+        ? `Peças recusadas (${codigos.join(', ')}) já estavam fora do pedido no Zen — card atualizado`
+        : `Aprovado Parcial: peças ${codigos.join(', ')} retiradas do pedido #${pedido.zen_pedido_id} — nova ordem de separação #${r.ordemSeparacaoId}`,
+      detalhes: { codigos, ordem_anterior: r.ordemCancelada || pedido.zen_ordem_separacao_id, ordem_nova: r.ordemSeparacaoId },
+    });
 
     res.json({
       sucesso: true,
@@ -513,6 +743,10 @@ export async function cancelarPedido(req, res, next) {
           `UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`,
           [err.message.slice(0, 1000), pedido.id]
         );
+        await registrarMovimento(pedido.id, 'erro_zen', {
+          de: pedido.status, para: 'cancelado', usuario: req.usuario, detalhes: { acao: 'excluir_pedido' },
+          descricao: `Falha ao excluir o pedido #${pedido.zen_pedido_id} no Zen: ${err.message.slice(0, 500)}`,
+        });
         return res.status(502).json({ erro: `Não foi possível excluir o pedido no ZenERP: ${err.message}` });
       }
     }
@@ -521,6 +755,11 @@ export async function cancelarPedido(req, res, next) {
       `UPDATE pedidos_orcamento SET status = 'cancelado', cancelado_status = $2, zen_erro = NULL, atualizado_em = NOW() WHERE id = $1`,
       [pedido.id, pedido.status]
     );
+    await registrarMovimento(pedido.id, 'cancelado', {
+      de: pedido.status, para: 'cancelado', usuario: req.usuario,
+      descricao: zenExcluido ? `Pedido cancelado — pedido de venda #${pedido.zen_pedido_id} excluído no Zen` : 'Pedido cancelado',
+      detalhes: pedido.zen_pedido_id ? { zen_pedido_id: pedido.zen_pedido_id, excluido_no_zen: zenExcluido } : null,
+    });
     res.json({ sucesso: true, zen_excluido: zenExcluido, zen_pedido_id: pedido.zen_pedido_id || null });
   } catch (err) { next(err); }
 }
