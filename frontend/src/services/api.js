@@ -69,7 +69,7 @@ export const pedidosOrcamentoService = {
   editar:   (id, dados)          => api.patch(`/pedidos-orcamento/${id}`, dados),
   cancelar: (id)                 => api.post(`/pedidos-orcamento/${id}/cancelar`),
   retirarRecusadas: (id)         => api.post(`/pedidos-orcamento/${id}/retirar-recusadas`),
-  atualizarItensZen: (id)        => api.post(`/pedidos-orcamento/${id}/atualizar-itens-zen`, null, { timeout: 120000 }),
+  atualizarItensZen: (id)        => api.post(`/pedidos-orcamento/${id}/atualizar-itens-zen`, {}, { timeout: 120000 }),
   sincronizarPipefy: ()          => api.post('/pedidos-orcamento/sincronizar-pipefy'),
 };
 
