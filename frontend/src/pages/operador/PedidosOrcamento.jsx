@@ -113,7 +113,7 @@ export default function PedidosOrcamento() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
-        <div className="grid md:grid-cols-3 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
           {COLUNAS.map(({ status, titulo, cor, badge }) => {
             const itens = pedidos.filter(p => p.status === status);
             return (
@@ -141,7 +141,7 @@ function Coluna({ titulo, cor, badge, total, arquivada = false, children }) {
   const [aberta, setAberta] = useState(!arquivada);
   const pilula = <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>;
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 min-w-0">
       <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[var(--c-superficie)]`}>
         {arquivada ? (
           <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1.5 text-[var(--c-suave)] hover:text-[var(--c-texto)]">
@@ -225,7 +225,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
   }
 
   return (
-    <div className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2">
+    <div className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2 min-w-0 break-words">
       <div className="flex items-center gap-1.5">
         <FileText size={13} className="text-[var(--c-destaque)] shrink-0" />
         <p className="text-sm text-[var(--c-texto)] font-medium flex-1">{pedido.cliente_nome || pedido.referencia}</p>

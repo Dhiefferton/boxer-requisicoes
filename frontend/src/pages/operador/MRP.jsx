@@ -207,7 +207,7 @@ export default function MRP() {
             Análise de consumo e previsão de compras mensais
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap min-w-0 max-w-full">
           {/* Período */}
           <select value={meses} onChange={e => setMeses(parseInt(e.target.value))}
             className="bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[var(--c-destaque)]">
@@ -218,7 +218,7 @@ export default function MRP() {
           </select>
           {/* Categoria */}
           <select value={categoria} onChange={e => setCategoria(e.target.value)}
-            className="bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[var(--c-destaque)]">
+            className="min-w-0 max-w-full bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[var(--c-destaque)]">
             <option value="">Todas categorias</option>
             {categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>

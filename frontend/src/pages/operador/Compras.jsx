@@ -31,10 +31,10 @@ export default function Compras() {
         <p className="text-sm text-[var(--c-suave)] mt-0.5">Cotações, comparação de fornecedores e histórico de compras</p>
       </div>
 
-      <div className="flex gap-1 border-b border-[var(--c-borda)]">
+      <div className="flex gap-1 border-b border-[var(--c-borda)] overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {ABAS.map(a => (
           <button key={a.id} onClick={() => setAba(a.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors
+            className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-2 text-sm font-medium border-b-2 transition-colors
               ${aba === a.id ? 'border-[var(--c-destaque)] text-[var(--c-texto)]' : 'border-transparent text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
             {a.label}
           </button>
@@ -183,16 +183,18 @@ function CardProcesso({ processo, expandido, onToggle, onAtualizar }) {
 
   return (
     <div className={`rounded-xl border bg-[var(--c-superficie)] overflow-hidden ${prontosCount > 0 ? 'border-green-500/30' : 'border-[var(--c-borda)]'}`}>
-      <button onClick={onToggle} className="w-full flex items-center justify-between px-4 py-3">
-        <div className="text-left">
+      <div role="button" tabIndex={0} onClick={onToggle}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}
+        className="w-full flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 px-3 sm:px-4 py-3 cursor-pointer">
+        <div className="text-left min-w-0 flex-1 basis-[10rem]">
           <p className="text-sm text-[var(--c-texto)] font-medium">Card #{processo.id} · {itensAtivos.length} item(ns)</p>
-          <p className="text-[10px] text-[var(--c-suave)]">
+          <p className="text-[10px] text-[var(--c-suave)] break-words">
             {itensAtivos.map(i => i.material_codigo).join(', ')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
           {prontosCount > 0 && (
-            <span className="text-[10px] font-medium px-2 py-1 rounded-full bg-green-500/15 text-green-400">
+            <span className="text-[10px] font-medium px-2 py-1 rounded-full bg-green-500/15 text-green-400 whitespace-nowrap">
               {prontosCount} pronto(s) p/ aprovar
             </span>
           )}
@@ -208,7 +210,7 @@ function CardProcesso({ processo, expandido, onToggle, onAtualizar }) {
           )}
           {expandido ? <ChevronUp size={16} className="text-[var(--c-suave)]" /> : <ChevronDown size={16} className="text-[var(--c-suave)]" />}
         </div>
-      </button>
+      </div>
       {expandido && (
         <div className="border-t border-[var(--c-borda)] divide-y divide-[var(--c-borda)]/60">
           {itensAtivos.map(item => (
@@ -503,20 +505,20 @@ function AbaAcompanhamento() {
           {itens.map(item => {
             const st = statusEntrega(item.data_prevista_entrega);
             return (
-              <div key={item.id} className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
+              <div key={item.id} className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-3 sm:p-4 space-y-3">
+                <div className="flex flex-wrap sm:flex-nowrap items-start justify-between gap-2 sm:gap-3">
+                  <div className="min-w-0 flex-1 basis-[12rem] break-words">
+                    <div className="flex flex-wrap items-center gap-x-2">
                       <span className="text-[10px] font-mono text-[var(--c-destaque)]">{item.material_codigo}</span>
                       <span className="text-[10px] text-[var(--c-suave)]">{item.categoria_nome}</span>
                     </div>
                     <p className="text-sm text-[var(--c-texto)]">{item.material_descricao}</p>
                     <p className="text-[11px] text-[var(--c-suave)] flex items-center gap-1 mt-0.5">
-                      <Building2 size={11} /> {item.fornecedor_vencedor} · {item.quantidade_necessaria} {item.unidade}
+                      <Building2 size={11} className="shrink-0" /> {item.fornecedor_vencedor} · {item.quantidade_necessaria} {item.unidade}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className={`text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 ${st.bg} ${st.cor}`}>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                    <span className={`text-[10px] font-medium px-2 py-1 rounded-full flex items-center gap-1 whitespace-nowrap ${st.bg} ${st.cor}`}>
                       <Truck size={11} /> {st.texto}
                     </span>
                     <button onClick={() => cancelarPedido(item)} title="Cancelar solicitação"

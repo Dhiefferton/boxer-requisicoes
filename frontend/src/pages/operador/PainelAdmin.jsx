@@ -156,8 +156,8 @@ function AbaUsuarios() {
 
       {/* Modal de edição */}
       {editando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-sm min-w-0 max-h-[calc(100dvh-1.5rem)] overflow-y-auto bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-4 sm:p-5 space-y-4">
             <div>
               <h3 className="font-semibold text-[var(--c-texto)]">Editar usuário</h3>
               <p className="text-xs text-[var(--c-suave)] mt-0.5">{editando.nome}</p>
@@ -202,15 +202,15 @@ function AbaUsuarios() {
       {loading ? <div className="flex justify-center py-8"><Spinner className="text-[var(--c-destaque)]" /></div> : (
         <div className="space-y-2">
           {usuariosFiltrados.map(u => (
-            <div key={u.id} className={`flex items-center gap-3 bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-4 py-3 ${!u.ativo ? 'opacity-50' : ''}`}>
+            <div key={u.id} className={`flex flex-wrap sm:flex-nowrap items-center gap-3 bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-3 sm:px-4 py-3 ${!u.ativo ? 'opacity-50' : ''}`}>
               <div className="w-8 h-8 rounded-full bg-[var(--c-destaque)]/20 flex items-center justify-center shrink-0">
                 <span className="text-xs font-bold text-[var(--c-destaque)]">{u.nome.charAt(0).toUpperCase()}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-[var(--c-texto)] truncate">{u.nome}</p>
-                <p className="text-xs text-[var(--c-suave)]">{u.email} · <span className="capitalize">{u.perfil}</span>{u.departamento_nome ? ` · ${u.departamento_nome}` : ''}</p>
+                <p className="text-xs text-[var(--c-suave)] break-all">{u.email} · <span className="capitalize">{u.perfil}</span>{u.departamento_nome ? ` · ${u.departamento_nome}` : ''}</p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto">
                 <button onClick={() => abrirEdicao(u)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--c-destaque)]/10 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/20 transition-colors">
                   <Pencil size={12} /> Editar
                 </button>
@@ -334,8 +334,8 @@ function AbaDepartamentos() {
 
       {/* Modal editar */}
       {editando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-sm min-w-0 max-h-[calc(100dvh-1.5rem)] overflow-y-auto bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-4 sm:p-5 space-y-4">
             <h3 className="font-semibold text-[var(--c-texto)]">Editar departamento</h3>
             <form onSubmit={handleEditar} className="space-y-3">
               <div>
@@ -679,8 +679,8 @@ function AbaEstoque() {
       )}
 
       {editandoProd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md min-w-0 max-h-[calc(100dvh-1.5rem)] overflow-y-auto bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-4 sm:p-5 space-y-4">
             <h3 className="font-semibold text-[var(--c-texto)]">Editar produto</h3>
             <form onSubmit={salvarProduto} className="space-y-3">
               <div><label className="text-xs text-[var(--c-suave)] mb-1 block">Código</label>
@@ -702,8 +702,8 @@ function AbaEstoque() {
                 <p className="text-xs font-semibold text-[var(--c-suave)] mb-2">Fornecedores</p>
                 <div className="space-y-1.5 mb-2">
                   {fornsProd.map(f => (
-                    <div key={f.id} className="flex items-center justify-between bg-[var(--c-fundo-2)] rounded-lg px-3 py-2">
-                      <div>
+                    <div key={f.id} className="flex items-center justify-between gap-2 bg-[var(--c-fundo-2)] rounded-lg px-3 py-2">
+                      <div className="min-w-0 break-words">
                         <span className="text-xs text-[var(--c-texto)]">{f.empresa}</span>
                         {f.preco_unitario && <span className="text-xs text-[var(--c-destaque)] ml-2">R$ {f.preco_unitario}</span>}
                       </div>
@@ -712,13 +712,13 @@ function AbaEstoque() {
                   ))}
                   {fornsProd.length === 0 && <p className="text-xs text-[var(--c-suave)]">Nenhum fornecedor vinculado</p>}
                 </div>
-                <div className="flex gap-2">
-                  <select value={fornSelecionado} onChange={e => setFornSelecionado(e.target.value)} className="flex-1 bg-[var(--c-fundo-2)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2 text-xs">
+                <div className="flex flex-wrap gap-2">
+                  <select value={fornSelecionado} onChange={e => setFornSelecionado(e.target.value)} className="basis-full sm:basis-0 flex-1 min-w-0 w-full bg-[var(--c-fundo-2)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2 text-xs">
                     <option value="">Selecionar fornecedor...</option>
                     {todosForns.filter(f => !fornsProd.find(fp => fp.id === f.id)).map(f => <option key={f.id} value={f.id}>{f.empresa}</option>)}
                   </select>
-                  <input type="number" placeholder="Preco" value={precoForn} onChange={e => setPrecoForn(e.target.value)} className="w-24 bg-[var(--c-fundo-2)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2 text-xs" />
-                  <button type="button" onClick={handleVincularForn} disabled={!fornSelecionado} className="px-3 py-2 rounded-xl text-xs font-medium bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] disabled:opacity-40">+ Add</button>
+                  <input type="number" placeholder="Preco" value={precoForn} onChange={e => setPrecoForn(e.target.value)} className="flex-1 sm:flex-none min-w-0 sm:w-24 bg-[var(--c-fundo-2)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2 text-xs" />
+                  <button type="button" onClick={handleVincularForn} disabled={!fornSelecionado} className="shrink-0 px-3 py-2 rounded-xl text-xs font-medium bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] disabled:opacity-40">+ Add</button>
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
@@ -873,13 +873,13 @@ function AbaFornecedores() {
             fornecedores.map(f => (
               <div key={f.id} className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-4 py-3 flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--c-texto)]">{f.empresa}</p>
-                  {f.representante && <p className="text-xs text-[var(--c-suave)] mt-0.5">Rep: {f.representante}</p>}
-                  <div className="flex gap-3 mt-1">
+                  <p className="text-sm font-medium text-[var(--c-texto)] break-words">{f.empresa}</p>
+                  {f.representante && <p className="text-xs text-[var(--c-suave)] mt-0.5 break-words">Rep: {f.representante}</p>}
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 min-w-0">
                     {f.telefone && <span className="text-xs text-[var(--c-suave)]">{f.telefone}</span>}
-                    {f.email && <span className="text-xs text-[var(--c-destaque)]">{f.email}</span>}
+                    {f.email && <span className="text-xs text-[var(--c-destaque)] break-all">{f.email}</span>}
                   </div>
-                  {f.observacoes && <p className="text-xs text-[var(--c-suave)] mt-1 italic">{f.observacoes}</p>}
+                  {f.observacoes && <p className="text-xs text-[var(--c-suave)] mt-1 italic break-words">{f.observacoes}</p>}
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <button onClick={() => { setEditando({...f}); setCriando(false); }} className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/10"><Pencil size={13} /></button>

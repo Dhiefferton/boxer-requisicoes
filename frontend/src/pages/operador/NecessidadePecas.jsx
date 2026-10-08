@@ -180,8 +180,8 @@ export default function NecessidadePecas() {
                   {relatorios.length === 0 ? (
                     <p className="text-xs text-[var(--c-suave)] py-4 text-center bg-[var(--c-superficie)] rounded-xl border border-[var(--c-borda)]">Nenhum relatório gerado ainda.</p>
                   ) : relatorios.map(r => (
-                    <div key={r.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--c-superficie)] border border-[var(--c-borda)] text-xs">
-                      <div>
+                    <div key={r.id} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[var(--c-superficie)] border border-[var(--c-borda)] text-xs">
+                      <div className="min-w-0 break-words">
                         <span className="font-semibold text-green-400 mr-2">Relatório #{r.id}</span>
                         <span className="text-[var(--c-texto)]">{r.total_itens} item(ns)</span>
                         <span className="text-[var(--c-suave)]"> · {formatarDataHora(r.gerado_em)} por {r.gerado_por_nome || '—'}</span>
@@ -199,13 +199,13 @@ export default function NecessidadePecas() {
                 <p className="text-xs text-[var(--c-suave)] py-4 text-center bg-[var(--c-superficie)] rounded-xl border border-[var(--c-borda)]">Nenhum item recusado.</p>
               ) : (
                 recusados.map(item => (
-                  <div key={item.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[var(--c-superficie)] border border-[var(--c-borda)] text-xs">
-                    <div>
+                  <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 px-3 py-2 rounded-lg bg-[var(--c-superficie)] border border-[var(--c-borda)] text-xs">
+                    <div className="min-w-0 break-words">
                       <span className="font-mono text-[var(--c-destaque)] mr-2">{item.codigo}</span>
                       <span className="text-[var(--c-texto)]">{item.descricao}</span>
                       <span className="text-[var(--c-suave)]"> · Qtd: {item.quantidade}</span>
                     </div>
-                    <span className="text-[var(--c-suave)] shrink-0 ml-2">recusado em {formatarData(item.revisado_em)} por {item.revisado_por_nome || '—'}</span>
+                    <span className="text-[var(--c-suave)] sm:shrink-0 sm:text-right">recusado em {formatarData(item.revisado_em)} por {item.revisado_por_nome || '—'}</span>
                   </div>
                 ))
               )}

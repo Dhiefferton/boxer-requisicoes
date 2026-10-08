@@ -223,25 +223,25 @@ export default function RegistroEntradas() {
         ) : (
           <div className="space-y-2">
             {entradas.map(e => (
-              <div key={e.id} className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-4 py-3 flex items-center gap-3">
+              <div key={e.id} className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-3 sm:px-4 py-3 flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1.5">
                 <div className="w-9 h-9 rounded-xl bg-green-500/15 flex items-center justify-center shrink-0">
                   <PackagePlus size={16} className="text-green-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-[var(--c-destaque)]">{e.codigo}</span>
+                  <div className="flex flex-wrap items-center gap-x-2">
+                    <span className="text-[10px] font-mono text-[var(--c-destaque)] break-all">{e.codigo}</span>
                     <span className="text-xs font-bold text-green-400">+{e.quantidade} {e.unidade}</span>
                   </div>
                   <p className="text-sm text-[var(--c-texto)] truncate">{e.descricao}</p>
-                  {e.observacao && <p className="text-xs text-[var(--c-suave)] mt-0.5">{e.observacao}</p>}
+                  {e.observacao && <p className="text-xs text-[var(--c-suave)] mt-0.5 break-words">{e.observacao}</p>}
                 </div>
-                <div className="text-right shrink-0 space-y-0.5">
-                  <div className="flex items-center gap-1 text-xs text-[var(--c-suave)] justify-end">
-                    <Calendar size={11} />{formatarData(e.created_at)}
+                <div className="order-last sm:order-none basis-full sm:basis-auto min-w-0 sm:max-w-[40%] flex flex-wrap sm:flex-col sm:items-end gap-x-3 gap-y-0.5 pl-12 sm:pl-0">
+                  <div className="flex items-center gap-1 text-xs text-[var(--c-suave)]">
+                    <Calendar size={11} className="shrink-0" />{formatarData(e.created_at)}
                   </div>
                   {e.usuario_nome && (
-                    <div className="flex items-center gap-1 text-xs text-[var(--c-suave)] justify-end">
-                      <User size={11} />{e.usuario_nome}
+                    <div className="flex items-center gap-1 text-xs text-[var(--c-suave)] min-w-0">
+                      <User size={11} className="shrink-0" /><span className="truncate">{e.usuario_nome}</span>
                     </div>
                   )}
                 </div>
