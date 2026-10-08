@@ -68,6 +68,18 @@
 
 * { box-sizing: border-box; }
 
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* Nada passa da largura do container (selects com opções longas, imagens, tabelas) */
+select, img, svg, video, canvas { max-width: 100%; }
+
+/* Celular: campos com 16px evitam o zoom automático do iPhone ao tocar no campo */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea { font-size: 16px; }
+}
+
 body {
   background-color: var(--color-boxer-bg);
   color: var(--color-boxer-text);
