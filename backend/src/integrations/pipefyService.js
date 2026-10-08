@@ -269,7 +269,7 @@ export async function buscarSituacaoCards(cardIds) {
         || fields.find(f => /aprova/.test(norm(f.name)) && /^(aprovad|recusad)/.test(valorNorm(f)))
         || fields.find(f => /^(aprovado( parcial)?|recusado)$/.test(valorNorm(f)));
       // "Peças Recusadas" (fase Aguardando aprovação): códigos que saem do pedido
-      const campoRecusadas = fields.find(f => /pecas? recusadas?/.test(norm(f.name)));
+      const campoRecusadas = fields.find(f => /pecas?\s+recusad/.test(norm(f.name))); // "Peças Recusados"
       if (!campo && card.current_phase?.id === String(ORCAMENTO_PHASE_APROVADO_RECUSADO)) {
         console.log(`⚠️ Card ${card.id} sem campo Aprovação. Campos:`, fields.map(f => `${f.name}=${valorTexto(f.value)}`).join(' | '));
       }
