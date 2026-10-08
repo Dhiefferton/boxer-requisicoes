@@ -6,11 +6,12 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck } from 'lucide-react';
+import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { podeEditarOrcamentos } from '../../utils/acessoOrcamentos';
+import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 
 const COLUNAS = [
   { status: 'solicitacao', titulo: 'Solicitado',  resumo: 'Solicitados',  cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
@@ -44,6 +45,7 @@ export default function PedidosOrcamento() {
   const [loading, setLoading] = useState(true);
   const [sincronizando, setSincronizando] = useState(false);
   const [msgSync, setMsgSync] = useState('');
+  const [verMovimentacao, setVerMovimentacao] = useState(false);
 
   async function carregar() {
     try {
@@ -83,6 +85,11 @@ export default function PedidosOrcamento() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => setVerMovimentacao(true)} title="Relatório de movimentação"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
+              bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
+            <Activity size={13} /> Movimentação
+          </button>
           {podeEditar && (
           <button onClick={sincronizarPipefy} disabled={sincronizando}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
@@ -98,6 +105,8 @@ export default function PedidosOrcamento() {
           </button>
         </div>
       </div>
+
+      {verMovimentacao && <PainelMovimentacao onFechar={() => setVerMovimentacao(false)} />}
 
       {/* ── Cards de resumo ──────────────────────────────── */}
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
