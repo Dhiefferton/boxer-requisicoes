@@ -11,7 +11,10 @@ import {
   pipefyQuery, listarCardsDaFase, extrairDadosOrcamento,
   buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO,
 } from '../integrations/pipefyService.js';
-import { criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen } from '../integrations/zenPedidoVenda.js';
+import {
+  criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
+  retirarPecasRecusadasZen, separarCodigos,
+} from '../integrations/zenPedidoVenda.js';
 
 const BASE_SELECT = `
   SELECT
@@ -21,11 +24,36 @@ const BASE_SELECT = `
     p.entregue_por, p.ns_entrada, p.itens,
     p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em, p.aprovacao,
     p.zen_romaneio_id, p.zen_nota_id,
+    p.pecas_recusadas, p.recusadas_retiradas_em, p.itens_recusados,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome
   FROM pedidos_orcamento p
   LEFT JOIN usuarios u ON u.id = p.criado_por
 `;
+
+// Colunas do Aprovado Parcial (migration 020) — cria se ainda não existirem
+let colunasOk = null;
+function garantirColunas() {
+  if (!colunasOk) {
+    colunasOk = (async () => {
+      const r = await query(
+        `SELECT COUNT(*)::int AS n FROM information_schema.columns
+          WHERE table_name = 'pedidos_orcamento'
+            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados')`
+      );
+      if (r.rows[0].n < 3) {
+        await query(
+          `ALTER TABLE pedidos_orcamento
+              ADD COLUMN IF NOT EXISTS pecas_recusadas        TEXT,
+              ADD COLUMN IF NOT EXISTS recusadas_retiradas_em TIMESTAMPTZ,
+              ADD COLUMN IF NOT EXISTS itens_recusados        JSONB`
+        );
+        console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
+      }
+    })().catch(err => { colunasOk = null; throw err; });
+  }
+  return colunasOk;
+}
 
 const criarSchema = z.object({
   referencia:  z.string().min(1, 'Informe uma referência'),
@@ -35,6 +63,7 @@ const criarSchema = z.object({
 // GET /pedidos-orcamento
 export async function listarPedidos(req, res, next) {
   try {
+    await garantirColunas();
     const result = await query(`${BASE_SELECT} WHERE p.status != 'cancelado' ORDER BY p.created_at DESC`);
     res.json({ pedidos: result.rows });
   } catch (err) { next(err); }
@@ -177,6 +206,7 @@ export async function listarPipesPipefy(req, res, next) {
 // atualizados (status no app não é alterado).
 export async function sincronizarPipefy(req, res, next) {
   try {
+    await garantirColunas();
     const cards = await listarCardsDaFase();
     let novos = 0, atualizados = 0;
 
@@ -199,7 +229,8 @@ export async function sincronizarPipefy(req, res, next) {
                        frete_por_conta = EXCLUDED.frete_por_conta,
                        entregue_por    = EXCLUDED.entregue_por,
                        ns_entrada      = EXCLUDED.ns_entrada,
-                       itens           = EXCLUDED.itens,
+                       itens           = CASE WHEN pedidos_orcamento.recusadas_retiradas_em IS NULL
+                                              THEN EXCLUDED.itens ELSE pedidos_orcamento.itens END,
                        pipefy_sincronizado_em = NOW()
          RETURNING (xmax = 0) AS inserido`,
         [
@@ -243,13 +274,16 @@ export async function sincronizarPipefy(req, res, next) {
     }
 
     // Card chegou em "Aprovado/Recusado" no Pipefy -> coluna Aprovado/Recusado,
-    // com a tag do campo "Aprovação" (Aprovado / Recusado)
+    // com a tag do campo "Aprovação" (Aprovado / Aprovado Parcial / Recusado)
+    // e o campo "Peças Recusadas". Pedido que já teve as peças recusadas
+    // retiradas volta pra "Em Separação" e só segue depois de separado de novo.
     let aprovadosRecusados = 0;
     const acompanhados = await query(
       `SELECT id, pipefy_card_id FROM pedidos_orcamento
         WHERE pipefy_card_id IS NOT NULL
           AND status NOT IN ('finalizado', 'cancelado')
-          AND (status <> 'aprovado_recusado' OR aprovacao IS NULL)`
+          AND NOT (recusadas_retiradas_em IS NOT NULL AND status IN ('solicitacao', 'separando'))
+          AND (status <> 'aprovado_recusado' OR aprovacao IS NULL OR recusadas_retiradas_em IS NULL)`
     );
     if (acompanhados.rows.length) {
       try {
@@ -258,8 +292,13 @@ export async function sincronizarPipefy(req, res, next) {
           const s = situacao.get(String(p.pipefy_card_id));
           if (s?.faseId === String(ORCAMENTO_PHASE_APROVADO_RECUSADO)) {
             await query(
-              `UPDATE pedidos_orcamento SET status = 'aprovado_recusado', aprovacao = COALESCE($1, aprovacao), atualizado_em = NOW() WHERE id = $2`,
-              [s.aprovacao, p.id]
+              `UPDATE pedidos_orcamento
+                  SET status = 'aprovado_recusado',
+                      aprovacao = COALESCE($1, aprovacao),
+                      pecas_recusadas = CASE WHEN recusadas_retiradas_em IS NULL THEN $2 ELSE pecas_recusadas END,
+                      atualizado_em = CASE WHEN status <> 'aprovado_recusado' THEN NOW() ELSE atualizado_em END
+                WHERE id = $3`,
+              [s.aprovacao, s.pecasRecusadas, p.id]
             );
             aprovadosRecusados++;
           }
@@ -270,6 +309,87 @@ export async function sincronizarPipefy(req, res, next) {
     }
 
     res.json({ total: cards.length, novos, atualizados, separados, aprovadosRecusados });
+  } catch (err) { next(err); }
+}
+
+// POST /pedidos-orcamento/:id/retirar-recusadas — Aprovado Parcial
+// Cancela a ordem de separação no Zen, tira as peças do campo "Peças Recusadas"
+// do pedido de venda, aprova de novo e gera uma nova ordem de separação.
+// O card volta pra "Em Separação".
+export async function retirarRecusadas(req, res, next) {
+  try {
+    await garantirColunas();
+    const atual = await query(
+      `SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`,
+      [parseInt(req.params.id)]
+    );
+    const pedido = atual.rows[0];
+    if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (pedido.status !== 'aprovado_recusado') {
+      return res.status(400).json({ erro: 'Só dá pra retirar peças de pedidos na coluna Aprovado/Recusado.' });
+    }
+    if (pedido.recusadas_retiradas_em) {
+      return res.status(400).json({ erro: 'As peças recusadas deste pedido já foram retiradas.' });
+    }
+    if (!pedido.zen_pedido_id) return res.status(400).json({ erro: 'Pedido sem pedido de venda no Zen.' });
+
+    // Lê o card de novo no Pipefy pra pegar o campo "Peças Recusadas" atualizado
+    let aprovacao = pedido.aprovacao;
+    let pecasRecusadas = pedido.pecas_recusadas;
+    if (pedido.pipefy_card_id) {
+      try {
+        const s = (await buscarSituacaoCards([pedido.pipefy_card_id])).get(String(pedido.pipefy_card_id));
+        if (s) { aprovacao = s.aprovacao || aprovacao; pecasRecusadas = s.pecasRecusadas ?? pecasRecusadas; }
+      } catch (err) {
+        console.error('⚠️ Pipefy (peças recusadas):', err.message);
+      }
+    }
+    if (!/parcial/i.test(String(aprovacao || ''))) {
+      return res.status(400).json({ erro: `O card está como "${aprovacao || 'sem aprovação'}" — esse botão é só para Aprovado Parcial.` });
+    }
+
+    const codigos = separarCodigos(pecasRecusadas);
+    if (codigos.length === 0) {
+      return res.status(400).json({ erro: 'O campo "Peças Recusadas" do card no Pipefy está vazio.' });
+    }
+    const doPedido = new Set((pedido.itens || []).map(i => String(i.codigo || '').trim().toUpperCase()));
+    const naoEncontrados = codigos.filter(c => !doPedido.has(c));
+    if (naoEncontrados.length) {
+      return res.status(400).json({
+        erro: `Código(s) em "Peças Recusadas" que não estão no pedido: ${naoEncontrados.join(', ')}. Corrija no Pipefy e tente de novo.`,
+      });
+    }
+
+    let r;
+    try {
+      r = await retirarPecasRecusadasZen(pedido, codigos);
+    } catch (err) {
+      console.error(`❌ ZenERP retirar recusadas #${pedido.id}:`, err.message);
+      await query(
+        `UPDATE pedidos_orcamento SET zen_erro = $1, pecas_recusadas = $2, atualizado_em = NOW() WHERE id = $3`,
+        [err.message.slice(0, 1000), pecasRecusadas, pedido.id]
+      );
+      return res.status(502).json({ erro: `Não foi possível retirar as peças no ZenERP: ${err.message}` });
+    }
+
+    const recusados = new Set(codigos);
+    const itensRecusados = (pedido.itens || []).filter(i => recusados.has(String(i.codigo || '').trim().toUpperCase()));
+    await query(
+      `UPDATE pedidos_orcamento
+          SET itens = $1::jsonb, itens_recusados = $2::jsonb, pecas_recusadas = $3,
+              recusadas_retiradas_em = NOW(), zen_ordem_separacao_id = $4,
+              zen_romaneio_id = NULL, zen_nota_id = NULL, zen_erro = NULL,
+              status = 'separando', atualizado_em = NOW()
+        WHERE id = $5`,
+      [JSON.stringify(r.itensAprovados), JSON.stringify(itensRecusados), pecasRecusadas, r.ordemSeparacaoId, pedido.id]
+    );
+
+    res.json({
+      sucesso: true,
+      zen_ordem_separacao_id: r.ordemSeparacaoId,
+      ordem_cancelada: r.ordemCancelada,
+      itens_retirados: r.itensRetirados,
+    });
   } catch (err) { next(err); }
 }
 
