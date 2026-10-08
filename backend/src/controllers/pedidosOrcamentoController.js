@@ -13,7 +13,7 @@ import {
 } from '../integrations/pipefyService.js';
 import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
-  retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen,
+  retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen, atualizarItensPedidoZen,
 } from '../integrations/zenPedidoVenda.js';
 
 const BASE_SELECT = `
@@ -24,7 +24,7 @@ const BASE_SELECT = `
     p.entregue_por, p.ns_entrada, p.itens,
     p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em, p.aprovacao,
     p.zen_romaneio_id, p.zen_nota_id,
-    p.pecas_recusadas, p.recusadas_retiradas_em, p.itens_recusados,
+    p.pecas_recusadas, p.recusadas_retiradas_em, p.itens_recusados, p.itens_alterados_em,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome
   FROM pedidos_orcamento p
@@ -39,15 +39,16 @@ function garantirColunas() {
       const r = await query(
         `SELECT COUNT(*)::int AS n FROM information_schema.columns
           WHERE table_name = 'pedidos_orcamento'
-            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status')`
+            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em')`
       );
-      if (r.rows[0].n < 4) {
+      if (r.rows[0].n < 5) {
         await query(
           `ALTER TABLE pedidos_orcamento
               ADD COLUMN IF NOT EXISTS pecas_recusadas        TEXT,
               ADD COLUMN IF NOT EXISTS recusadas_retiradas_em TIMESTAMPTZ,
               ADD COLUMN IF NOT EXISTS itens_recusados        JSONB,
-              ADD COLUMN IF NOT EXISTS cancelado_status       TEXT`
+              ADD COLUMN IF NOT EXISTS cancelado_status       TEXT,
+              ADD COLUMN IF NOT EXISTS itens_alterados_em     TIMESTAMPTZ`
         );
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
@@ -233,8 +234,31 @@ export async function sincronizarPipefy(req, res, next) {
       reativados = r.rowCount;
     }
 
+    // Card já em andamento que voltou pra "Requisitar Peças" com as peças mudadas
+    // (alguém reverteu no Pipefy e incluiu/tirou peça) -> marca pra atualizar no Zen
+    const assinatura = (itens) => (Array.isArray(itens) ? itens : [])
+      .filter(i => i?.codigo).map(i => `${String(i.codigo).trim().toUpperCase()}:${Number(i.quantidade) || 0}`)
+      .sort().join('|');
+    const existentes = new Map();
+    if (cards.length) {
+      const ex = await query(
+        `SELECT id, pipefy_card_id, status, itens, zen_pedido_id, recusadas_retiradas_em
+           FROM pedidos_orcamento WHERE pipefy_card_id = ANY($1::text[])`,
+        [cards.map(c => String(c.id))]
+      );
+      for (const row of ex.rows) existentes.set(String(row.pipefy_card_id), row);
+    }
+    let alterados = 0;
+
     for (const card of cards) {
       const d = extrairDadosOrcamento(card);
+      const antes = existentes.get(String(card.id));
+      if (antes && antes.zen_pedido_id && !antes.recusadas_retiradas_em
+          && ['separando', 'separado', 'aprovado_recusado'].includes(antes.status)
+          && assinatura(antes.itens) !== assinatura(d.itens)) {
+        await query(`UPDATE pedidos_orcamento SET itens_alterados_em = NOW() WHERE id = $1`, [antes.id]);
+        alterados++;
+      }
       const result = await query(
         `INSERT INTO pedidos_orcamento
            (referencia, pipefy_card_id, pipefy_campos, pipefy_url, pipefy_sincronizado_em,
@@ -331,7 +355,56 @@ export async function sincronizarPipefy(req, res, next) {
       }
     }
 
-    res.json({ total: cards.length, novos, atualizados, reativados, separados, aprovadosRecusados });
+    res.json({ total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados });
+  } catch (err) { next(err); }
+}
+
+// POST /pedidos-orcamento/:id/atualizar-itens-zen
+// Peças do card mudaram no Pipefy depois do pedido já estar no Zen: desfaz a
+// ordem de separação, acerta os itens do pedido de venda (inclui, tira e corrige
+// quantidade), aprova de novo e gera nova ordem. O card volta pra "Em Separação".
+export async function atualizarItensZen(req, res, next) {
+  try {
+    await garantirColunas();
+    const atual = await query(
+      `SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`,
+      [parseInt(req.params.id)]
+    );
+    const pedido = atual.rows[0];
+    if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (!pedido.zen_pedido_id) return res.status(400).json({ erro: 'Pedido ainda não foi criado no Zen.' });
+    if (!['separando', 'separado', 'aprovado_recusado'].includes(pedido.status)) {
+      return res.status(400).json({ erro: 'Só dá pra atualizar as peças de pedidos em Em Separação, Separado ou Aprovado/Recusado.' });
+    }
+
+    let r;
+    try {
+      r = await atualizarItensPedidoZen(pedido);
+    } catch (err) {
+      console.error(`❌ ZenERP atualizar itens #${pedido.id}:`, err.message);
+      await query(`UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`,
+        [err.message.slice(0, 1000), pedido.id]);
+      return res.status(502).json({ erro: `Não foi possível atualizar as peças no ZenERP: ${err.message}` });
+    }
+
+    if (r.semAlteracao) {
+      await query(`UPDATE pedidos_orcamento SET itens_alterados_em = NULL, zen_erro = NULL WHERE id = $1`, [pedido.id]);
+      return res.json({ sucesso: true, sem_alteracao: true });
+    }
+
+    await query(
+      `UPDATE pedidos_orcamento
+          SET zen_ordem_separacao_id = $1, zen_romaneio_id = NULL, zen_nota_id = NULL, zen_erro = NULL,
+              itens_alterados_em = NULL, aprovacao = NULL, pecas_recusadas = NULL,
+              status = 'separando', atualizado_em = NOW()
+        WHERE id = $2`,
+      [r.ordemSeparacaoId, pedido.id]
+    );
+    res.json({
+      sucesso: true,
+      zen_ordem_separacao_id: r.ordemSeparacaoId,
+      adicionados: r.adicionados, removidos: r.removidos, alterados: r.alterados,
+    });
   } catch (err) { next(err); }
 }
 
