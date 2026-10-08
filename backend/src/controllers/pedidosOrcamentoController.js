@@ -39,14 +39,15 @@ function garantirColunas() {
       const r = await query(
         `SELECT COUNT(*)::int AS n FROM information_schema.columns
           WHERE table_name = 'pedidos_orcamento'
-            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados')`
+            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status')`
       );
-      if (r.rows[0].n < 3) {
+      if (r.rows[0].n < 4) {
         await query(
           `ALTER TABLE pedidos_orcamento
               ADD COLUMN IF NOT EXISTS pecas_recusadas        TEXT,
               ADD COLUMN IF NOT EXISTS recusadas_retiradas_em TIMESTAMPTZ,
-              ADD COLUMN IF NOT EXISTS itens_recusados        JSONB`
+              ADD COLUMN IF NOT EXISTS itens_recusados        JSONB,
+              ADD COLUMN IF NOT EXISTS cancelado_status       TEXT`
         );
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
@@ -210,6 +211,28 @@ export async function sincronizarPipefy(req, res, next) {
     const cards = await listarCardsDaFase();
     let novos = 0, atualizados = 0;
 
+    // Card que voltou pra "Requisitar Peças" depois de cancelado aqui (cancelado
+    // já em andamento: separação, aprovado/recusado...) -> volta pra "Solicitado"
+    // como um pedido novo, sem os vínculos antigos do Zen. Cancelado ainda em
+    // "Solicitado" foi descartado de propósito e continua escondido.
+    let reativados = 0;
+    if (cards.length) {
+      const r = await query(
+        `UPDATE pedidos_orcamento
+            SET status = 'solicitacao', cancelado_status = NULL,
+                zen_pedido_id = NULL, zen_ordem_separacao_id = NULL, zen_romaneio_id = NULL,
+                zen_nota_id = NULL, zen_erro = NULL, zen_enviado_em = NULL,
+                aprovacao = NULL, pecas_recusadas = NULL, recusadas_retiradas_em = NULL,
+                itens_recusados = NULL, atualizado_em = NOW()
+          WHERE status = 'cancelado'
+            AND COALESCE(cancelado_status, '') <> 'solicitacao'
+            AND pipefy_card_id = ANY($1::text[])
+          RETURNING id`,
+        [cards.map(c => String(c.id))]
+      );
+      reativados = r.rowCount;
+    }
+
     for (const card of cards) {
       const d = extrairDadosOrcamento(card);
       const result = await query(
@@ -308,7 +331,7 @@ export async function sincronizarPipefy(req, res, next) {
       }
     }
 
-    res.json({ total: cards.length, novos, atualizados, separados, aprovadosRecusados });
+    res.json({ total: cards.length, novos, atualizados, reativados, separados, aprovadosRecusados });
   } catch (err) { next(err); }
 }
 
@@ -398,6 +421,7 @@ export async function retirarRecusadas(req, res, next) {
 // aprovação) e exclui o pedido de venda antes de cancelar o card.
 export async function cancelarPedido(req, res, next) {
   try {
+    await garantirColunas();
     const atual = await query(
       `SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`,
       [parseInt(req.params.id)]
@@ -421,8 +445,8 @@ export async function cancelarPedido(req, res, next) {
     }
 
     await query(
-      `UPDATE pedidos_orcamento SET status = 'cancelado', zen_erro = NULL, atualizado_em = NOW() WHERE id = $1`,
-      [pedido.id]
+      `UPDATE pedidos_orcamento SET status = 'cancelado', cancelado_status = $2, zen_erro = NULL, atualizado_em = NOW() WHERE id = $1`,
+      [pedido.id, pedido.status]
     );
     res.json({ sucesso: true, zen_excluido: zenExcluido, zen_pedido_id: pedido.zen_pedido_id || null });
   } catch (err) { next(err); }
