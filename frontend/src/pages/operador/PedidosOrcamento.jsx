@@ -209,12 +209,19 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
     finally { setRetirando(false); }
   }
 
+  const [cancelando, setCancelando] = useState(false);
   async function cancelar() {
-    if (!confirm('Cancelar este pedido de orçamento?')) return;
+    const noZen = pedido.status === 'aprovado_recusado' && pedido.zen_pedido_id;
+    const msg = noZen
+      ? `Cancelar este pedido?\n\nNo Zen, a separação será desfeita (as peças voltam pro estoque) e o pedido de venda #${pedido.zen_pedido_id} será EXCLUÍDO.`
+      : 'Cancelar este pedido de orçamento?';
+    if (!confirm(msg)) return;
+    setCancelando(true);
     try {
       await pedidosOrcamentoService.cancelar(pedido.id);
       onAtualizar();
-    } catch (err) { alert(err.response?.data?.erro || 'Erro ao cancelar.'); }
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao cancelar.'); onAtualizar(); }
+    finally { setCancelando(false); }
   }
 
   return (
@@ -335,8 +342,10 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
             {mudando ? (proxima.status === 'separando' ? 'Criando pedido no Zen...' : proxima.status === 'finalizado' ? 'Finalizando no Zen...' : 'Movendo...') : <>Mover p/ {proxima.titulo} <ArrowRight size={13} /></>}
           </button>
         )}
-        <button onClick={cancelar} title="Cancelar" className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-red-400 hover:bg-red-500/10">
-          <Ban size={14} />
+        <button onClick={cancelar} disabled={cancelando}
+          title={pedido.status === 'aprovado_recusado' && pedido.zen_pedido_id ? 'Cancelar e excluir o pedido no Zen' : 'Cancelar'}
+          className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40">
+          {cancelando ? <span className="block w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Ban size={14} />}
         </button>
       </div>
       )}
