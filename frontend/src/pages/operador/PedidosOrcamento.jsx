@@ -72,7 +72,8 @@ export default function PedidosOrcamento() {
   }
 
   return (
-    <div className="space-y-5">
+    // Tela grande (5 colunas): tela travada na altura da janela e cada coluna rola sozinha
+    <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-6.6rem)]">
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -113,7 +114,7 @@ export default function PedidosOrcamento() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 xl:grid-rows-1 xl:flex-1 xl:min-h-0 gap-4">
           {COLUNAS.map(({ status, titulo, cor, badge }) => {
             const itens = pedidos.filter(p => p.status === status);
             return (
@@ -141,8 +142,8 @@ function Coluna({ titulo, cor, badge, total, arquivada = false, children }) {
   const [aberta, setAberta] = useState(!arquivada);
   const pilula = <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>;
   return (
-    <div className="space-y-2 min-w-0">
-      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[var(--c-superficie)]`}>
+    <div className="space-y-2 min-w-0 xl:min-h-0 xl:flex xl:flex-col">
+      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[var(--c-superficie)] xl:shrink-0`}>
         {arquivada ? (
           <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1.5 text-[var(--c-suave)] hover:text-[var(--c-texto)]">
             {aberta ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
@@ -155,7 +156,7 @@ function Coluna({ titulo, cor, badge, total, arquivada = false, children }) {
         <span className="text-xs font-bold text-[var(--c-suave)]">{total}</span>
       </div>
       {aberta ? (
-        <div className="space-y-2">{children}</div>
+        <div className="space-y-2 xl:flex-1 xl:min-h-0 xl:overflow-y-auto xl:pr-1 xl:-mr-1 xl:pb-2">{children}</div>
       ) : (
         <button onClick={() => setAberta(true)}
           className="w-full text-xs text-[var(--c-suave)] py-3 text-center rounded-2xl border-2 border-dashed border-[var(--c-borda)] hover:text-[var(--c-texto)]">
@@ -294,12 +295,12 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
       )}
       {itens.length > 0 && (
         <div className="rounded-lg border border-[var(--c-borda)] overflow-hidden">
-          <table className="w-full text-xs">
+          <table className="w-full text-xs table-fixed">
             <thead className="bg-[var(--c-fundo)] text-[var(--c-suave)]">
               <tr>
                 <th className="text-left font-medium px-2 py-1">Peça</th>
-                <th className="text-right font-medium px-2 py-1">Qtd</th>
-                <th className="text-right font-medium px-2 py-1">Valor</th>
+                <th className="text-right font-medium px-1.5 py-1 w-9">Qtd</th>
+                <th className="text-right font-medium px-2 py-1 w-[5.5rem]">Valor</th>
               </tr>
             </thead>
             <tbody>
@@ -307,11 +308,11 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
                 <tr key={i} className={`border-t border-[var(--c-borda)] ${
                   !pedido.recusadas_retiradas_em && recusadosSet.has(String(it.codigo || '').trim().toUpperCase())
                     ? 'text-red-400 line-through' : 'text-[var(--c-texto)]'}`}>
-                  <td className="px-2 py-1">
-                    {it.codigo && <span className="font-mono text-[var(--c-destaque)] mr-1">{it.codigo}</span>}
+                  <td className="px-2 py-1 break-words">
+                    {it.codigo && <span className="font-mono text-[var(--c-destaque)] mr-1 break-all">{it.codigo}</span>}
                     {it.descricao}
                   </td>
-                  <td className="px-2 py-1 text-right">{it.quantidade ?? '—'}</td>
+                  <td className="px-1.5 py-1 text-right">{it.quantidade ?? '—'}</td>
                   <td className="px-2 py-1 text-right whitespace-nowrap">{brl(it.valor_unitario)}</td>
                 </tr>
               ))}
