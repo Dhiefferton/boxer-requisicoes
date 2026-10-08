@@ -125,7 +125,7 @@ export default function PedidosOrcamento() {
                   </div>
                 ) : (
                   itens.map(pedido => (
-                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} podeEditar={podeEditar} />
+                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} podeEditar={podeEditar} ehAdmin={usuario?.perfil === 'admin'} />
                   ))
                 )}
               </Coluna>
@@ -167,7 +167,7 @@ function Coluna({ titulo, cor, badge, total, arquivada = false, children }) {
   );
 }
 
-function CardPedido({ pedido, onAtualizar, podeEditar }) {
+function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
   const [mudando, setMudando] = useState(false);
   const itens = pedido.itens || [];
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
@@ -363,7 +363,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
 
       {podeEditar && (
       <div className="flex gap-2 pt-1">
-        {podeAtualizarItens && (itensAlterados || !precisaRetirar) && (
+        {ehAdmin && podeAtualizarItens && (itensAlterados || !precisaRetirar) && (
           <button onClick={atualizarItensZen} disabled={atualizandoItens}
             title="Acertar o pedido no Zen com as peças atuais do card"
             className={`flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 px-2.5 rounded-lg disabled:opacity-40 ${
