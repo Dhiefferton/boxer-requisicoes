@@ -293,3 +293,142 @@ export async function finalizarRomaneioZen(pedido) {
 
   return { romaneioId, notaId };
 }
+
+// ============================================================
+// Aprovado Parcial — retirar as peças recusadas do pedido no Zen
+// ============================================================
+//   1. Cancela a ordem de separação atual (desfaz reserva/ordem passo a
+//      passo até o Zen aceitar POST /sale/saleOpPickingOrderCreateRevert)
+//      -> a reserva é desfeita e as peças voltam pro estoque
+//   2. Volta o pedido pra preparação (saleOpApproveRevert / saleOpPrepareRevert)
+//   3. Exclui os itens recusados (DELETE /sale/saleItem/{id})
+//   4. Prepara, aprova e gera uma nova ordem de separação (criarPedidoVendaZen)
+// Idempotente: se parar no meio, dá pra apertar o botão de novo.
+
+const normCodigo = (c) => String(c || '').trim().toUpperCase();
+
+/** "123, 456\n789" -> ['123','456','789'] */
+export function separarCodigos(texto) {
+  return [...new Set(String(texto || '')
+    .split(/[\s,;|]+/)
+    .map(normCodigo)
+    .filter(Boolean))];
+}
+
+async function tentar(metodo, caminho) {
+  try { await zen(metodo, caminho); return null; }
+  catch (err) { return err; }
+}
+
+// Desfaz a ordem de separação até o Zen aceitar a reversão no pedido
+async function cancelarOrdemSeparacao(saleId, ordemId) {
+  const erros = [];
+  for (let passo = 0; passo < 15; passo++) {
+    const erroRevert = await tentar('POST', `/sale/saleOpPickingOrderCreateRevert/${saleId}?pickingOrderId=${ordemId}`);
+    if (!erroRevert) return;
+    erros.push(erroRevert.message);
+
+    // Ainda não deu: recua um passo na ordem / reserva / romaneio
+    const ordem    = await zen('GET', `/material/pickingOrder/${ordemId}`);
+    const reserva  = ordem?.reservation?.id   ? await zen('GET', `/material/reservation/${ordem.reservation.id}`)    : null;
+    const romaneio = ordem?.outgoingList?.id  ? await zen('GET', `/material/outgoingList/${ordem.outgoingList.id}`) : null;
+
+    if (romaneio?.status === 'FINISHED') {
+      throw new Error(`O romaneio ${romaneio.id} já foi finalizado (nota fiscal criada). Cancele a nota no Zen antes de retirar peças.`);
+    }
+
+    const candidatos = [];
+    if (romaneio?.status === 'PACKED') candidatos.push(`/material/outgoingListOpPackedRevert/${romaneio.id}`);
+    if (ordem?.status && !['PREPARING', 'PREPARED', 'APPROVED', 'DISTRIBUTED'].includes(ordem.status)) {
+      candidatos.push(`/material/pickingOrderOpReservationFinishRevert/${ordemId}`);
+    }
+    if (reserva) {
+      const r = reserva.status;
+      if (r === 'FINISHED')  candidatos.push(`/material/reservationOpFinishRevert/${reserva.id}`);
+      if (r === 'STARTED')   candidatos.push(`/material/reservationOpStartRevert/${reserva.id}`);
+      if (r === 'ALLOCATED') candidatos.push(`/material/reservationOpAllocateRevert/${reserva.id}`);
+      if (r === 'APPROVED')  candidatos.push(`/material/reservationOpApproveRevert/${reserva.id}`);
+      if (r === 'PREPARED')  candidatos.push(`/material/reservationOpPrepareRevert/${reserva.id}`);
+    }
+    if (ordem?.status === 'DISTRIBUTED') candidatos.push(`/material/pickingOrderOpDistributeRevert/${ordemId}`);
+    if (ordem?.status === 'APPROVED')    candidatos.push(`/material/pickingOrderOpApproveRevert/${ordemId}`);
+    if (ordem?.status === 'PREPARED')    candidatos.push(`/material/pickingOrderOpPrepareRevert/${ordemId}`);
+
+    let avancou = false;
+    for (const caminho of candidatos) {
+      const erro = await tentar('POST', caminho);
+      if (!erro) { avancou = true; break; }
+      erros.push(erro.message);
+    }
+    if (!avancou) {
+      throw new Error(
+        `Não consegui cancelar a ordem de separação ${ordemId} no Zen ` +
+        `(ordem ${ordem?.status || '?'}, reserva ${reserva?.status || '-'}, romaneio ${romaneio?.status || '-'}). ` +
+        `Último erro: ${erros[erros.length - 1] || erroRevert.message}`
+      );
+    }
+  }
+  throw new Error(`Ordem de separação ${ordemId}: muitas tentativas sem conseguir cancelar.`);
+}
+
+/**
+ * @param pedido linha de pedidos_orcamento
+ * @param codigosRecusados códigos (já normalizados) a retirar
+ * @returns {{ zenPedidoId, ordemSeparacaoId, ordemCancelada, itensRetirados: string[] }}
+ */
+export async function retirarPecasRecusadasZen(pedido, codigosRecusados) {
+  const saleId = pedido.zen_pedido_id;
+  if (!saleId) throw new Error('Pedido sem pedido de venda no Zen.');
+  const recusados = new Set((codigosRecusados || []).map(normCodigo));
+  if (recusados.size === 0) throw new Error('Nenhuma peça recusada informada.');
+
+  const aprovados = (pedido.itens || []).filter(i => !recusados.has(normCodigo(i.codigo)));
+  if (aprovados.length === 0) {
+    throw new Error('Todas as peças do pedido estão como recusadas — nesse caso cancele o pedido no Zen.');
+  }
+
+  let venda = await zen('GET', `/sale/sale/${saleId}`);
+  if (venda.status === 'CANCELED') throw new Error(`Pedido ${saleId} está cancelado no Zen.`);
+
+  // 1. Cancela a ordem de separação atual
+  let ordemCancelada = null;
+  if (venda.pickingOrder?.id) {
+    ordemCancelada = venda.pickingOrder.id;
+    await cancelarOrdemSeparacao(saleId, ordemCancelada);
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  }
+
+  // 2. Volta pra preparação
+  if (venda.status === 'APPROVED') {
+    await zen('POST', `/sale/saleOpApproveRevert/${saleId}`);
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  }
+  if (venda.status === 'PREPARED') {
+    await zen('POST', `/sale/saleOpPrepareRevert/${saleId}`);
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  }
+  if (venda.status !== 'PREPARING') {
+    throw new Error(`Pedido ${saleId} no Zen ficou com status ${venda.status} — não consegui voltar pra preparação.`);
+  }
+
+  // 3. Exclui os itens recusados
+  const itensZen = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${saleId}`)}&max=200`);
+  const itensRetirados = [];
+  for (const item of itensZen || []) {
+    const codigo = normCodigo(item.productPacking?.code);
+    if (recusados.has(codigo)) {
+      await zen('DELETE', `/sale/saleItem/${item.id}`);
+      itensRetirados.push(codigo);
+    }
+  }
+
+  // 4. Prepara, aprova e gera a nova ordem — só com as peças aprovadas
+  const novo = await criarPedidoVendaZen({ ...pedido, zen_pedido_id: saleId, itens: aprovados });
+  return {
+    zenPedidoId:      saleId,
+    ordemSeparacaoId: novo.ordemSeparacaoId,
+    ordemCancelada,
+    itensRetirados,
+    itensAprovados:   aprovados,
+  };
+}

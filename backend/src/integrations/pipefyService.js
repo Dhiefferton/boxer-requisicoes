@@ -247,7 +247,8 @@ export const ORCAMENTO_PHASE_APROVADO_RECUSADO = process.env.PIPEFY_ORCAMENTO_PH
  * Situação atual de vários cards: fase atual + campo "Aprovação"
  * (Aprovado / Recusado, preenchido na fase "Aguardando aprovação").
  * Uma consulta só, com um alias por card (lotes de 30).
- * @returns {Map<string, { faseId, faseNome, aprovacao }>}
+ * Também traz "Peças Recusadas" (códigos a retirar quando Aprovado Parcial).
+ * @returns {Map<string, { faseId, faseNome, aprovacao, pecasRecusadas }>}
  */
 export async function buscarSituacaoCards(cardIds) {
   const resultado = new Map();
@@ -266,7 +267,9 @@ export async function buscarSituacaoCards(cardIds) {
       const campo =
         fields.find(f => norm(f.name).replace(/[^a-z]/g, '') === 'aprovacao')
         || fields.find(f => /aprova/.test(norm(f.name)) && /^(aprovad|recusad)/.test(valorNorm(f)))
-        || fields.find(f => /^(aprovado|recusado)$/.test(valorNorm(f)));
+        || fields.find(f => /^(aprovado( parcial)?|recusado)$/.test(valorNorm(f)));
+      // "Peças Recusadas" (fase Aguardando aprovação): códigos que saem do pedido
+      const campoRecusadas = fields.find(f => /pecas? recusadas?/.test(norm(f.name)));
       if (!campo && card.current_phase?.id === String(ORCAMENTO_PHASE_APROVADO_RECUSADO)) {
         console.log(`⚠️ Card ${card.id} sem campo Aprovação. Campos:`, fields.map(f => `${f.name}=${valorTexto(f.value)}`).join(' | '));
       }
@@ -274,6 +277,7 @@ export async function buscarSituacaoCards(cardIds) {
         faseId:    card.current_phase?.id ? String(card.current_phase.id) : null,
         faseNome:  card.current_phase?.name || null,
         aprovacao: valorTexto(campo?.value),
+        pecasRecusadas: valorTexto(campoRecusadas?.value),
       });
     });
   }
