@@ -241,11 +241,11 @@ function ModalConfirmacao({ label, status, onConfirmar, onCancelar }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-black/70 backdrop-blur-sm overflow-y-auto"
       onClick={onCancelar}
     >
       <div
-        className="w-full max-w-sm bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-4"
+        className="w-full max-w-sm max-h-[calc(100dvh-1.5rem)] overflow-y-auto bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-4 sm:p-5 space-y-4"
         onClick={e => e.stopPropagation()}
       >
         <div>
