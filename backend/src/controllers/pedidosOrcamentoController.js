@@ -13,7 +13,7 @@ import {
 } from '../integrations/pipefyService.js';
 import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
-  retirarPecasRecusadasZen, separarCodigos,
+  retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen,
 } from '../integrations/zenPedidoVenda.js';
 
 const BASE_SELECT = `
@@ -394,14 +394,36 @@ export async function retirarRecusadas(req, res, next) {
 }
 
 // POST /pedidos-orcamento/:id/cancelar
+// Na coluna Aprovado/Recusado: desfaz tudo no Zen (separação, reserva,
+// aprovação) e exclui o pedido de venda antes de cancelar o card.
 export async function cancelarPedido(req, res, next) {
   try {
-    const { id } = req.params;
-    const result = await query(
-      `UPDATE pedidos_orcamento SET status = 'cancelado', atualizado_em = NOW() WHERE id = $1 RETURNING id`,
-      [parseInt(id)]
+    const atual = await query(
+      `SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`,
+      [parseInt(req.params.id)]
     );
-    if (!result.rows[0]) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    res.json({ sucesso: true });
+    const pedido = atual.rows[0];
+    if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+
+    let zenExcluido = false;
+    if (pedido.status === 'aprovado_recusado' && pedido.zen_pedido_id) {
+      try {
+        const r = await excluirPedidoVendaZen(pedido);
+        zenExcluido = r.excluido;
+      } catch (err) {
+        console.error(`❌ ZenERP excluir pedido orçamento #${pedido.id}:`, err.message);
+        await query(
+          `UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`,
+          [err.message.slice(0, 1000), pedido.id]
+        );
+        return res.status(502).json({ erro: `Não foi possível excluir o pedido no ZenERP: ${err.message}` });
+      }
+    }
+
+    await query(
+      `UPDATE pedidos_orcamento SET status = 'cancelado', zen_erro = NULL, atualizado_em = NOW() WHERE id = $1`,
+      [pedido.id]
+    );
+    res.json({ sucesso: true, zen_excluido: zenExcluido, zen_pedido_id: pedido.zen_pedido_id || null });
   } catch (err) { next(err); }
 }
