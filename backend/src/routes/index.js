@@ -31,7 +31,7 @@ import {
   gerarRelatorio, listarRelatorios, detalharRelatorio
 } from '../controllers/necessidadesPecasController.js';
 import {
-  listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy, retirarRecusadas, atualizarItensZen
+  listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy, retirarRecusadas, atualizarItensZen, listarMovimentos
 } from '../controllers/pedidosOrcamentoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
@@ -132,6 +132,7 @@ router.post('/necessidades-pecas/:id/cancelar',     autenticar, exigirAdminOuSet
 
 // ── Pedidos de Orçamento (v1: só estrutura, admin only por enquanto)
 router.get('/pedidos-orcamento',                autenticar, exigirLeituraOrcamentos, listarPedidos);
+router.get('/pedidos-orcamento/movimentos',     autenticar, exigirLeituraOrcamentos, listarMovimentos);
 router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operador', 'admin'), criarPedido);
 router.patch('/pedidos-orcamento/:id/mover',    autenticar, exigirPerfil('operador', 'admin'), moverPedido);
 router.patch('/pedidos-orcamento/:id',          autenticar, exigirPerfil('operador', 'admin'), editarPedido);
