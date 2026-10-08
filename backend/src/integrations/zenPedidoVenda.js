@@ -352,7 +352,13 @@ async function cancelarOrdemSeparacao(saleId, ordemId) {
         if (romaneio?.status === 'PICKED') candidatos.push(`/material/outgoingListOpPacked/${romaneio.id}`);
         candidatos.push(`/material/reservationOpFinishRevert/${reserva.id}`);
       }
-      if (r === 'STARTED')   candidatos.push(`/material/reservationOpStartRevert/${reserva.id}`);
+      if (r === 'STARTED') {
+        candidatos.push(`/material/reservationOpStartRevert/${reserva.id}`);
+        // "notEmpty": a reserva ainda tem estoque alocado — desaloca e tenta de novo
+        candidatos.push(`/material/reservationOpAllocateAutoRevert/${reserva.id}`);
+        candidatos.push(`/material/reservationOpAllocateRevert/${reserva.id}`);
+        candidatos.push(`/material/reservationOpAllocateStockRevert/${reserva.id}`);
+      }
       if (r === 'ALLOCATED') candidatos.push(`/material/reservationOpAllocateRevert/${reserva.id}`);
       // Reserva APROVADA já deveria liberar a reversão no pedido; se não liberar, recua mais
       if (r === 'APPROVED')  candidatos.push(`/material/reservationOpApproveRevert/${reserva.id}`);
@@ -373,7 +379,7 @@ async function cancelarOrdemSeparacao(saleId, ordemId) {
       throw new Error(
         `Não consegui cancelar a ordem de separação ${ordemId} no Zen ` +
         `(ordem ${ordem?.status || '?'}, reserva ${reserva?.status || '-'}, romaneio ${romaneio?.status || '-'}). ` +
-        `Erros: ${erros.slice(-3).join(' | ') || erroRevert.message}`
+        `Erros: ${erros.slice(-5).join(' | ') || erroRevert.message}`
       );
     }
   }
