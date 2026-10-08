@@ -353,10 +353,16 @@ async function cancelarOrdemSeparacao(saleId, ordemId) {
     if (ordem?.status === 'DISTRIBUTED') candidatos.push(`/material/pickingOrderOpDistributeRevert/${ordemId}`);
     if (ordem?.status === 'APPROVED')    candidatos.push(`/material/pickingOrderOpApproveRevert/${ordemId}`);
     if (ordem?.status === 'PREPARED')    candidatos.push(`/material/pickingOrderOpPrepareRevert/${ordemId}`);
+    // O Zen não desfaz a reserva enquanto existe romaneio PICKED/PACKED:
+    // último recurso é excluir o romaneio da ordem que está sendo cancelada
+    if (romaneio && ['PICKING', 'PICKED'].includes(romaneio.status)) {
+      candidatos.push(['DELETE', `/material/outgoingList/${romaneio.id}`]);
+    }
 
     let avancou = false;
-    for (const caminho of candidatos) {
-      const erro = await tentar('POST', caminho);
+    for (const item of candidatos) {
+      const [metodo, caminho] = Array.isArray(item) ? item : ['POST', item];
+      const erro = await tentar(metodo, caminho);
       if (!erro) { avancou = true; break; }
       erros.push(erro.message);
     }
@@ -364,7 +370,7 @@ async function cancelarOrdemSeparacao(saleId, ordemId) {
       throw new Error(
         `Não consegui cancelar a ordem de separação ${ordemId} no Zen ` +
         `(ordem ${ordem?.status || '?'}, reserva ${reserva?.status || '-'}, romaneio ${romaneio?.status || '-'}). ` +
-        `Último erro: ${erros[erros.length - 1] || erroRevert.message}`
+        `Erros: ${erros.slice(-3).join(' | ') || erroRevert.message}`
       );
     }
   }
