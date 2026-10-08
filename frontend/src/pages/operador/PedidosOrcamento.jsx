@@ -6,7 +6,7 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors } from 'lucide-react';
+import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -62,7 +62,7 @@ export default function PedidosOrcamento() {
     setMsgSync('');
     try {
       const { data } = await pedidosOrcamentoService.sincronizarPipefy();
-      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s)${data.reativados ? `, ${data.reativados} reaberto(s)` : ''}. Zen: ${data.separados || 0} separado(s). Aprovado/Recusado: ${data.aprovadosRecusados || 0}.`);
+      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s)${data.reativados ? `, ${data.reativados} reaberto(s)` : ''}${data.alterados ? `, ${data.alterados} com peças alteradas` : ''}. Zen: ${data.separados || 0} separado(s). Aprovado/Recusado: ${data.aprovadosRecusados || 0}.`);
       await carregar();
     } catch (err) {
       setMsgSync(err.response?.data?.erro || 'Erro ao sincronizar com o Pipefy.');
@@ -211,6 +211,32 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
   }
 
   const [cancelando, setCancelando] = useState(false);
+  // Peças mudaram no Pipefy depois do pedido já estar no Zen
+  const podeAtualizarItens = !!pedido.zen_pedido_id && ['separando', 'separado', 'aprovado_recusado'].includes(pedido.status);
+  const itensAlterados = podeAtualizarItens && !!pedido.itens_alterados_em;
+  const [atualizandoItens, setAtualizandoItens] = useState(false);
+  async function atualizarItensZen() {
+    if (!confirm(
+      `Atualizar as peças do pedido #${pedido.zen_pedido_id} no Zen com as peças do card?\n\n` +
+      'A ordem de separação atual será desfeita (as peças voltam pro estoque), o pedido recebe as peças do card ' +
+      '(inclui, tira e corrige quantidades), é aprovado de novo e ganha uma nova ordem de separação. ' +
+      'O card volta para "Em Separação".'
+    )) return;
+    setAtualizandoItens(true);
+    try {
+      const { data } = await pedidosOrcamentoService.atualizarItensZen(pedido.id);
+      if (data.sem_alteracao) alert('As peças do Zen já estão iguais às do card — nada a alterar.');
+      else {
+        const partes = [];
+        if (data.adicionados?.length) partes.push(`incluídas: ${data.adicionados.join(', ')}`);
+        if (data.alterados?.length)   partes.push(`quantidade corrigida: ${data.alterados.join(', ')}`);
+        if (data.removidos?.length)   partes.push(`retiradas: ${data.removidos.join(', ')}`);
+        alert(`Pronto! ${partes.join(' · ')}.\nNova ordem de separação: #${data.zen_ordem_separacao_id}.`);
+      }
+      onAtualizar();
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao atualizar as peças no Zen.'); onAtualizar(); }
+    finally { setAtualizandoItens(false); }
+  }
   async function cancelar() {
     const noZen = pedido.status === 'aprovado_recusado' && pedido.zen_pedido_id;
     const msg = noZen
@@ -281,6 +307,12 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
           ))}
         </div>
       )}
+      {itensAlterados && (
+        <div className="text-[11px] rounded-lg px-2 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400">
+          <p className="font-semibold">Peças alteradas no Pipefy</p>
+          <p className="text-[var(--c-suave)]">O pedido no Zen ainda está com as peças antigas.</p>
+        </div>
+      )}
       {pedido.zen_erro && (
         <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg px-2 py-1 break-words">ZenERP: {pedido.zen_erro}</p>
       )}
@@ -331,6 +363,15 @@ function CardPedido({ pedido, onAtualizar, podeEditar }) {
 
       {podeEditar && (
       <div className="flex gap-2 pt-1">
+        {podeAtualizarItens && (itensAlterados || !precisaRetirar) && (
+          <button onClick={atualizarItensZen} disabled={atualizandoItens}
+            title="Acertar o pedido no Zen com as peças atuais do card"
+            className={`flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 px-2.5 rounded-lg disabled:opacity-40 ${
+              itensAlterados ? 'flex-1 bg-amber-500/15 text-amber-400 hover:bg-amber-500/25'
+              : 'text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)]'}`}>
+            {atualizandoItens ? 'Atualizando no Zen...' : <><PackageCheck size={13} /> {itensAlterados ? 'Atualizar peças no Zen' : 'Peças no Zen'}</>}
+          </button>
+        )}
         {precisaRetirar && (
           <button onClick={retirarRecusadas} disabled={retirando || codigosRecusados.length === 0}
             className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 disabled:opacity-40">
