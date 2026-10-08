@@ -396,6 +396,22 @@ export async function retirarPecasRecusadasZen(pedido, codigosRecusados) {
   let venda = await zen('GET', `/sale/sale/${saleId}`);
   if (venda.status === 'CANCELED') throw new Error(`Pedido ${saleId} está cancelado no Zen.`);
 
+  // Já ajustado à mão no Zen? (peças fora do pedido e ordem de separação nova)
+  // -> não mexe em nada, só devolve a situação pra atualizar o card
+  const itensAntes = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${saleId}`)}&max=200`);
+  const aindaTemRecusada = (itensAntes || []).some(i => recusados.has(normCodigo(i.productPacking?.code)));
+  if (!aindaTemRecusada && venda.pickingOrder?.id
+      && String(venda.pickingOrder.id) !== String(pedido.zen_ordem_separacao_id || '')) {
+    return {
+      zenPedidoId:      saleId,
+      ordemSeparacaoId: venda.pickingOrder.id,
+      ordemCancelada:   pedido.zen_ordem_separacao_id || null,
+      itensRetirados:   [...recusados],
+      itensAprovados:   aprovados,
+      jaFeitoNoZen:     true,
+    };
+  }
+
   // 1. Cancela a ordem de separação atual
   let ordemCancelada = null;
   if (venda.pickingOrder?.id) {
