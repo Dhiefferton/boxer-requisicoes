@@ -463,3 +463,54 @@ export async function retirarPecasRecusadasZen(pedido, codigosRecusados) {
     itensAprovados:   aprovados,
   };
 }
+
+// ============================================================
+// Cancelar (coluna Aprovado/Recusado) — desfaz tudo e exclui o pedido no Zen
+// ============================================================
+//   1. Cancela a ordem de separação (mesma sequência do Aprovado Parcial:
+//      embala romaneio, reverte reserva, desaloca, desfaz a ordem)
+//   2. Volta o pedido pra preparação
+//   3. Exclui o pedido de venda (DELETE /sale/sale/{id}); se o Zen não deixar
+//      com itens, exclui os itens primeiro
+// Idempotente: pedido que já não existe no Zen conta como excluído.
+export async function excluirPedidoVendaZen(pedido) {
+  const saleId = pedido.zen_pedido_id;
+  if (!saleId) return { excluido: false, semPedido: true };
+
+  let venda;
+  try {
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  } catch (err) {
+    if (/→ 404/.test(err.message)) return { excluido: true, jaNaoExistia: true };
+    throw err;
+  }
+  if (!venda?.id) return { excluido: true, jaNaoExistia: true };
+
+  const ordemCancelada = venda.pickingOrder?.id || null;
+  if (ordemCancelada) {
+    await cancelarOrdemSeparacao(saleId, ordemCancelada);
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  }
+  if (venda.status === 'APPROVED') {
+    await zen('POST', `/sale/saleOpApproveRevert/${saleId}`);
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  }
+  if (venda.status === 'PREPARED') {
+    await zen('POST', `/sale/saleOpPrepareRevert/${saleId}`);
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  }
+
+  try {
+    await zen('DELETE', `/sale/sale/${saleId}`);
+  } catch (errExcluir) {
+    // Tenta de novo sem os itens
+    const itens = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${saleId}`)}&max=200`);
+    for (const item of itens || []) await zen('DELETE', `/sale/saleItem/${item.id}`);
+    try {
+      await zen('DELETE', `/sale/sale/${saleId}`);
+    } catch (err2) {
+      throw new Error(`Desfiz a separação, mas o Zen não deixou excluir o pedido ${saleId} (status ${venda.status}): ${err2.message}`);
+    }
+  }
+  return { excluido: true, ordemCancelada };
+}
