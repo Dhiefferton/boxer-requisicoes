@@ -263,9 +263,20 @@ export async function sincronizarMaquinas(db) {
        JOIN categorias c ON c.id = m.categoria_id
       WHERE m.codigo = ANY($1::text[])`, [codigosZen]);
   const jaTem = new Set(existentes.rows.map(r => r.codigo));
-  // Máquinas já cadastradas em outra categoria (não são movidas sozinhas)
+  // Máquinas que tinham sido cadastradas como "Partes e Peças" (ex.: pela
+  // planilha) passam para "Máquinas" — o perfil MAQ do Zen manda.
+  const paraMover = existentes.rows
+    .filter(r => r.categoria_id !== categoriaId && r.categoria === 'Partes e Peças')
+    .map(r => r.codigo);
+  if (paraMover.length) {
+    await db.query(
+      `UPDATE materiais SET categoria_id = $1, updated_at = NOW() WHERE codigo = ANY($2::text[])`,
+      [categoriaId, paraMover]
+    );
+  }
+  // Mesmo código em outra categoria qualquer: só avisa, não mexe
   const emOutraCategoria = existentes.rows
-    .filter(r => r.categoria_id !== categoriaId)
+    .filter(r => r.categoria_id !== categoriaId && r.categoria !== 'Partes e Peças')
     .map(r => `${r.codigo} (${r.categoria})`);
   // Igual às peças: entra no catálogo mesmo com saldo zerado
   const novos = codigosZen.filter(c => !jaTem.has(c)).slice(0, MAX_NOVAS_POR_SYNC);
@@ -318,7 +329,8 @@ export async function sincronizarMaquinas(db) {
 
   const resultado = {
     perfis, registros_erp: linhas.length || 0, codigos_zen: codigosZen.length,
-    cadastradas, novas: novosCadastrados.slice(0, 200), em_outra_categoria: emOutraCategoria,
+    cadastradas, novas: novosCadastrados.slice(0, 200), movidas_de_pecas: paraMover.length,
+    em_outra_categoria: emOutraCategoria,
     atualizadas: codigos.length,
     duracao: ((Date.now() - inicio) / 1000).toFixed(1),
   };
