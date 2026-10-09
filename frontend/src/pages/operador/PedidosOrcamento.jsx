@@ -6,7 +6,7 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity } from 'lucide-react';
+import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity, History } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -220,6 +220,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
   }
 
   const [cancelando, setCancelando] = useState(false);
+  const [verHistorico, setVerHistorico] = useState(false);
   // Peças mudaram no Pipefy depois do pedido já estar no Zen
   const podeAtualizarItens = !!pedido.zen_pedido_id && ['separando', 'separado', 'aprovado_recusado'].includes(pedido.status);
   const itensAlterados = podeAtualizarItens && !!pedido.itens_alterados_em;
@@ -265,11 +266,17 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
       <div className="flex items-center gap-1.5">
         <FileText size={13} className="text-[var(--c-destaque)] shrink-0" />
         <p className="text-sm text-[var(--c-texto)] font-medium flex-1">{pedido.cliente_nome || pedido.referencia}</p>
+        <button onClick={() => setVerHistorico(true)} title="Histórico deste card"
+          className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><History size={13} /></button>
         {pedido.pipefy_url && (
           <a href={pedido.pipefy_url} target="_blank" rel="noreferrer" title="Abrir no Pipefy"
             className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
         )}
       </div>
+      {verHistorico && (
+        <PainelMovimentacao pedidoInicial={{ id: pedido.id, nome: pedido.cliente_nome || pedido.referencia }}
+          onFechar={() => setVerHistorico(false)} />
+      )}
       {pedido.aprovacao && (
         <span className={`inline-block mr-1 text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${
           parcial ? 'text-amber-300 bg-amber-500/20'
