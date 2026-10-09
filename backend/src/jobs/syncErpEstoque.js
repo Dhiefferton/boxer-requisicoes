@@ -269,7 +269,17 @@ async function desfazerAutomaticas(db, categoriaId, codigosLista) {
 // estão no perfil MAQ do Zen): soma os registros livres.
 async function saldoPorCodigo(token, codigo) {
   const itens = await stockPorFiltro(token, `productPacking.product.code=="${codigo}"`, 500);
-  return itens.filter(i => i.status === 'FREE').reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+  const livre = itens.filter(i => i.status === 'FREE').reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+  if (codigo === '99486') {   // DIAGNÓSTICO temporário
+    const resumo = itens.map(i => ({
+      id: i.id, status: i.status, type: i.type, qtd: i.quantity,
+      reserva: i.reservation?.code ?? i.reservation?.status ?? i.reservation ?? null,
+      endereco: i.address?.code, deposito: i.warehouse?.code, serial: i.serial?.code,
+    }));
+    console.log(`[SyncERP] DEBUG stock 99486 total=${itens.length} livre=${livre}: ` + JSON.stringify(resumo).slice(0, 3000));
+    console.log('[SyncERP] DEBUG stock 99486 chaves: ' + JSON.stringify(Object.keys(itens[0] || {})));
+  }
+  return livre;
 }
 
 export async function sincronizarMaquinas(db) {
@@ -319,33 +329,18 @@ export async function sincronizarMaquinas(db) {
   // 2. Desfaz o que a versão automática anterior colocou fora da lista
   const desfeitas = await desfazerAutomaticas(db, categoriaId, codigosLista);
 
-  // 3. Saldo do Zen: perfil MAQ pelo stockCube (igual às peças); o que
-  //    não estiver no perfil MAQ é consultado código a código.
+  // 3. Saldo do Zen, código a código (mesmo número da tela de estoque)
   const token = await getToken();
   const saldos = {};
-  let registrosErp = 0;
-  const perfis = await idsPerfisMaquinas(token).catch(() => []);
-  if (perfis.length) {
-    const linhas = await buscaEstoque(perfis);
-    for (const item of (Array.isArray(linhas) ? linhas : [])) {
-      if (!item.product_code) continue;
-      saldos[item.product_code] = (saldos[item.product_code] || 0) + (item.sum_quantity || 0);
-    }
-    registrosErp = Array.isArray(linhas) ? linhas.length : 0;
-    // DIAGNÓSTICO temporário: linhas cruas do stockCube de um código
-    const dbg = (Array.isArray(linhas) ? linhas : []).filter(l => l.product_code === '99486');
-    console.log('[SyncERP] DEBUG 99486 linhas=' + dbg.length + ' campos=' + JSON.stringify(Object.keys(dbg[0] || {})).slice(0, 2500));
-    for (const l of dbg) {
-      const resumo = Object.fromEntries(Object.entries(l).filter(([k, v]) =>
-        v !== null && v !== '' && typeof v !== 'object' && !/^product_|^productProfile|^unit_|fiscal/.test(k)));
-      console.log('[SyncERP] DEBUG 99486 linha: ' + JSON.stringify(resumo).slice(0, 2500));
-    }
-  }
+  const perfis = [];
+  const registrosErp = 0;
   const doCatalogo = await db.query(
     `SELECT codigo FROM materiais WHERE categoria_id = $1 AND ativo = TRUE`, [categoriaId]
   );
   const codigos = doCatalogo.rows.map(r => r.codigo);
-  const foraDoPerfil = codigos.filter(c => saldos[c] === undefined);
+  // O saldo das máquinas segue a tela de estoque do Zen (registros
+  // livres), não o stockCube — o cubo soma também o que está reservado.
+  const foraDoPerfil = codigos;
   for (let i = 0; i < foraDoPerfil.length; i += 10) {   // 10 por vez
     await Promise.all(foraDoPerfil.slice(i, i + 10).map(async codigo => {
       try { saldos[codigo] = await saldoPorCodigo(token, codigo); }
