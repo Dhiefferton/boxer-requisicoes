@@ -334,7 +334,12 @@ export async function sincronizarMaquinas(db) {
     registrosErp = Array.isArray(linhas) ? linhas.length : 0;
     // DIAGNÓSTICO temporário: linhas cruas do stockCube de um código
     const dbg = (Array.isArray(linhas) ? linhas : []).filter(l => l.product_code === '99486');
-    console.log('[SyncERP] DEBUG 99486:', JSON.stringify(dbg).slice(0, 3500));
+    console.log('[SyncERP] DEBUG 99486 linhas=' + dbg.length + ' campos=' + JSON.stringify(Object.keys(dbg[0] || {})).slice(0, 2500));
+    for (const l of dbg) {
+      const resumo = Object.fromEntries(Object.entries(l).filter(([k, v]) =>
+        v !== null && v !== '' && typeof v !== 'object' && !/^product_|^productProfile|^unit_|fiscal/.test(k)));
+      console.log('[SyncERP] DEBUG 99486 linha: ' + JSON.stringify(resumo).slice(0, 2500));
+    }
   }
   const doCatalogo = await db.query(
     `SELECT codigo FROM materiais WHERE categoria_id = $1 AND ativo = TRUE`, [categoriaId]
