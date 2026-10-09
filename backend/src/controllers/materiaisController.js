@@ -3,6 +3,11 @@
 // ============================================================
 
 import { query } from '../config/db.js';
+import { garantirCategoriaMaquinas } from '../jobs/syncErpEstoque.js';
+
+// A categoria "Máquinas" (perfil MAQ do Zen) é criada sozinha na
+// primeira listagem — não precisa rodar migração.
+let _categoriaMaquinasOk = false;
 
 const BASE_SELECT = `
   SELECT
@@ -10,8 +15,9 @@ const BASE_SELECT = `
     c.nome AS categoria_nome, c.icone AS categoria_icone, c.id AS categoria_id,
     e.quantidade, e.nivel_minimo,
     m.quantidade_erp, m.ultima_sync_erp,
+    (c.nome IN ('Partes e Peças', 'Máquinas')) AS estoque_erp,
     CASE
-      WHEN c.nome = 'Partes e Peças' THEN
+      WHEN c.nome IN ('Partes e Peças', 'Máquinas') THEN
         CASE
           WHEN COALESCE(m.quantidade_erp, 0) = 0 THEN 'sem_estoque'
           WHEN COALESCE(m.quantidade_erp, 0) <= COALESCE(e.nivel_minimo, 0) THEN 'baixo_estoque'
@@ -90,6 +96,10 @@ export async function listarMateriais(req, res, next) {
 // GET /categorias
 export async function listarCategorias(req, res, next) {
   try {
+    if (!_categoriaMaquinasOk) {
+      await garantirCategoriaMaquinas({ query }).catch(e => console.error('[Categorias] Maquinas:', e.message));
+      _categoriaMaquinasOk = true;
+    }
     const result = await query(
       `SELECT id, nome, icone FROM categorias WHERE ativo = TRUE ORDER BY ordem, nome`
     );
