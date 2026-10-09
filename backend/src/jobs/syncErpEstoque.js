@@ -267,19 +267,15 @@ async function desfazerAutomaticas(db, categoriaId, codigosLista) {
 
 // Saldo de um código direto pelo estoque (para máquinas da lista que não
 // estão no perfil MAQ do Zen): soma os registros livres.
+// Endereços que não contam como saldo disponível (AVA = avaria)
+const ENDERECOS_IGNORADOS = (process.env.ZEN_MAQ_ENDERECOS_IGNORADOS || 'AVA')
+  .split(',').map(e => e.trim().toUpperCase()).filter(Boolean);
+
 async function saldoPorCodigo(token, codigo) {
-  const itens = await stockPorFiltro(token, `productPacking.product.code=="${codigo}"`, 500);
-  const livre = itens.filter(i => i.status === 'FREE').reduce((s, i) => s + (Number(i.quantity) || 0), 0);
-  if (codigo === '99486') {   // DIAGNÓSTICO temporário
-    const resumo = itens.map(i => ({
-      id: i.id, status: i.status, type: i.type, qtd: i.quantity,
-      reserva: i.reservation?.code ?? i.reservation?.status ?? i.reservation ?? null,
-      endereco: i.address?.code, deposito: i.warehouse?.code, serial: i.serial?.code,
-    }));
-    console.log(`[SyncERP] DEBUG stock 99486 total=${itens.length} livre=${livre}: ` + JSON.stringify(resumo).slice(0, 3000));
-    console.log('[SyncERP] DEBUG stock 99486 chaves: ' + JSON.stringify(Object.keys(itens[0] || {})));
-  }
-  return livre;
+  const itens = await stockPorFiltro(token, `productPacking.product.code=="${codigo}"`, 1000);
+  return itens
+    .filter(i => i.status === 'FREE' && !ENDERECOS_IGNORADOS.includes(String(i.address?.code || '').toUpperCase()))
+    .reduce((s, i) => s + (Number(i.quantity) || 0), 0);
 }
 
 export async function sincronizarMaquinas(db) {
@@ -338,8 +334,8 @@ export async function sincronizarMaquinas(db) {
     `SELECT codigo FROM materiais WHERE categoria_id = $1 AND ativo = TRUE`, [categoriaId]
   );
   const codigos = doCatalogo.rows.map(r => r.codigo);
-  // O saldo das máquinas segue a tela de estoque do Zen (registros
-  // livres), não o stockCube — o cubo soma também o que está reservado.
+  // O saldo das máquinas segue a tela de estoque do Zen: registros livres,
+  // sem o que está em endereço de avaria (AVA).
   const foraDoPerfil = codigos;
   for (let i = 0; i < foraDoPerfil.length; i += 10) {   // 10 por vez
     await Promise.all(foraDoPerfil.slice(i, i + 10).map(async codigo => {
