@@ -46,6 +46,9 @@ export async function listarMateriais(req, res, next) {
     const params = [];
     let paramIdx = 1;
 
+    // Máquinas: categoria visível só para admin
+    if (req.usuario?.perfil !== 'admin') condicoes.push(`c.nome <> 'Máquinas'`);
+
     if (categoria) {
       condicoes.push(`m.categoria_id = $${paramIdx++}`);
       params.push(parseInt(categoria));
@@ -101,7 +104,10 @@ export async function listarCategorias(req, res, next) {
       _categoriaMaquinasOk = true;
     }
     const result = await query(
-      `SELECT id, nome, icone FROM categorias WHERE ativo = TRUE ORDER BY ordem, nome`
+      `SELECT id, nome, icone FROM categorias
+        WHERE ativo = TRUE AND ($1 OR nome <> 'Máquinas')
+        ORDER BY ordem, nome`,
+      [req.usuario?.perfil === 'admin']
     );
     res.json({ categorias: result.rows });
   } catch (err) {
@@ -114,8 +120,8 @@ export async function detalharMaterial(req, res, next) {
   try {
     const { id } = req.params;
     const result = await query(
-      `${BASE_SELECT} WHERE m.id = $1`,
-      [parseInt(id)]
+      `${BASE_SELECT} WHERE m.id = $1 AND ($2 OR c.nome <> 'Máquinas')`,
+      [parseInt(id), req.usuario?.perfil === 'admin']
     );
 
     if (!result.rows[0]) {
