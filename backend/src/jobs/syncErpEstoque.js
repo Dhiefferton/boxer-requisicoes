@@ -267,6 +267,9 @@ async function desfazerAutomaticas(db, categoriaId, codigosLista) {
 
 // Saldo de um código direto pelo estoque (para máquinas da lista que não
 // estão no perfil MAQ do Zen): soma os registros livres.
+// Endereço das máquinas no Zen (TEK_SP > MAQ)
+const ENDERECO_MAQ_ID = Number(process.env.ZEN_MAQ_ADDRESS_ID || 3155);
+
 // Endereços que não contam como saldo disponível (AVA = avaria)
 const ENDERECOS_IGNORADOS = (process.env.ZEN_MAQ_ENDERECOS_IGNORADOS || 'AVA')
   .split(',').map(e => e.trim().toUpperCase()).filter(Boolean);
@@ -325,54 +328,30 @@ export async function sincronizarMaquinas(db) {
   // 2. Desfaz o que a versão automática anterior colocou fora da lista
   const desfeitas = await desfazerAutomaticas(db, categoriaId, codigosLista);
 
-  // 3. Saldo do Zen (mesmo número da tela de estoque): perfil MAQ pelo
-  //    stockCube, tirando o que está no endereço de avaria (AVA). Os itens
-  //    da lista que não são perfil MAQ no Zen são consultados um a um.
+  // 3. Saldo do Zen com os mesmos filtros da tela "Pesquisar estoques":
+  //    Tipo REGULAR, Endereço TEK_SP/MAQ (id 3155), Reserva AVAILABLE (id 0).
+  //    Uma consulta só (paginada) para todo o endereço, somando por produto.
   const token = await getToken();
   const saldos = {};
   const doCatalogo = await db.query(
     `SELECT codigo FROM materiais WHERE categoria_id = $1 AND ativo = TRUE`, [categoriaId]
   );
   const codigos = doCatalogo.rows.map(r => r.codigo);
+  const filtroMaq = `type=="REGULAR";address.id==${ENDERECO_MAQ_ID};reservation.id==0`;
   let registrosErp = 0;
-  const perfis = await idsPerfisMaquinas(token).catch(() => []);
-  let avaOk = false;
-  const ava = {};
-  if (perfis.length) {
-    const linhas = await buscaEstoque(perfis);
-    for (const item of (Array.isArray(linhas) ? linhas : [])) {
-      if (!item.product_code) continue;
-      saldos[item.product_code] = (saldos[item.product_code] || 0) + (item.sum_quantity || 0);
+  for (let pagina = 0; pagina < 100; pagina++) {
+    const itens = await zenGet(token,
+      `/material/stock?q=${encodeURIComponent(filtroMaq)}&first=${pagina * 500}&max=500`);
+    if (!Array.isArray(itens) || !itens.length) break;
+    registrosErp += itens.length;
+    for (const it of itens) {
+      const cod = it.productPacking?.product?.code;
+      if (cod) saldos[cod] = (saldos[cod] || 0) + (Number(it.quantity) || 0);
     }
-    registrosErp = Array.isArray(linhas) ? linhas.length : 0;
-    try {
-      for (const end of ENDERECOS_IGNORADOS) {
-        for (let pagina = 0; pagina < 40; pagina++) {
-          const itens = await zenGet(token,
-            `/material/stock?q=${encodeURIComponent(`address.code=="${end}"`)}&first=${pagina * 500}&max=500`);
-          if (!Array.isArray(itens) || !itens.length) break;
-          for (const it of itens) {
-            const cod = it.productPacking?.product?.code;
-            if (cod && it.status === 'FREE') ava[cod] = (ava[cod] || 0) + (Number(it.quantity) || 0);
-          }
-          if (itens.length < 500) break;
-        }
-      }
-      avaOk = true;
-    } catch (e) {
-      console.error('[SyncERP] Maquinas: consulta do endereço de avaria falhou:', e.message);
-    }
+    if (itens.length < 500) break;
   }
-  // Sem o desconto da avaria ou fora do perfil MAQ: consulta código a código
-  const umAUm = codigos.filter(c => !avaOk || saldos[c] === undefined);
-  for (const c of codigos) if (!umAUm.includes(c)) saldos[c] = (saldos[c] || 0) - (ava[c] || 0);
-  for (let i = 0; i < umAUm.length; i += 10) {   // 10 por vez
-    await Promise.all(umAUm.slice(i, i + 10).map(async codigo => {
-      try { saldos[codigo] = await saldoPorCodigo(token, codigo); }
-      catch (e) { console.error(`[SyncERP] Saldo ${codigo}:`, e.message); }
-    }));
-  }
-  const foraDoPerfil = umAUm;
+  const perfis = [];
+  const foraDoPerfil = codigos.filter(c => saldos[c] === undefined);
   const quantidades = codigos.map(c => Math.max(0, Math.round(saldos[c] || 0)));
   if (codigos.length) {
     await db.query(
@@ -386,8 +365,8 @@ export async function sincronizarMaquinas(db) {
   const resultado = {
     lista: codigosLista.length, cadastradas, movidas_para_maquinas: movidas,
     voltaram_para_pecas: desfeitas.voltaramPecas, desativadas_fora_da_lista: desfeitas.desativadas,
-    perfis, registros_erp: registrosErp, fora_do_perfil_maq: foraDoPerfil.length,
-    atualizadas: codigos.length, avaria_descontada: avaOk, saldo_99486: saldos['99486'],
+    filtro: filtroMaq, registros_erp: registrosErp, sem_saldo_no_endereco: foraDoPerfil.length,
+    atualizadas: codigos.length, saldo_99486: saldos['99486'] || 0,
     duracao: ((Date.now() - inicio) / 1000).toFixed(1),
   };
   console.log('[SyncERP] Maquinas:', JSON.stringify(resultado));
