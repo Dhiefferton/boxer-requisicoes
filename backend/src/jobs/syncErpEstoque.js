@@ -258,9 +258,18 @@ export async function sincronizarMaquinas(db) {
 
   // Cadastra as máquinas com saldo que ainda não estão no catálogo
   const codigosZen = Object.keys(saldos);
-  const existentes = await db.query(`SELECT codigo FROM materiais WHERE codigo = ANY($1::text[])`, [codigosZen]);
+  const existentes = await db.query(
+    `SELECT m.codigo, m.categoria_id, c.nome AS categoria FROM materiais m
+       JOIN categorias c ON c.id = m.categoria_id
+      WHERE m.codigo = ANY($1::text[])`, [codigosZen]);
   const jaTem = new Set(existentes.rows.map(r => r.codigo));
-  const novos = codigosZen.filter(c => !jaTem.has(c) && saldos[c] > 0).slice(0, MAX_NOVAS_POR_SYNC);
+  // Máquinas já cadastradas em outra categoria (não são movidas sozinhas)
+  const emOutraCategoria = existentes.rows
+    .filter(r => r.categoria_id !== categoriaId)
+    .map(r => `${r.codigo} (${r.categoria})`);
+  // Igual às peças: entra no catálogo mesmo com saldo zerado
+  const novos = codigosZen.filter(c => !jaTem.has(c)).slice(0, MAX_NOVAS_POR_SYNC);
+  const novosCadastrados = [];
   let cadastradas = 0;
   for (const codigo of novos) {
     try {
@@ -285,6 +294,7 @@ export async function sincronizarMaquinas(db) {
           [ins.rows[0].id]
         );
         cadastradas++;
+        novosCadastrados.push(codigo);
       }
     } catch (e) {
       console.error(`[SyncERP] Maquina ${codigo} nao cadastrada:`, e.message);
@@ -307,7 +317,9 @@ export async function sincronizarMaquinas(db) {
   }
 
   const resultado = {
-    perfis, registros_erp: linhas.length || 0, cadastradas, atualizadas: codigos.length,
+    perfis, registros_erp: linhas.length || 0, codigos_zen: codigosZen.length,
+    cadastradas, novas: novosCadastrados.slice(0, 200), em_outra_categoria: emOutraCategoria,
+    atualizadas: codigos.length,
     duracao: ((Date.now() - inicio) / 1000).toFixed(1),
   };
   console.log('[SyncERP] Maquinas:', JSON.stringify(resultado));
