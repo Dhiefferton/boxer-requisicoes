@@ -54,6 +54,15 @@ async function executarSync(db) {
     );
 
     console.log(`[SyncERP] Concluido em ${duracao}s - ${codigos.length} pecas atualizadas.`);
+
+    // Máquinas (perfil MAQ no Zen) — mesmo esquema das peças. Erro aqui
+    // não derruba a sincronização das peças.
+    try {
+      resultado.maquinas = await sincronizarMaquinas(db);
+    } catch (errMaq) {
+      console.error('[SyncERP] Erro nas maquinas:', errMaq.message);
+      resultado.maquinas = { erro: errMaq.message };
+    }
     return resultado;
   } catch (err) {
     console.error('[SyncERP] Erro:', err.message);
@@ -128,7 +137,7 @@ export async function debugEstoquePorCodigo(codigo) {
   return itens; // retorna o objeto CRU completo, sem filtrar campos
 }
 
-async function buscaEstoque() {
+async function buscaEstoque(perfis = [1002, 1003]) {
   const token = await getToken();
   const url = `${ZEN_BASE_URL}/system/data/dataSourceOpRead`;
   const body = {
@@ -136,7 +145,7 @@ async function buscaEstoque() {
     'parameters': {
       'SHOW_PRODUCT': true,
       'SHOW_PRODUCT_PACKING': true,
-      'PRODUCT_PROFILE_IDS': [1002, 1003],
+      'PRODUCT_PROFILE_IDS': perfis,
       'TYPE_LIST': ["REGULAR"]
     }
   };
@@ -156,4 +165,151 @@ async function buscaEstoque() {
     throw new Error(`ZenERP respondeu ${response.status}: ${erro}`);
   }
   return await response.json();
+}
+
+// ============================================================
+// MÁQUINAS — mesmo esquema de Partes e Peças, mas puxando do Zen os
+// produtos do perfil MAQ. A cada sincronização:
+//   1. garante a categoria "Máquinas" no catálogo;
+//   2. lê o saldo do Zen (stockCube) dos perfis MAQ;
+//   3. cadastra automaticamente as máquinas com saldo que ainda não
+//      existem no catálogo;
+//   4. atualiza quantidade_erp de todas as máquinas do catálogo
+//      (as que não aparecem no Zen ficam com 0).
+// ============================================================
+export const CATEGORIA_MAQUINAS = 'Máquinas';
+const PERFIS_MAQ = (process.env.ZEN_MAQ_PERFIS || 'MAQ,MAQ/S')
+  .split(',').map(s => s.trim()).filter(Boolean);
+const MAX_NOVAS_POR_SYNC = 300;
+
+let _idsPerfisMaq = null;
+
+async function zenGet(token, caminho) {
+  const response = await fetch(`${ZEN_BASE_URL}${caminho}`, {
+    headers: { 'accept': 'application/json', 'Authorization': `Bearer ${token}`, 'tenant': ZEN_TENANT },
+  });
+  if (!response.ok) {
+    const erro = await response.text().catch(() => '');
+    throw new Error(`ZenERP respondeu ${response.status}: ${erro.slice(0, 200)}`);
+  }
+  return response.json();
+}
+
+// Registros de estoque crus de um filtro (1 registro por série)
+async function stockPorFiltro(token, filtro, max = 1) {
+  const j = await zenGet(token, `/material/stock?q=${encodeURIComponent(filtro)}&first=0&max=${max}`);
+  return Array.isArray(j) ? j : [];
+}
+
+// IDs dos perfis MAQ no Zen (o stockCube filtra por ID, não por código).
+// Descobre pelo próprio estoque; pode ser fixado com ZEN_MAQ_PROFILE_IDS.
+async function idsPerfisMaquinas(token) {
+  if (process.env.ZEN_MAQ_PROFILE_IDS) {
+    return process.env.ZEN_MAQ_PROFILE_IDS.split(',').map(Number).filter(Boolean);
+  }
+  if (_idsPerfisMaq?.length) return _idsPerfisMaq;
+  const ids = new Set();
+  for (const codigo of PERFIS_MAQ) {
+    const itens = await stockPorFiltro(token, `productPacking.product.productProfile.code=="${codigo}"`);
+    const id = itens[0]?.productPacking?.product?.productProfile?.id;
+    if (id) ids.add(Number(id));
+  }
+  _idsPerfisMaq = [...ids];
+  return _idsPerfisMaq;
+}
+
+// Garante a categoria "Máquinas" e devolve o id dela
+export async function garantirCategoriaMaquinas(db) {
+  await db.query(
+    `INSERT INTO categorias (nome, icone, ordem) VALUES ($1, 'cog', 7)
+     ON CONFLICT (nome) DO NOTHING`,
+    [CATEGORIA_MAQUINAS]
+  );
+  const r = await db.query(`SELECT id FROM categorias WHERE nome = $1`, [CATEGORIA_MAQUINAS]);
+  return r.rows[0].id;
+}
+
+function textoLinha(item, ...campos) {
+  for (const c of campos) if (item[c]) return String(item[c]).trim();
+  return '';
+}
+
+export async function sincronizarMaquinas(db) {
+  const inicio = Date.now();
+  const categoriaId = await garantirCategoriaMaquinas(db);
+  const token = await getToken();
+  const perfis = await idsPerfisMaquinas(token);
+  if (!perfis.length) throw new Error(`Perfil ${PERFIS_MAQ.join('/')} não encontrado no estoque do Zen`);
+
+  const linhas = await buscaEstoque(perfis);
+  const saldos = {};
+  const infos = {};
+  for (const item of (Array.isArray(linhas) ? linhas : [])) {
+    const codigo = item.product_code;
+    if (!codigo) continue;
+    saldos[codigo] = (saldos[codigo] || 0) + (item.sum_quantity || 0);
+    if (!infos[codigo]) {
+      infos[codigo] = {
+        descricao: textoLinha(item, 'product_description', 'product_name', 'description'),
+        unidade: textoLinha(item, 'product_unit_code', 'unit_code', 'product_unit'),
+      };
+    }
+  }
+
+  // Cadastra as máquinas com saldo que ainda não estão no catálogo
+  const codigosZen = Object.keys(saldos);
+  const existentes = await db.query(`SELECT codigo FROM materiais WHERE codigo = ANY($1::text[])`, [codigosZen]);
+  const jaTem = new Set(existentes.rows.map(r => r.codigo));
+  const novos = codigosZen.filter(c => !jaTem.has(c) && saldos[c] > 0).slice(0, MAX_NOVAS_POR_SYNC);
+  let cadastradas = 0;
+  for (const codigo of novos) {
+    try {
+      let { descricao, unidade } = infos[codigo];
+      if (!descricao) {
+        const [reg] = await stockPorFiltro(token, `productPacking.product.code=="${codigo}"`);
+        const produto = reg?.productPacking?.product;
+        descricao = produto?.description || '';
+        unidade = unidade || produto?.unit?.code || '';
+      }
+      const ins = await db.query(
+        `INSERT INTO materiais (codigo, descricao, categoria_id, unidade)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (codigo) DO NOTHING
+         RETURNING id`,
+        [codigo, (descricao || `Máquina ${codigo}`).slice(0, 255), categoriaId, (unidade || 'UN').slice(0, 20)]
+      );
+      if (ins.rows[0]) {
+        await db.query(
+          `INSERT INTO estoques (material_id, quantidade, nivel_minimo) VALUES ($1, 0, 0)
+           ON CONFLICT (material_id) DO NOTHING`,
+          [ins.rows[0].id]
+        );
+        cadastradas++;
+      }
+    } catch (e) {
+      console.error(`[SyncERP] Maquina ${codigo} nao cadastrada:`, e.message);
+    }
+  }
+
+  // Atualiza o saldo de todas as máquinas do catálogo
+  const doCatalogo = await db.query(
+    `SELECT codigo FROM materiais WHERE categoria_id = $1 AND ativo = TRUE`, [categoriaId]
+  );
+  const codigos = doCatalogo.rows.map(r => r.codigo);
+  const quantidades = codigos.map(c => Math.max(0, Math.round(saldos[c] || 0)));
+  if (codigos.length) {
+    await db.query(
+      `UPDATE materiais SET quantidade_erp = data.qtd, ultima_sync_erp = NOW()
+       FROM (SELECT UNNEST($1::text[]) AS cod, UNNEST($2::int[]) AS qtd) AS data
+       WHERE materiais.codigo = data.cod`,
+      [codigos, quantidades]
+    );
+  }
+
+  const resultado = {
+    perfis, registros_erp: linhas.length || 0, cadastradas, atualizadas: codigos.length,
+    duracao: ((Date.now() - inicio) / 1000).toFixed(1),
+  };
+  console.log('[SyncERP] Maquinas:', JSON.stringify(resultado));
+  return resultado;
 }
