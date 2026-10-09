@@ -325,24 +325,54 @@ export async function sincronizarMaquinas(db) {
   // 2. Desfaz o que a versão automática anterior colocou fora da lista
   const desfeitas = await desfazerAutomaticas(db, categoriaId, codigosLista);
 
-  // 3. Saldo do Zen, código a código (mesmo número da tela de estoque)
+  // 3. Saldo do Zen (mesmo número da tela de estoque): perfil MAQ pelo
+  //    stockCube, tirando o que está no endereço de avaria (AVA). Os itens
+  //    da lista que não são perfil MAQ no Zen são consultados um a um.
   const token = await getToken();
   const saldos = {};
-  const perfis = [];
-  const registrosErp = 0;
   const doCatalogo = await db.query(
     `SELECT codigo FROM materiais WHERE categoria_id = $1 AND ativo = TRUE`, [categoriaId]
   );
   const codigos = doCatalogo.rows.map(r => r.codigo);
-  // O saldo das máquinas segue a tela de estoque do Zen: registros livres,
-  // sem o que está em endereço de avaria (AVA).
-  const foraDoPerfil = codigos;
-  for (let i = 0; i < foraDoPerfil.length; i += 10) {   // 10 por vez
-    await Promise.all(foraDoPerfil.slice(i, i + 10).map(async codigo => {
+  let registrosErp = 0;
+  const perfis = await idsPerfisMaquinas(token).catch(() => []);
+  let avaOk = false;
+  const ava = {};
+  if (perfis.length) {
+    const linhas = await buscaEstoque(perfis);
+    for (const item of (Array.isArray(linhas) ? linhas : [])) {
+      if (!item.product_code) continue;
+      saldos[item.product_code] = (saldos[item.product_code] || 0) + (item.sum_quantity || 0);
+    }
+    registrosErp = Array.isArray(linhas) ? linhas.length : 0;
+    try {
+      for (const end of ENDERECOS_IGNORADOS) {
+        for (let pagina = 0; pagina < 40; pagina++) {
+          const itens = await zenGet(token,
+            `/material/stock?q=${encodeURIComponent(`address.code=="${end}"`)}&first=${pagina * 500}&max=500`);
+          if (!Array.isArray(itens) || !itens.length) break;
+          for (const it of itens) {
+            const cod = it.productPacking?.product?.code;
+            if (cod && it.status === 'FREE') ava[cod] = (ava[cod] || 0) + (Number(it.quantity) || 0);
+          }
+          if (itens.length < 500) break;
+        }
+      }
+      avaOk = true;
+    } catch (e) {
+      console.error('[SyncERP] Maquinas: consulta do endereço de avaria falhou:', e.message);
+    }
+  }
+  // Sem o desconto da avaria ou fora do perfil MAQ: consulta código a código
+  const umAUm = codigos.filter(c => !avaOk || saldos[c] === undefined);
+  for (const c of codigos) if (!umAUm.includes(c)) saldos[c] = (saldos[c] || 0) - (ava[c] || 0);
+  for (let i = 0; i < umAUm.length; i += 10) {   // 10 por vez
+    await Promise.all(umAUm.slice(i, i + 10).map(async codigo => {
       try { saldos[codigo] = await saldoPorCodigo(token, codigo); }
       catch (e) { console.error(`[SyncERP] Saldo ${codigo}:`, e.message); }
     }));
   }
+  const foraDoPerfil = umAUm;
   const quantidades = codigos.map(c => Math.max(0, Math.round(saldos[c] || 0)));
   if (codigos.length) {
     await db.query(
@@ -357,7 +387,7 @@ export async function sincronizarMaquinas(db) {
     lista: codigosLista.length, cadastradas, movidas_para_maquinas: movidas,
     voltaram_para_pecas: desfeitas.voltaramPecas, desativadas_fora_da_lista: desfeitas.desativadas,
     perfis, registros_erp: registrosErp, fora_do_perfil_maq: foraDoPerfil.length,
-    atualizadas: codigos.length,
+    atualizadas: codigos.length, avaria_descontada: avaOk, saldo_99486: saldos['99486'],
     duracao: ((Date.now() - inicio) / 1000).toFixed(1),
   };
   console.log('[SyncERP] Maquinas:', JSON.stringify(resultado));
