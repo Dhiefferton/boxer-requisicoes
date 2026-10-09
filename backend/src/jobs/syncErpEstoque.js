@@ -329,44 +329,44 @@ export async function sincronizarMaquinas(db) {
   const desfeitas = await desfazerAutomaticas(db, categoriaId, codigosLista);
 
   // 3. Saldo do Zen com os mesmos filtros da tela "Pesquisar estoques":
-  //    Tipo REGULAR, Endereço TEK_SP/MAQ (id 3155), Reserva AVAILABLE (id 0).
-  //    Uma consulta só (paginada) para todo o endereço, somando por produto.
+  //    Tipo REGULAR, Endereço TEK_SP/MAQ (id 3155), Reserva AVAILABLE (id 0),
+  //    consultado produto a produto. Para não estourar o tempo da função,
+  //    para depois de ~150s; os que ficaram são os primeiros da próxima rodada
+  //    (ordem: sincronizado há mais tempo primeiro).
   const token = await getToken();
   const saldos = {};
   const doCatalogo = await db.query(
-    `SELECT codigo FROM materiais WHERE categoria_id = $1 AND ativo = TRUE`, [categoriaId]
+    `SELECT codigo FROM materiais WHERE categoria_id = $1 AND ativo = TRUE
+      ORDER BY ultima_sync_erp NULLS FIRST, codigo`, [categoriaId]
   );
   const codigos = doCatalogo.rows.map(r => r.codigo);
-  const filtroMaq = `type=="REGULAR";address.id==${ENDERECO_MAQ_ID};reservation.id==0`;
+  const filtroBase = `type=="REGULAR";address.id==${ENDERECO_MAQ_ID};reservation.id==0`;
+  const limite = Date.now() + 150 * 1000;
   let registrosErp = 0;
-  for (let pagina = 0; pagina < 100; pagina++) {
-    const itens = await zenGet(token,
-      `/material/stock?q=${encodeURIComponent(filtroMaq)}&first=${pagina * 500}&max=500`);
-    if (!Array.isArray(itens) || !itens.length) break;
-    registrosErp += itens.length;
-    for (const it of itens) {
-      const cod = it.productPacking?.product?.code;
-      if (cod) saldos[cod] = (saldos[cod] || 0) + (Number(it.quantity) || 0);
-    }
-    if (itens.length < 500) break;
+  for (let i = 0; i < codigos.length && Date.now() < limite; i += 15) {
+    await Promise.all(codigos.slice(i, i + 15).map(async codigo => {
+      try {
+        const itens = await stockPorFiltro(token, `productPacking.product.code=="${codigo}";${filtroBase}`, 1000);
+        registrosErp += itens.length;
+        saldos[codigo] = itens.reduce((t, it) => t + (Number(it.quantity) || 0), 0);
+      } catch (e) { console.error(`[SyncERP] Saldo ${codigo}:`, e.message); }
+    }));
   }
-  const perfis = [];
-  const foraDoPerfil = codigos.filter(c => saldos[c] === undefined);
-  const quantidades = codigos.map(c => Math.max(0, Math.round(saldos[c] || 0)));
-  if (codigos.length) {
+  const feitos = codigos.filter(c => saldos[c] !== undefined);
+  if (feitos.length) {
     await db.query(
       `UPDATE materiais SET quantidade_erp = data.qtd, ultima_sync_erp = NOW()
        FROM (SELECT UNNEST($1::text[]) AS cod, UNNEST($2::int[]) AS qtd) AS data
        WHERE materiais.codigo = data.cod`,
-      [codigos, quantidades]
+      [feitos, feitos.map(c => Math.max(0, Math.round(saldos[c])))]
     );
   }
 
   const resultado = {
     lista: codigosLista.length, cadastradas, movidas_para_maquinas: movidas,
     voltaram_para_pecas: desfeitas.voltaramPecas, desativadas_fora_da_lista: desfeitas.desativadas,
-    filtro: filtroMaq, registros_erp: registrosErp, sem_saldo_no_endereco: foraDoPerfil.length,
-    atualizadas: codigos.length, saldo_99486: saldos['99486'] || 0,
+    filtro: filtroBase, registros_erp: registrosErp, pendentes_proxima_rodada: codigos.length - feitos.length,
+    atualizadas: feitos.length, saldo_99486: saldos['99486'],
     duracao: ((Date.now() - inicio) / 1000).toFixed(1),
   };
   console.log('[SyncERP] Maquinas:', JSON.stringify(resultado));
