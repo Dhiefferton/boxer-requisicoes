@@ -85,11 +85,13 @@ export default function PedidosOrcamento() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={() => setVerMovimentacao(true)} title="Relatório de movimentação"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
-              bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
-            <Activity size={13} /> Movimentação
-          </button>
+          {usuario?.perfil === 'admin' && (
+            <button onClick={() => setVerMovimentacao(true)} title="Relatório de movimentação"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
+                bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
+              <Activity size={13} /> Movimentação
+            </button>
+          )}
           {podeEditar && (
           <button onClick={sincronizarPipefy} disabled={sincronizando}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
@@ -106,7 +108,7 @@ export default function PedidosOrcamento() {
         </div>
       </div>
 
-      {verMovimentacao && <PainelMovimentacao onFechar={() => setVerMovimentacao(false)} />}
+      {verMovimentacao && usuario?.perfil === 'admin' && <PainelMovimentacao onFechar={() => setVerMovimentacao(false)} />}
 
       {/* ── Cards de resumo ──────────────────────────────── */}
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
@@ -266,14 +268,16 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
       <div className="flex items-center gap-1.5">
         <FileText size={13} className="text-[var(--c-destaque)] shrink-0" />
         <p className="text-sm text-[var(--c-texto)] font-medium flex-1">{pedido.cliente_nome || pedido.referencia}</p>
-        <button onClick={() => setVerHistorico(true)} title="Histórico deste card"
-          className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><History size={13} /></button>
+        {ehAdmin && (
+          <button onClick={() => setVerHistorico(true)} title="Histórico deste card"
+            className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><History size={13} /></button>
+        )}
         {pedido.pipefy_url && (
           <a href={pedido.pipefy_url} target="_blank" rel="noreferrer" title="Abrir no Pipefy"
             className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
         )}
       </div>
-      {verHistorico && (
+      {ehAdmin && verHistorico && (
         <PainelMovimentacao pedidoInicial={{ id: pedido.id, nome: pedido.cliente_nome || pedido.referencia }}
           onFechar={() => setVerHistorico(false)} />
       )}
