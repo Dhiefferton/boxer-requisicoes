@@ -138,7 +138,7 @@ export async function debugEstoquePorCodigo(codigo) {
   return itens; // retorna o objeto CRU completo, sem filtrar campos
 }
 
-async function buscaEstoque(perfis = [1002, 1003]) {
+async function buscaEstoque(perfis = [1002, 1003], extras = {}) {
   const token = await getToken();
   const url = `${ZEN_BASE_URL}/system/data/dataSourceOpRead`;
   const body = {
@@ -147,7 +147,8 @@ async function buscaEstoque(perfis = [1002, 1003]) {
       'SHOW_PRODUCT': true,
       'SHOW_PRODUCT_PACKING': true,
       'PRODUCT_PROFILE_IDS': perfis,
-      'TYPE_LIST': ["REGULAR"]
+      'TYPE_LIST': ["REGULAR"],
+      ...extras,
     }
   };
 
@@ -341,16 +342,43 @@ export async function sincronizarMaquinas(db) {
   );
   const codigos = doCatalogo.rows.map(r => r.codigo);
   const filtroBase = `type=="REGULAR";address.id==${ENDERECO_MAQ_ID};reservation.id==0`;
-  const limite = Date.now() + 150 * 1000;
   let registrosErp = 0;
-  for (let i = 0; i < codigos.length && Date.now() < limite; i += 15) {
-    await Promise.all(codigos.slice(i, i + 15).map(async codigo => {
-      try {
-        const itens = await stockPorFiltro(token, `productPacking.product.code=="${codigo}";${filtroBase}`, 1000);
-        registrosErp += itens.length;
-        saldos[codigo] = itens.reduce((t, it) => t + (Number(it.quantity) || 0), 0);
-      } catch (e) { console.error(`[SyncERP] Saldo ${codigo}:`, e.message); }
-    }));
+  let modo = 'lote';
+
+  // 3a. Em lote (igual às peças): stockCube aberto por endereço e reserva,
+  //     ficando só com Endereço MAQ + Reserva AVAILABLE. Uma chamada só.
+  try {
+    const perfisCubo = [...new Set([...(await idsPerfisMaquinas(token).catch(() => [])), 1002, 1003])];
+    let linhas;
+    try {
+      linhas = await buscaEstoque(perfisCubo, { SHOW_ADDRESS: true, SHOW_RESERVATION: true, ADDRESS_IDS: [ENDERECO_MAQ_ID] });
+    } catch {
+      linhas = await buscaEstoque(perfisCubo, { SHOW_ADDRESS: true, SHOW_RESERVATION: true });
+    }
+    linhas = Array.isArray(linhas) ? linhas : [];
+    registrosErp = linhas.length;
+    if (!linhas.some(l => l.address_id != null)) throw new Error('stockCube não separou por endereço');
+    const naLista = new Set(codigos);
+    for (const l of linhas) {
+      if (!naLista.has(l.product_code)) continue;
+      if (Number(l.address_id) !== ENDERECO_MAQ_ID) continue;
+      if (l.reservation_id != null && Number(l.reservation_id) !== 0) continue;
+      saldos[l.product_code] = (saldos[l.product_code] || 0) + (Number(l.sum_quantity) || 0);
+    }
+    for (const c of codigos) if (saldos[c] === undefined) saldos[c] = 0;
+  } catch (e) {
+    // 3b. Plano B: produto a produto (lento), parando em ~150s
+    modo = 'produto a produto (' + e.message + ')';
+    const limite = Date.now() + 150 * 1000;
+    for (let i = 0; i < codigos.length && Date.now() < limite; i += 15) {
+      await Promise.all(codigos.slice(i, i + 15).map(async codigo => {
+        try {
+          const itens = await stockPorFiltro(token, `productPacking.product.code=="${codigo}";${filtroBase}`, 1000);
+          registrosErp += itens.length;
+          saldos[codigo] = itens.reduce((t, it) => t + (Number(it.quantity) || 0), 0);
+        } catch (e2) { console.error(`[SyncERP] Saldo ${codigo}:`, e2.message); }
+      }));
+    }
   }
   const feitos = codigos.filter(c => saldos[c] !== undefined);
   if (feitos.length) {
@@ -365,7 +393,7 @@ export async function sincronizarMaquinas(db) {
   const resultado = {
     lista: codigosLista.length, cadastradas, movidas_para_maquinas: movidas,
     voltaram_para_pecas: desfeitas.voltaramPecas, desativadas_fora_da_lista: desfeitas.desativadas,
-    filtro: filtroBase, registros_erp: registrosErp, pendentes_proxima_rodada: codigos.length - feitos.length,
+    modo, filtro: filtroBase, registros_erp: registrosErp, pendentes_proxima_rodada: codigos.length - feitos.length,
     atualizadas: feitos.length, saldo_99486: saldos['99486'],
     duracao: ((Date.now() - inicio) / 1000).toFixed(1),
   };
