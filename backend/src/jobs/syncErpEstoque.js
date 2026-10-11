@@ -400,3 +400,6 @@ export async function sincronizarMaquinas(db) {
   console.log('[SyncERP] Maquinas:', JSON.stringify(resultado));
   return resultado;
 }
+
+// Usados pela tela de Inventário
+export { buscaEstoque, stockPorFiltro, ENDERECO_MAQ_ID };
