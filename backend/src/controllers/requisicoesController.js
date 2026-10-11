@@ -366,11 +366,14 @@ export async function relatorioRequisicoes(req, res, next) {
         r.id, r.status, r.created_at,
         u.nome AS solicitante_nome,
         d.nome AS departamento_nome,
-        i.codigo_snapshot, i.descricao_snapshot, i.quantidade
+        i.codigo_snapshot, i.descricao_snapshot, i.quantidade,
+        c.nome AS categoria_nome
       FROM requisicoes r
       JOIN usuarios u ON u.id = r.usuario_id
       LEFT JOIN departamentos d ON d.id = u.departamento_id
       JOIN itens_requisicao i ON i.requisicao_id = r.id
+      LEFT JOIN materiais m ON m.id = i.material_id
+      LEFT JOIN categorias c ON c.id = m.categoria_id
       ORDER BY r.id DESC
     `);
     res.json({ itens: result.rows });
