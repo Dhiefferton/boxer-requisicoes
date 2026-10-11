@@ -56,10 +56,11 @@ export default function PainelOperador() {
         'Status':       i.status,
         'Codigo':       i.codigo_snapshot,
         'Descricao':    i.descricao_snapshot,
+        'Categoria':    i.categoria_nome || '-',
         'Quantidade':   i.quantidade,
       }));
       const ws = XLSX.utils.json_to_sheet(linhas);
-      ws['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 18 }, { wch: 45 }, { wch: 12 }];
+      ws['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 25 }, { wch: 25 }, { wch: 15 }, { wch: 18 }, { wch: 45 }, { wch: 20 }, { wch: 12 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Requisicoes');
       const dataHoje = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
