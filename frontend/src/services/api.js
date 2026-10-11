@@ -74,6 +74,21 @@ export const pedidosOrcamentoService = {
   movimentos: (params)           => api.get('/pedidos-orcamento/movimentos', { params, timeout: 30000 }),
 };
 
+export const inventarioService = {
+  listar:       ()                  => api.get('/inventarios'),
+  indicadores:  (meses)             => api.get('/inventarios/indicadores', { params: { meses }, timeout: 30000 }),
+  previa:       (filtros)           => api.post('/inventarios/previa', filtros),
+  criar:        (filtros)           => api.post('/inventarios', filtros, { timeout: 120000 }),
+  detalhar:     (id)                => api.get(`/inventarios/${id}`, { timeout: 30000 }),
+  meu:          (id)                => api.get(`/inventarios/${id}/meu`, { timeout: 20000 }),
+  buscar:       (id, texto)         => api.get(`/inventarios/${id}/buscar`, { params: { texto }, timeout: 30000 }),
+  contar:       (id, itemId, dados) => api.post(`/inventarios/${id}/itens/${itemId}/contar`, dados, { timeout: 30000 }),
+  historico:    (id, itemId)        => api.get(`/inventarios/${id}/itens/${itemId}/historico`),
+  recontar:     (id, itens)         => api.post(`/inventarios/${id}/recontar`, { itens }),
+  finalizar:    (id)                => api.post(`/inventarios/${id}/finalizar`),
+  cancelar:     (id)                => api.post(`/inventarios/${id}/cancelar`),
+};
+
 export const requisicoesService = {
   criar:       (dados)           => api.post('/requisicoes', dados),
   listar:      (params)          => api.get('/requisicoes', { params }),
