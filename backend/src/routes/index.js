@@ -33,6 +33,11 @@ import {
 import {
   listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy, retirarRecusadas, atualizarItensZen, listarMovimentos
 } from '../controllers/pedidosOrcamentoController.js';
+import {
+  listarInventarios, previaInventario, criarInventario, detalharInventario, meuInventario,
+  buscarItemInventario, contarItem, pedirRecontagem, historicoItem, finalizarInventario,
+  cancelarInventario, indicadoresInventario,
+} from '../controllers/inventarioController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
 
@@ -148,5 +153,20 @@ router.patch('/necessidades-pecas/:id',             autenticar, exigirPerfil('ad
 router.post('/necessidades-pecas/:id/aprovar',      autenticar, exigirPerfil('admin'), aprovarNecessidade);
 router.post('/necessidades-pecas/:id/recusar',      autenticar, exigirPerfil('admin'), recusarNecessidade);
 router.post('/necessidades-pecas/:id/enviar',       autenticar, exigirPerfil('admin'), enviarOutroSistema);
+
+// Inventário — admin e operador
+const inv = [autenticar, exigirPerfil('operador', 'admin')];
+router.get('/inventarios',                         ...inv, listarInventarios);
+router.get('/inventarios/indicadores',             ...inv, indicadoresInventario);
+router.post('/inventarios/previa',                 ...inv, previaInventario);
+router.post('/inventarios',                        ...inv, criarInventario);
+router.get('/inventarios/:id',                     ...inv, detalharInventario);
+router.get('/inventarios/:id/meu',                 ...inv, meuInventario);
+router.get('/inventarios/:id/buscar',              ...inv, buscarItemInventario);
+router.post('/inventarios/:id/itens/:itemId/contar', ...inv, contarItem);
+router.get('/inventarios/:id/itens/:itemId/historico', ...inv, historicoItem);
+router.post('/inventarios/:id/recontar',           ...inv, pedirRecontagem);
+router.post('/inventarios/:id/finalizar',          ...inv, finalizarInventario);
+router.post('/inventarios/:id/cancelar',           autenticar, exigirPerfil('admin'), cancelarInventario);
 
 export default router;
