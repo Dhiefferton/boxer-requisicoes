@@ -19,6 +19,10 @@ import MRP             from './pages/operador/MRP';
 import Compras         from './pages/operador/Compras';
 import NecessidadePecas from './pages/operador/NecessidadePecas';
 import PedidosOrcamento from './pages/operador/PedidosOrcamento';
+import Inventario       from './pages/operador/Inventario';
+import InventarioDetalhe from './pages/operador/InventarioDetalhe';
+import InventarioContagem from './pages/operador/InventarioContagem';
+import InventarioIndicadores from './pages/operador/InventarioIndicadores';
 import { podeVerOrcamentos } from './utils/acessoOrcamentos';
 import { Spinner } from './components/ui';
 
@@ -119,6 +123,18 @@ export default function App() {
             } />
             <Route path="/pedidos-orcamento" element={
               <RotaOrcamentos><PedidosOrcamento /></RotaOrcamentos>
+            } />
+            <Route path="/inventario" element={
+              <RotaPerfil perfis={['operador', 'admin']}><Inventario /></RotaPerfil>
+            } />
+            <Route path="/inventario/indicadores" element={
+              <RotaPerfil perfis={['operador', 'admin']}><InventarioIndicadores /></RotaPerfil>
+            } />
+            <Route path="/inventario/:id" element={
+              <RotaPerfil perfis={['operador', 'admin']}><InventarioDetalhe /></RotaPerfil>
+            } />
+            <Route path="/inventario/:id/contar" element={
+              <RotaPerfil perfis={['operador', 'admin']}><InventarioContagem /></RotaPerfil>
             } />
             <Route path="/"  element={<Navigate to="/catalogo" replace />} />
             <Route path="*"  element={<Navigate to="/catalogo" replace />} />
