@@ -75,7 +75,7 @@ export default function PedidosOrcamento() {
 
   return (
     // Tela grande (5 colunas): tela travada na altura da janela e cada coluna rola sozinha
-    <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-6.6rem)]">
+    <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-3.1rem)]">
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
