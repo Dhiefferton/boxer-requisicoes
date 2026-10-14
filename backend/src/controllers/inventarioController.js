@@ -93,12 +93,18 @@ function garantirEstrutura() {
 }
 
 // ── Zen ────────────────────────────────────────────────────────
+// Só valem endereços de estoque físico: os que começam com PE (PE.A…, PEC…).
+// AVA, TERCEIRO, DEVOLUCAO, MERCADO_LIVRE etc. ficam de fora. Máquinas usam o MAQ.
+const enderecoValido = (e, categoria) =>
+  /^PE/i.test(String(e || '').trim()) || (categoria === 'Máquinas' && String(e || '').trim().toUpperCase() === 'MAQ');
+
 // Endereços (com saldo) de todos os produtos, numa chamada só
 async function enderecosZenEmLote() {
   const linhas = await buscaEstoque([1001, 1002, 1003], { SHOW_ADDRESS: true });
   const mapa = {};
   for (const l of (Array.isArray(linhas) ? linhas : [])) {
     if (!l.product_code || !l.address_code || !(Number(l.sum_quantity) > 0)) continue;
+    if (!/^PE/i.test(String(l.address_code).trim()) && String(l.address_code).trim().toUpperCase() !== 'MAQ') continue;
     (mapa[l.product_code] ||= []).push({ e: l.address_code, q: Number(l.sum_quantity) });
   }
   const fmt = {};
@@ -122,7 +128,7 @@ async function saldoZenAgora(codigo, categoria) {
     const q = Number(it.quantity) || 0;
     saldo += q;
     const e = it.address?.code;
-    if (e && q > 0) porEndereco[e] = (porEndereco[e] || 0) + q;
+    if (e && q > 0 && enderecoValido(e, categoria)) porEndereco[e] = (porEndereco[e] || 0) + q;
   }
   const endereco = Object.entries(porEndereco).sort((a, b) => b[1] - a[1]).map(([e]) => e).join(' / ');
   return { saldo, endereco };
@@ -263,7 +269,7 @@ export async function criarInventario(req, res, next) {
               AS d(mid, cod, descr, cat, cur, ende, saldo)
        ON CONFLICT (inventario_id, codigo) DO NOTHING`,
       [id, itens.map(i => i.id), itens.map(i => i.codigo), itens.map(i => i.descricao), itens.map(i => i.categoria),
-       itens.map(i => i.curva || ''), itens.map(i => enderecos[i.codigo] || ''), itens.map(i => Number(i.saldo) || 0)]
+       itens.map(i => i.curva || ''), itens.map(i => (enderecos[i.codigo] || '').split(' / ').filter(e => enderecoValido(e, i.categoria)).join(' / ')), itens.map(i => Number(i.saldo) || 0)]
     );
     res.status(201).json({ inventario: inv.rows[0], itens: itens.length, aviso: avisoEndereco });
   } catch (err) { next(err); }
@@ -339,9 +345,9 @@ export async function buscarItemInventario(req, res, next) {
     // Endereço atualizado do Zen (sem mostrar saldo — contagem às cegas)
     try {
       const z = await saldoZenAgora(item.codigo, item.categoria);
-      if (z.endereco && z.endereco !== item.endereco) {
-        await query(`UPDATE inventario_itens SET endereco = $1 WHERE id = $2`, [z.endereco, item.id]);
-        item.endereco = z.endereco;
+      if ((z.endereco || null) !== (item.endereco || null)) {
+        await query(`UPDATE inventario_itens SET endereco = $1 WHERE id = $2`, [z.endereco || null, item.id]);
+        item.endereco = z.endereco || null;
       }
     } catch (e) { console.error('[Inventario] endereco zen:', e.message); }
     const { saldo_inicial, saldo_zen, diferenca, ...cego } = item;
@@ -368,7 +374,7 @@ export async function contarItem(req, res, next) {
     let endereco = item.endereco;
     try {
       const z = await saldoZenAgora(item.codigo, item.categoria);
-      saldo = z.saldo; endereco = z.endereco || endereco;
+      saldo = z.saldo; endereco = z.endereco || null;
     } catch (e) { console.error('[Inventario] saldo zen:', e.message); }
 
     const status = statusDaContagem(quantidade, saldo);
