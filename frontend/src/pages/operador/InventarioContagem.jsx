@@ -5,7 +5,7 @@
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Camera, CameraOff, Check, List, Minus, Plus, ScanLine, Timer, X, MapPin } from 'lucide-react';
+import { ArrowLeft, Camera, CameraOff, Check, List, Minus, Plus, ScanLine, Timer, X, MapPin, SkipForward, Navigation } from 'lucide-react';
 import { inventarioService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { TagCurva, TagStatus, fmtCrono, fmtHora, fmtNum } from '../../components/inventario/util';
@@ -101,6 +101,7 @@ export default function InventarioContagem() {
   const [ok, setOk] = useState(null);
   const [verPendentes, setVerPendentes] = useState(false);
   const [agora, setAgora] = useState(Date.now());
+  const [pulados, setPulados] = useState([]);
   const inputQtd = useRef(null);
   const inputCodigo = useRef(null);
 
@@ -117,6 +118,16 @@ export default function InventarioContagem() {
   const desde = ultima ? (agora - ultima) / 1000 : 0;
   const crono = (info?.meu_tempo_seg || 0) + (ultima && desde <= (info?.pausa_seg || 600) ? desde : 0);
   const pausado = ultima && desde > (info?.pausa_seg || 600);
+
+  // Rota de contagem: pendentes em ordem de endereço (A → Z); os pulados vão para o fim
+  const fila = info?.pendentes || [];
+  const proximo = fila.find(p => !pulados.includes(p.id)) || fila.find(p => p.id === pulados[0]) || null;
+  const posicao = proximo ? fila.indexOf(proximo) + 1 : 0;
+  const seguinte = proximo ? fila.slice(fila.indexOf(proximo) + 1).find(p => !pulados.includes(p.id)) : null;
+  function pular() {
+    if (!proximo) return;
+    setPulados(l => [...l.filter(x => x !== proximo.id), proximo.id]);
+  }
 
   async function buscar(texto) {
     const t = String(texto || '').trim();
@@ -196,6 +207,41 @@ export default function InventarioContagem() {
               <div className="min-w-0 text-sm"><p className="text-green-300 font-semibold">Contagem registrada</p>
                 <p className="text-xs text-[var(--c-suave)] truncate">{ok.codigo} · {fmtNum(ok.quantidade)} un · {fmtHora(ok.hora)}</p></div>
             </div>
+          )}
+          {proximo ? (
+            <div className="bg-[var(--c-superficie)] border-2 border-[var(--c-destaque)]/60 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-[var(--c-suave)]">
+                <span className="flex items-center gap-1"><Navigation size={12} /> Próximo da rota (endereço A → Z)</span>
+                <span>{fmtNum(posicao)} de {fmtNum(fila.length)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin size={20} className="text-[var(--c-destaque)] shrink-0" />
+                <span className={`font-mono font-extrabold text-2xl break-all ${proximo.endereco ? 'text-[var(--c-texto)]' : 'text-amber-400 text-base'}`}>
+                  {proximo.endereco || 'Sem endereço PE no Zen'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono font-bold text-[var(--c-destaque)]">{proximo.codigo}</span>
+                <TagCurva curva={proximo.curva} longa />
+                {proximo.status === 'recontagem' && <TagStatus status="recontagem" />}
+              </div>
+              <p className="text-sm font-semibold text-[var(--c-texto)]">{proximo.descricao}</p>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => buscar(proximo.codigo)} disabled={buscando}
+                  className="flex-1 py-3 rounded-xl bg-[var(--c-destaque)] text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-40">
+                  <Check size={17} /> Contar este
+                </button>
+                <button onClick={pular} disabled={fila.length < 2}
+                  className="px-4 py-3 rounded-xl border border-[var(--c-borda)] text-[var(--c-texto)] text-sm flex items-center gap-1.5 disabled:opacity-40">
+                  <SkipForward size={15} /> Pular
+                </button>
+              </div>
+              {seguinte && (
+                <p className="text-[11px] text-[var(--c-suave)] truncate">Depois: <span className="font-mono">{seguinte.endereco || 'sem endereço'}</span> · {seguinte.codigo}</p>
+              )}
+            </div>
+          ) : info && (
+            <div className="text-center text-sm text-green-300 bg-green-500/10 border border-green-500/30 rounded-2xl py-4">Todos os itens foram contados.</div>
           )}
           {camera ? <LeitorQR ativo={camera} onLer={buscar} /> : (
             <button onClick={() => setCamera(true)} className="w-full h-24 rounded-2xl border border-dashed border-[var(--c-borda)] text-[var(--c-suave)] flex flex-col items-center justify-center gap-1">
