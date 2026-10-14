@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boxer — login Microsoft</title>
+<style>body{margin:0;font-family:system-ui,sans-serif;background:#0f1117;color:#c9cdd6;display:flex;align-items:center;justify-content:center;height:100vh}</style>
+</head>
+<body>
+<p>Login concluído. Pode fechar esta janela.</p>
+<script>
+  // Devolve o resultado do login para a tela que abriu o popup
+  (function () {
+    var dados = { tipo: 'ms-auth', url: location.href };
+    try { if (window.opener) window.opener.postMessage(dados, location.origin); } catch (e) {}
+    try { var c = new BroadcastChannel('boxer-ms-auth'); c.postMessage(dados); c.close(); } catch (e) {}
+    try { localStorage.setItem('boxer_ms_auth', JSON.stringify(dados)); } catch (e) {}
+    setTimeout(function () { window.close(); }, 300);
+  })();
+</script>
+</body>
+</html>
