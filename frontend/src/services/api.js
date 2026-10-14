@@ -87,6 +87,8 @@ export const inventarioService = {
   recontar:     (id, itens)         => api.post(`/inventarios/${id}/recontar`, { itens }),
   finalizar:    (id)                => api.post(`/inventarios/${id}/finalizar`),
   cancelar:     (id)                => api.post(`/inventarios/${id}/cancelar`),
+  planilhaConfig: ()                => api.get('/inventarios/planilha/config'),
+  marcarPlanilha: (id)              => api.post(`/inventarios/${id}/planilha`),
 };
 
 export const requisicoesService = {
