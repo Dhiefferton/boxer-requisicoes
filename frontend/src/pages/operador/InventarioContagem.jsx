@@ -185,6 +185,7 @@ export default function InventarioContagem() {
       if (navigator.vibrate) navigator.vibrate(60);
       setItem(data.item); setQtd(''); setObs(''); setCodigo(''); setCamera(false);
     } catch (e) {
+      if (e.response?.status === 410) { alert(e.response.data.erro); navigate('/inventario'); return; }
       setErro(e.response?.data?.erro || 'Erro ao buscar o item.');
       if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
     } finally { setBuscando(false); }
