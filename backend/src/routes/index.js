@@ -37,6 +37,7 @@ import {
   listarInventarios, previaInventario, criarInventario, detalharInventario, meuInventario,
   buscarItemInventario, contarItem, pedirRecontagem, historicoItem, finalizarInventario,
   cancelarInventario, indicadoresInventario,
+  configPlanilha, marcarPlanilha,
 } from '../controllers/inventarioController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
@@ -158,6 +159,7 @@ router.post('/necessidades-pecas/:id/enviar',       autenticar, exigirPerfil('ad
 const inv = [autenticar, exigirPerfil('operador', 'admin')];
 router.get('/inventarios',                         ...inv, listarInventarios);
 router.get('/inventarios/indicadores',             ...inv, indicadoresInventario);
+router.get('/inventarios/planilha/config',         ...inv, configPlanilha);
 router.post('/inventarios/previa',                 ...inv, previaInventario);
 router.post('/inventarios',                        ...inv, criarInventario);
 router.get('/inventarios/:id',                     ...inv, detalharInventario);
@@ -167,6 +169,7 @@ router.post('/inventarios/:id/itens/:itemId/contar', ...inv, contarItem);
 router.get('/inventarios/:id/itens/:itemId/historico', ...inv, historicoItem);
 router.post('/inventarios/:id/recontar',           ...inv, pedirRecontagem);
 router.post('/inventarios/:id/finalizar',          ...inv, finalizarInventario);
+router.post('/inventarios/:id/planilha',           ...inv, marcarPlanilha);
 router.post('/inventarios/:id/cancelar',           autenticar, exigirPerfil('admin'), cancelarInventario);
 
 export default router;
