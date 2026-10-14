@@ -102,10 +102,11 @@ const enderecoValido = (e, categoria) =>
 
 // Endereços (com saldo) de todos os produtos, numa chamada só
 async function enderecosZenEmLote() {
-  const linhas = await buscaEstoque([1001, 1002, 1003], { SHOW_ADDRESS: true });
+  const linhas = await buscaEstoque([1001, 1002, 1003], { SHOW_ADDRESS: true, SHOW_RESERVATION: true });
   const mapa = {};
   for (const l of (Array.isArray(linhas) ? linhas : [])) {
     if (!l.product_code || !l.address_code || !(Number(l.sum_quantity) > 0)) continue;
+    if (l.reservation_id != null && Number(l.reservation_id) !== 0) continue; // só reserva SISTEMA (AVAILABLE)
     if (!/^PE/i.test(String(l.address_code).trim()) && String(l.address_code).trim().toUpperCase() !== 'MAQ') continue;
     (mapa[l.product_code] ||= []).push({ e: l.address_code, q: Number(l.sum_quantity) });
   }
@@ -122,7 +123,7 @@ async function saldoZenAgora(codigo, categoria) {
   const maq = categoria === 'Máquinas';
   const filtro = maq
     ? `productPacking.product.code=="${codigo}";type=="REGULAR";address.id==${ENDERECO_MAQ_ID};reservation.id==0`
-    : `productPacking.product.code=="${codigo}";type=="REGULAR"`;
+    : `productPacking.product.code=="${codigo}";type=="REGULAR";reservation.id==0`;
   const itens = await stockPorFiltro(token, filtro, 1000);
   let saldo = 0;
   const porEndereco = {};
