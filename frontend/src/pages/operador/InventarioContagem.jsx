@@ -119,7 +119,6 @@ export default function InventarioContagem() {
   useEffect(() => { const t = setInterval(() => setAgora(Date.now()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { if (item) setTimeout(() => inputQtd.current?.focus(), 50); }, [item]);
   // No modo coletor, deixa o campo de código sempre pronto para a próxima leitura
-  useEffect(() => { if (coletor && !item && !verPendentes) setTimeout(() => inputCodigo.current?.focus(), 50); }, [coletor, item, verPendentes, ok]);
 
 
   // Leitura do coletor: teclas chegando muito rápidas (< 50 ms entre elas) e
@@ -291,31 +290,12 @@ export default function InventarioContagem() {
           ) : info && (
             <div className="text-center text-sm text-green-300 bg-green-500/10 border border-green-500/30 rounded-2xl py-4">Todos os itens foram contados.</div>
           )}
-          {camera ? <LeitorQR ativo={camera} onLer={buscar} /> : coletor ? (
-            <div onClick={() => inputCodigo.current?.focus()} className="w-full h-20 rounded-2xl border border-dashed border-[var(--c-destaque)]/60 bg-[var(--c-destaque)]/5 text-[var(--c-destaque)] flex flex-col items-center justify-center gap-1">
-              <Barcode size={22} /> <span className="text-sm font-medium">{buscando ? 'Buscando…' : 'Coletor pronto — bipe o código'}</span>
-            </div>
-          ) : (
-            <button onClick={() => { setCamera(true); setUsarCamera(true); }} className="w-full h-24 rounded-2xl border border-dashed border-[var(--c-borda)] text-[var(--c-suave)] flex flex-col items-center justify-center gap-1">
-              <Camera size={22} /> <span className="text-sm">Abrir câmera</span>
-            </button>
-          )}
-          <form onSubmit={e => { e.preventDefault(); buscar(codigo); }} className="flex gap-2">
-            <input ref={inputCodigo} value={codigo} onChange={e => setCodigo(e.target.value)} placeholder="Digite ou bipe o código"
-              inputMode="text" autoComplete="off"
-              className="flex-1 min-w-0 bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-3" />
-            <button type="submit" disabled={buscando || !codigo.trim()} className="px-4 rounded-xl bg-[var(--c-destaque)] text-white disabled:opacity-40">
-              {buscando ? <Spinner size={16} /> : <ScanLine size={18} />}
-            </button>
-          </form>
-          <div className="flex gap-2">
-            <button onClick={() => setVerPendentes(true)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-[var(--c-borda)] text-xs sm:text-sm text-[var(--c-texto)] whitespace-nowrap">
-              <List size={15} className="shrink-0" /> {fmtNum(info?.pendentes.length || 0)} pendentes
-            </button>
-            <button onClick={() => { const v = !camera; setCamera(v); setUsarCamera(v); }} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[var(--c-borda)] text-sm text-[var(--c-texto)]">
-              {camera ? <><CameraOff size={15} /> Fechar câmera</> : <><Camera size={15} /> Usar câmera</>}
-            </button>
+          <div className="w-full h-20 rounded-2xl border border-dashed border-[var(--c-destaque)]/60 bg-[var(--c-destaque)]/5 text-[var(--c-destaque)] flex flex-col items-center justify-center gap-1">
+            <Barcode size={22} /> <span className="text-sm font-medium">{buscando ? 'Buscando…' : 'Coletor pronto — bipe o código'}</span>
           </div>
+          <button onClick={() => setVerPendentes(true)} className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-[var(--c-borda)] text-sm text-[var(--c-texto)] whitespace-nowrap">
+            <List size={15} className="shrink-0" /> {fmtNum(info?.pendentes.length || 0)} pendentes
+          </button>
           {info?.ultimas?.length > 0 && (
             <div>
               <p className="text-xs text-[var(--c-suave)] mb-1">Minhas últimas contagens</p>
