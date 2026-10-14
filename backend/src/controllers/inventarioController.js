@@ -307,9 +307,9 @@ export async function meuInventario(req, res, next) {
         WHERE c.inventario_id = $1 AND c.usuario_id = $2 ORDER BY c.criado_em DESC LIMIT 8`,
       [id, req.usuario.id]);
     const pendentes = await query(
-      `SELECT id, codigo, descricao, curva, endereco, status FROM inventario_itens
+      `SELECT id, codigo, descricao, curva, categoria, endereco, status FROM inventario_itens
         WHERE inventario_id = $1 AND status IN ('pendente', 'recontagem')
-        ORDER BY CASE status WHEN 'recontagem' THEN 0 ELSE 1 END, endereco NULLS LAST, codigo LIMIT 3000`, [id]);
+        ORDER BY NULLIF(endereco, '') COLLATE "C" NULLS LAST, codigo LIMIT 3000`, [id]);
     res.json({
       inventario: inv.rows[0],
       total: resumo.total, contados: resumo.contados, recontagem: resumo.recontagem,
