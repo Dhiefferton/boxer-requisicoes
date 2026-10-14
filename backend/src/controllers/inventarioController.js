@@ -340,6 +340,10 @@ export async function buscarItemInventario(req, res, next) {
     const id = parseInt(req.params.id);
     const texto = String(req.query.texto || '').trim();
     if (!texto) return res.status(400).json({ erro: 'Informe o código.' });
+    const inv = await query(`SELECT status FROM inventarios WHERE id = $1`, [id]);
+    if (!inv.rows[0] || inv.rows[0].status !== 'andamento') {
+      return res.status(410).json({ erro: 'Este inventário não está mais em andamento. Volte para a tela Inventário e abra a contagem de novo.' });
+    }
     // O QR pode trazer só o código ou um texto maior: testa o texto inteiro e cada pedaço
     const pedacos = [...new Set([texto, ...texto.split(/[^0-9A-Za-z\-./]+/), ...(texto.match(/\d{3,}/g) || [])]
       .map(s => s.trim().toUpperCase()).filter(Boolean))].slice(0, 30);
