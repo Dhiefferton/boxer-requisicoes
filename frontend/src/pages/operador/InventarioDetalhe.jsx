@@ -3,9 +3,9 @@
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import * as XLSX from 'xlsx';
-import { ArrowLeft, FileDown, RotateCcw, Check, ScanLine, Search, X, Ban, RefreshCw } from 'lucide-react';
+import { ArrowLeft, FileSpreadsheet, RotateCcw, Check, ScanLine, Search, X, Ban, RefreshCw } from 'lucide-react';
 import { inventarioService } from '../../services/api';
+import { loginMicrosoft, alimentarPlanilha, dataExcel } from '../../services/planilhaMicrosoft';
 import { useAuth } from '../../context/AuthContext';
 import { Spinner } from '../../components/ui';
 import { Kpi, TagCurva, TagStatus, fmtData, fmtHora, fmtDataHora, fmtNum, fmtPct, fmtTempo } from '../../components/inventario/util';
@@ -25,6 +25,7 @@ export default function InventarioDetalhe() {
   const [busca, setBusca] = useState('');
   const [ocupado, setOcupado] = useState(false);
   const [historico, setHistorico] = useState(null);
+  const [planilha, setPlanilha] = useState(''); // texto do progresso ao lançar na planilha
 
   async function carregar() {
     setErro('');
@@ -68,20 +69,38 @@ export default function InventarioDetalhe() {
     finally { setOcupado(false); }
   }
 
-  function exportar() {
-    const linhas = itens.map(i => ({
-      'Código': i.codigo, 'Descrição': i.descricao, 'Categoria': i.categoria, 'Curva': i.curva || '',
-      'Endereço (Zen)': i.endereco || '', 'Saldo ao criar': Number(i.saldo_inicial),
-      'Saldo Zen na contagem': i.saldo_zen == null ? '' : Number(i.saldo_zen),
-      'Contado': i.contado == null ? '' : Number(i.contado), 'Diferença': i.diferenca == null ? '' : Number(i.diferenca),
-      'Status': i.status, 'Contador': i.contado_por_nome || '', 'Data/hora': i.contado_em ? new Date(i.contado_em).toLocaleString('pt-BR') : '',
-      'Contagens': i.contagens, 'Observação': i.observacao || '',
-    }));
-    const ws = XLSX.utils.json_to_sheet(linhas);
-    ws['!cols'] = [{ wch: 10 }, { wch: 45 }, { wch: 16 }, { wch: 6 }, { wch: 22 }, { wch: 10 }, { wch: 12 }, { wch: 9 }, { wch: 9 }, { wch: 11 }, { wch: 16 }, { wch: 18 }, { wch: 9 }, { wch: 30 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, `Inventario ${inv.id}`);
-    XLSX.writeFile(wb, `inventario-${inv.id}-${new Date(inv.criado_em).toISOString().slice(0, 10)}.xlsx`);
+  // Alimenta a planilha de Inventário (OneDrive/SharePoint) com este inventário:
+  //  • Tabela5 (Dados do inventário): uma linha por item contado
+  //  • Tabela11: a data do inventário e o tempo de contagem por curva
+  // As colunas calculadas da planilha (OK?, Mês, Ano, Período…) o próprio Excel preenche.
+  async function lancarNaPlanilha() {
+    const contados = itens.filter(i => i.contado != null);
+    if (!contados.length) { alert('Nenhum item contado neste inventário.'); return; }
+    if (inv.planilha_em && !confirm(`Este inventário já foi lançado na planilha em ${fmtDataHora(inv.planilha_em)} por ${inv.planilha_por_nome}. Lançar de novo vai DUPLICAR as linhas. Continuar?`)) return;
+    if (!inv.planilha_em && !confirm(`Lançar ${fmtNum(contados.length)} itens deste inventário na planilha de Inventário?`)) return;
+    setPlanilha('Preparando…');
+    try {
+      const { data: cfg } = await inventarioService.planilhaConfig();
+      if (!cfg.configurado) throw new Error('A ligação com a planilha ainda não foi configurada (MS_CLIENT_ID e INVENTARIO_PLANILHA_URL no servidor).');
+      setPlanilha('Entrando na conta Microsoft…');
+      const token = await loginMicrosoft(cfg);
+      const data = dataExcel(inv.criado_em);
+      const num = (v) => (v == null ? null : Number(v));
+      const linhasDados = contados.map(i => [
+        data, i.curva ? `Curva ${i.curva}` : 'Sem curva',
+        /^\d+$/.test(i.codigo) ? Number(i.codigo) : i.codigo, i.descricao,
+        num(i.saldo_zen ?? i.saldo_inicial), num(i.contado),
+        null, null, null, null, null, null, null,
+      ]);
+      const tc = r.tempo_curva || {};
+      const linhaTempos = [data, null, null, (tc.A || 0) / 86400, (tc.B || 0) / 86400, (tc.C || 0) / 86400, null];
+      const res = await alimentarPlanilha({ token, arquivoUrl: cfg.arquivoUrl, linhasDados, linhaTempos, aoProgredir: setPlanilha });
+      await inventarioService.marcarPlanilha(inv.id);
+      await carregar();
+      alert(`Pronto! ${fmtNum(linhasDados.length)} itens e os tempos por curva foram lançados em "${res.arquivo}".`);
+    } catch (e) {
+      alert(e.response?.data?.erro || e.message || 'Erro ao lançar na planilha.');
+    } finally { setPlanilha(''); }
   }
 
   async function verHistorico(item) {
@@ -109,9 +128,13 @@ export default function InventarioDetalhe() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={carregar} className="p-2 rounded-xl border border-[var(--c-borda)] text-[var(--c-suave)]" title="Atualizar"><RefreshCw size={15} /></button>
-          <button onClick={exportar} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/30">
-            <FileDown size={14} /> Exportar Excel
-          </button>
+          {inv.status === 'finalizado' && (
+            <button onClick={lancarNaPlanilha} disabled={!!planilha}
+              title={inv.planilha_em ? `Lançado em ${fmtDataHora(inv.planilha_em)} por ${inv.planilha_por_nome}` : 'Lançar este inventário na planilha de Inventário'}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/30 disabled:opacity-60">
+              {planilha ? <><Spinner size={14} /> {planilha}</> : <><FileSpreadsheet size={14} /> {inv.planilha_em ? `Na planilha ✓ ${fmtData(inv.planilha_em)}` : 'Alimentar planilha'}</>}
+            </button>
+          )}
           {emAndamento && <>
             <button onClick={() => navigate(`/inventario/${inv.id}/contar`)} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-borda)] text-[var(--c-texto)]">
               <ScanLine size={14} /> Contar
