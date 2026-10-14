@@ -91,10 +91,11 @@ export default function InventarioContagem() {
   const navigate = useNavigate();
   const [info, setInfo] = useState(null);
   const [erro, setErro] = useState('');
-  // Modo coletor de dados: o leitor do coletor "digita" o código e manda Enter.
-  // Fica lembrado neste aparelho; com ele ligado a câmera não abre sozinha.
-  const [coletor, setColetor] = useState(() => { try { return localStorage.getItem('boxer_coletor') === '1'; } catch { return false; } });
-  const [camera, setCamera] = useState(() => { try { return localStorage.getItem('boxer_coletor') !== '1'; } catch { return true; } });
+  // Coletor de dados sempre ativo (o leitor "digita" o código e manda Enter).
+  // A câmera é opcional: só abre quando a pessoa pede.
+  const coletor = true;
+  const [camera, setCamera] = useState(false);
+  const [usarCamera, setUsarCamera] = useState(false); // reabre a câmera depois de cada contagem
   const [codigo, setCodigo] = useState('');
   const [buscando, setBuscando] = useState(false);
   const [item, setItem] = useState(null);
@@ -120,13 +121,6 @@ export default function InventarioContagem() {
   // No modo coletor, deixa o campo de código sempre pronto para a próxima leitura
   useEffect(() => { if (coletor && !item && !verPendentes) setTimeout(() => inputCodigo.current?.focus(), 50); }, [coletor, item, verPendentes, ok]);
 
-  function alternarColetor() {
-    setColetor(v => {
-      try { localStorage.setItem('boxer_coletor', v ? '0' : '1'); } catch { /* ignora */ }
-      if (!v) setCamera(false);
-      return !v;
-    });
-  }
 
   // Leitura do coletor: teclas chegando muito rápidas (< 50 ms entre elas) e
   // terminando em Enter são uma leitura, não digitação. Funciona com o foco em
@@ -206,7 +200,7 @@ export default function InventarioContagem() {
     try {
       const { data } = await inventarioService.contar(id, item.id, { quantidade: n, observacao: obs });
       setOk({ codigo: item.codigo, descricao: item.descricao, quantidade: n, hora: data.item.contado_em });
-      setItem(null); setCamera(!coletor);
+      setItem(null); setCamera(usarCamera);
       carregar();
     } catch (e) { setErro(e.response?.data?.erro || 'Erro ao registrar.'); }
     finally { setSalvando(false); }
@@ -302,7 +296,7 @@ export default function InventarioContagem() {
               <Barcode size={22} /> <span className="text-sm font-medium">{buscando ? 'Buscando…' : 'Coletor pronto — bipe o código'}</span>
             </div>
           ) : (
-            <button onClick={() => setCamera(true)} className="w-full h-24 rounded-2xl border border-dashed border-[var(--c-borda)] text-[var(--c-suave)] flex flex-col items-center justify-center gap-1">
+            <button onClick={() => { setCamera(true); setUsarCamera(true); }} className="w-full h-24 rounded-2xl border border-dashed border-[var(--c-borda)] text-[var(--c-suave)] flex flex-col items-center justify-center gap-1">
               <Camera size={22} /> <span className="text-sm">Abrir câmera</span>
             </button>
           )}
@@ -318,12 +312,8 @@ export default function InventarioContagem() {
             <button onClick={() => setVerPendentes(true)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-[var(--c-borda)] text-xs sm:text-sm text-[var(--c-texto)] whitespace-nowrap">
               <List size={15} className="shrink-0" /> {fmtNum(info?.pendentes.length || 0)} pendentes
             </button>
-            <button onClick={() => setCamera(c => !c)} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[var(--c-borda)] text-sm text-[var(--c-texto)]">
-              {camera ? <><CameraOff size={15} /> Fechar</> : <><Camera size={15} /> Câmera</>}
-            </button>
-            <button onClick={alternarColetor}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm ${coletor ? 'border-[var(--c-destaque)] bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] font-medium' : 'border-[var(--c-borda)] text-[var(--c-texto)]'}`}>
-              <Barcode size={15} /> Coletor{coletor ? ' ✓' : ''}
+            <button onClick={() => { const v = !camera; setCamera(v); setUsarCamera(v); }} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-[var(--c-borda)] text-sm text-[var(--c-texto)]">
+              {camera ? <><CameraOff size={15} /> Fechar câmera</> : <><Camera size={15} /> Usar câmera</>}
             </button>
           </div>
           {info?.ultimas?.length > 0 && (
@@ -372,7 +362,7 @@ export default function InventarioContagem() {
           <button onClick={registrar} disabled={salvando || qtd === ''} className="w-full py-4 rounded-2xl bg-[var(--c-destaque)] text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-40">
             {salvando ? <><Spinner size={16} /> Registrando…</> : <><Check size={18} /> Registrar contagem</>}
           </button>
-          <button onClick={() => { setItem(null); setCamera(!coletor); }} className="w-full py-3 rounded-2xl border border-[var(--c-borda)] text-[var(--c-texto)] text-sm">
+          <button onClick={() => { setItem(null); setCamera(usarCamera); }} className="w-full py-3 rounded-2xl border border-[var(--c-borda)] text-[var(--c-texto)] text-sm">
             Cancelar
           </button>
         </div>
