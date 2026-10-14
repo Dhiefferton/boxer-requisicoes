@@ -369,13 +369,20 @@ export async function contarItem(req, res, next) {
     const item = it.rows[0];
     if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
 
-    // Saldo do Zen na hora da contagem
+    // Saldo: o mesmo do catálogo (Partes e Peças / Máquinas) — quantidade_erp,
+    // que a sincronização em lote do Zen (stockCube) atualiza a cada 5 min.
     let saldo = Number(item.saldo_inicial) || 0;
+    const mat = await query(
+      `SELECT quantidade_erp FROM materiais WHERE id = $1 OR (codigo = $2 AND $1::int IS NULL) LIMIT 1`,
+      [item.material_id, item.codigo]);
+    if (mat.rows[0] && mat.rows[0].quantidade_erp != null) saldo = Number(mat.rows[0].quantidade_erp) || 0;
+
+    // Endereço atualizado do Zen (só PE)
     let endereco = item.endereco;
     try {
       const z = await saldoZenAgora(item.codigo, item.categoria);
-      saldo = z.saldo; endereco = z.endereco || null;
-    } catch (e) { console.error('[Inventario] saldo zen:', e.message); }
+      endereco = z.endereco || null;
+    } catch (e) { console.error('[Inventario] endereco zen:', e.message); }
 
     const status = statusDaContagem(quantidade, saldo);
     const observacao = String(req.body?.observacao || '').trim() || null;
