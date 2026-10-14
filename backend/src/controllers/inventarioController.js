@@ -251,13 +251,24 @@ export async function criarInventario(req, res, next) {
     }
     const f = filtrosCandidatos(req.body || {});
     const { sql, params } = sqlCandidatos(f);
-    const itens = (await query(sql, params)).rows;
-    if (!itens.length) return res.status(400).json({ erro: 'Nenhum item com esses filtros.' });
+    const candidatos = (await query(sql, params)).rows;
+    if (!candidatos.length) return res.status(400).json({ erro: 'Nenhum item com esses filtros.' });
 
-    let enderecos = {};
-    let avisoEndereco = null;
+    // Endereços do Zen: só entram itens com saldo em endereço PE (ou MAQ, para Máquinas).
+    // Item com saldo só em MERCADO_LIVRE, AVA, DEVOLUCAO, TERCEIRO etc. fica de fora.
+    let enderecos;
     try { enderecos = await enderecosZenEmLote(); }
-    catch (e) { avisoEndereco = 'Não consegui buscar os endereços no Zen agora; eles aparecem na hora da contagem.'; console.error('[Inventario] enderecos:', e.message); }
+    catch (e) {
+      console.error('[Inventario] enderecos:', e.message);
+      return res.status(503).json({ erro: 'Não consegui buscar os endereços no Zen agora. Tente de novo em instantes.' });
+    }
+    const enderecoDe = (i) => (enderecos[i.codigo] || '').split(' / ').filter(e => enderecoValido(e, i.categoria)).join(' / ');
+    const itens = candidatos.filter(i => !(Number(i.saldo) > 0) || enderecoDe(i));
+    const foraDoPE = candidatos.length - itens.length;
+    if (!itens.length) return res.status(400).json({ erro: `Nenhum item para contar: os ${candidatos.length} itens com esses filtros só têm saldo fora dos endereços PE.` });
+    const avisoEndereco = foraDoPE
+      ? `${foraDoPE} item(ns) ficaram de fora porque o saldo deles está só em endereços que não são PE (Mercado Livre, AVA, Devolução…).`
+      : null;
 
     const inv = await query(
       `INSERT INTO inventarios (filtros, criado_por, criado_por_nome) VALUES ($1, $2, $3) RETURNING *`,
@@ -271,9 +282,9 @@ export async function criarInventario(req, res, next) {
               AS d(mid, cod, descr, cat, cur, ende, saldo)
        ON CONFLICT (inventario_id, codigo) DO NOTHING`,
       [id, itens.map(i => i.id), itens.map(i => i.codigo), itens.map(i => i.descricao), itens.map(i => i.categoria),
-       itens.map(i => i.curva || ''), itens.map(i => (enderecos[i.codigo] || '').split(' / ').filter(e => enderecoValido(e, i.categoria)).join(' / ')), itens.map(i => Number(i.saldo) || 0)]
+       itens.map(i => i.curva || ''), itens.map(i => enderecoDe(i)), itens.map(i => Number(i.saldo) || 0)]
     );
-    res.status(201).json({ inventario: inv.rows[0], itens: itens.length, aviso: avisoEndereco });
+    res.status(201).json({ inventario: inv.rows[0], itens: itens.length, fora_do_pe: foraDoPE, aviso: avisoEndereco });
   } catch (err) { next(err); }
 }
 
