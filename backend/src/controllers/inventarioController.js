@@ -76,6 +76,8 @@ function garantirEstrutura() {
         );
         CREATE INDEX IF NOT EXISTS idx_inv_cont_inv ON inventario_contagens(inventario_id, usuario_id, criado_em);
         ALTER TABLE materiais ADD COLUMN IF NOT EXISTS curva_abc CHAR(1);
+        ALTER TABLE inventarios ADD COLUMN IF NOT EXISTS planilha_em TIMESTAMPTZ;
+        ALTER TABLE inventarios ADD COLUMN IF NOT EXISTS planilha_por_nome VARCHAR(150);
       `);
       // Curva ABC da planilha (só preenche quem ainda não tem)
       const r = await query(`SELECT COUNT(*)::int AS n FROM materiais WHERE curva_abc IS NOT NULL`);
@@ -438,6 +440,29 @@ export async function finalizarInventario(req, res, next) {
         WHERE id = $1 AND status = 'andamento' RETURNING *`, [parseInt(req.params.id), req.usuario.nome]);
     if (!r.rows[0]) return res.status(400).json({ erro: 'Inventário não está em andamento.' });
     res.json({ inventario: r.rows[0] });
+  } catch (err) { next(err); }
+}
+
+// ── Planilha de Inventário (OneDrive/SharePoint) ───────────────
+// GET /inventarios/planilha/config — dados públicos para o login Microsoft
+// (sem segredo: o acesso é feito no navegador, com a conta de quem clica).
+export async function configPlanilha(req, res) {
+  const clientId = process.env.MS_CLIENT_ID || '';
+  const tenantId = process.env.MS_TENANT_ID || 'organizations';
+  const arquivoUrl = process.env.INVENTARIO_PLANILHA_URL || '';
+  res.json({ configurado: !!(clientId && arquivoUrl), clientId, tenantId, arquivoUrl });
+}
+
+// POST /inventarios/:id/planilha — marca que o inventário já foi lançado na planilha
+export async function marcarPlanilha(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const r = await query(
+      `UPDATE inventarios SET planilha_em = NOW(), planilha_por_nome = $2
+        WHERE id = $1 AND status = 'finalizado' RETURNING id, planilha_em, planilha_por_nome`,
+      [parseInt(req.params.id), req.usuario.nome]);
+    if (!r.rows[0]) return res.status(400).json({ erro: 'Só inventários finalizados vão para a planilha.' });
+    res.json(r.rows[0]);
   } catch (err) { next(err); }
 }
 
