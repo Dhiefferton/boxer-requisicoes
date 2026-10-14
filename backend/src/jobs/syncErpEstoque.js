@@ -25,15 +25,17 @@ async function executarSync(db) {
     );
     const codigosSet = new Set(result.rows.map(r => r.codigo));
     console.log(`[SyncERP] Monitorando ${codigosSet.size} pecas...`);
-    // Saldo das peças: só o que está em endereço PE (estoque físico do almoxarifado).
-    // MERCADO_LIVRE, AVA, DEVOLUCAO, TERCEIRO etc. não entram no saldo do catálogo.
-    const dados = await buscaEstoque([1002, 1003], { SHOW_ADDRESS: true });
+    // Saldo das peças: só o que está em endereço PE/PEC (estoque físico do almoxarifado)
+    // e na reserva SISTEMA (AVAILABLE, id 0). MERCADO_LIVRE, AVA, DEVOLUCAO, TERCEIRO etc.
+    // e unidades presas em reserva (ex.: FINALIZADA) não entram no saldo do catálogo.
+    const dados = await buscaEstoque([1002, 1003], { SHOW_ADDRESS: true, SHOW_RESERVATION: true });
     const linhas = Array.isArray(dados) ? dados : [];
     const saldos = {};
     for (const item of linhas) {
       const codigo = item.product_code;
       if (!codigo || !codigosSet.has(codigo)) continue;
       if (!/^PE/i.test(String(item.address_code || '').trim())) continue;
+      if (item.reservation_id != null && Number(item.reservation_id) !== 0) continue;
       saldos[codigo] = (saldos[codigo] || 0) + (item.sum_quantity || 0);
     }
     const totalRegistros = linhas.length;
