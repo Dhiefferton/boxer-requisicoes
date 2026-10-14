@@ -291,9 +291,7 @@ export default function InventarioContagem() {
           ) : info && (
             <div className="text-center text-sm text-green-300 bg-green-500/10 border border-green-500/30 rounded-2xl py-4">Todos os itens foram contados.</div>
           )}
-          <div className="w-full h-20 rounded-2xl border border-dashed border-[var(--c-destaque)]/60 bg-[var(--c-destaque)]/5 text-[var(--c-destaque)] flex flex-col items-center justify-center gap-1">
-            <Barcode size={22} /> <span className="text-sm font-medium">{buscando ? 'Buscando…' : 'Coletor pronto — bipe o código'}</span>
-          </div>
+          {buscando && <p className="text-center text-sm text-[var(--c-destaque)] flex items-center justify-center gap-2"><Spinner size={14} /> Buscando item…</p>}
           <button onClick={() => setVerPendentes(true)} className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-[var(--c-borda)] text-sm text-[var(--c-texto)] whitespace-nowrap">
             <List size={15} className="shrink-0" /> {fmtNum(info?.pendentes.length || 0)} pendentes
           </button>
