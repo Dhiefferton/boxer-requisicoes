@@ -215,13 +215,14 @@ function NovoInventario({ saldoMax, onFechar, onCriado }) {
         <div className="rounded-xl bg-[var(--c-fundo)] border border-[var(--c-borda)] p-3">
           {!previa ? <Spinner size={16} className="text-[var(--c-destaque)]" /> : (
             <>
-              <p className="text-2xl font-bold text-[var(--c-texto)]">{fmtNum(previa.total)} <span className="text-sm font-normal text-[var(--c-suave)]">itens para contar</span></p>
+              <p className="text-2xl font-bold text-[var(--c-texto)]">{fmtNum(previa.total)} <span className="text-sm font-normal text-[var(--c-suave)]">itens com saldo até {saldoMax}</span></p>
               <p className="text-xs text-[var(--c-suave)] mt-1">
                 {['A', 'B', 'C', '-'].map(c => {
                   const n = previa.grupos.filter(g => g.curva === c).reduce((s, g) => s + g.n, 0);
                   return n ? `${c === '-' ? 'Sem curva' : 'Curva ' + c}: ${fmtNum(n)}` : null;
                 }).filter(Boolean).join(' · ')}
               </p>
+              <p className="text-[11px] text-[var(--c-suave)] mt-1">Ao criar, saem os itens que só têm saldo fora dos endereços PE (Mercado Livre, AVA, Devolução…).</p>
             </>
           )}
         </div>
