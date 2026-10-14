@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, FileSpreadsheet, RotateCcw, Check, ScanLine, Search, X, Ban, RefreshCw } from 'lucide-react';
 import { inventarioService } from '../../services/api';
-import { loginMicrosoft, alimentarPlanilha, dataExcel } from '../../services/planilhaMicrosoft';
 import { useAuth } from '../../context/AuthContext';
 import { Spinner } from '../../components/ui';
 import { Kpi, TagCurva, TagStatus, fmtData, fmtHora, fmtDataHora, fmtNum, fmtPct, fmtTempo } from '../../components/inventario/util';
@@ -69,37 +68,26 @@ export default function InventarioDetalhe() {
     finally { setOcupado(false); }
   }
 
-  // Alimenta a planilha de Inventário (OneDrive/SharePoint) com este inventário:
-  //  • Tabela5 (Dados do inventário): uma linha por item contado
-  //  • Tabela11: a data do inventário e o tempo de contagem por curva
-  // As colunas calculadas da planilha (OK?, Mês, Ano, Período…) o próprio Excel preenche.
+  // Libera este inventário para a planilha de Inventário (SharePoint).
+  // A planilha puxa os inventários liberados pelo botão "Atualizar inventário"
+  // (Office Script) — mesmo esquema do Boxer-Frotas: sem login Microsoft.
   async function lancarNaPlanilha() {
-    const contados = itens.filter(i => i.contado != null);
-    if (!contados.length) { alert('Nenhum item contado neste inventário.'); return; }
-    if (inv.planilha_em && !confirm(`Este inventário já foi lançado na planilha em ${fmtDataHora(inv.planilha_em)} por ${inv.planilha_por_nome}. Lançar de novo vai DUPLICAR as linhas. Continuar?`)) return;
-    if (!inv.planilha_em && !confirm(`Lançar ${fmtNum(contados.length)} itens deste inventário na planilha de Inventário?`)) return;
-    setPlanilha('Preparando…');
+    const contados = itens.filter(i => i.contado != null).length;
+    if (!contados) { alert('Nenhum item contado neste inventário.'); return; }
+    if (inv.planilha_em) {
+      alert(inv.planilha_importado_em
+        ? `Este inventário já está na planilha (importado em ${fmtDataHora(inv.planilha_importado_em)}).`
+        : 'Este inventário já está liberado. Na planilha, clique em "Atualizar inventário" para puxar os dados.');
+      return;
+    }
+    if (!confirm(`Liberar ${fmtNum(contados)} itens deste inventário para a planilha de Inventário?`)) return;
+    setPlanilha('Liberando…');
     try {
-      const { data: cfg } = await inventarioService.planilhaConfig();
-      if (!cfg.configurado) throw new Error('A ligação com a planilha ainda não foi configurada (MS_CLIENT_ID e INVENTARIO_PLANILHA_URL no servidor).');
-      setPlanilha('Entrando na conta Microsoft…');
-      const token = await loginMicrosoft(cfg);
-      const data = dataExcel(inv.criado_em);
-      const num = (v) => (v == null ? null : Number(v));
-      const linhasDados = contados.map(i => [
-        data, i.curva ? `Curva ${i.curva}` : 'Sem curva',
-        /^\d+$/.test(i.codigo) ? Number(i.codigo) : i.codigo, i.descricao,
-        num(i.saldo_zen ?? i.saldo_inicial), num(i.contado),
-        null, null, null, null, null, null, null,
-      ]);
-      const tc = r.tempo_curva || {};
-      const linhaTempos = [data, null, null, (tc.A || 0) / 86400, (tc.B || 0) / 86400, (tc.C || 0) / 86400, null];
-      const res = await alimentarPlanilha({ token, arquivoUrl: cfg.arquivoUrl, linhasDados, linhaTempos, aoProgredir: setPlanilha });
       await inventarioService.marcarPlanilha(inv.id);
       await carregar();
-      alert(`Pronto! ${fmtNum(linhasDados.length)} itens e os tempos por curva foram lançados em "${res.arquivo}".`);
+      alert('Liberado! Na planilha de Inventário, clique em "Atualizar inventário" para puxar os dados.');
     } catch (e) {
-      alert(e.response?.data?.erro || e.message || 'Erro ao lançar na planilha.');
+      alert(e.response?.data?.erro || 'Erro ao liberar para a planilha.');
     } finally { setPlanilha(''); }
   }
 
@@ -130,9 +118,9 @@ export default function InventarioDetalhe() {
           <button onClick={carregar} className="p-2 rounded-xl border border-[var(--c-borda)] text-[var(--c-suave)]" title="Atualizar"><RefreshCw size={15} /></button>
           {inv.status === 'finalizado' && (
             <button onClick={lancarNaPlanilha} disabled={!!planilha}
-              title={inv.planilha_em ? `Lançado em ${fmtDataHora(inv.planilha_em)} por ${inv.planilha_por_nome}` : 'Lançar este inventário na planilha de Inventário'}
+              title={inv.planilha_em ? `Liberado em ${fmtDataHora(inv.planilha_em)} por ${inv.planilha_por_nome}` : 'Liberar este inventário para a planilha de Inventário'}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/30 disabled:opacity-60">
-              {planilha ? <><Spinner size={14} /> {planilha}</> : <><FileSpreadsheet size={14} /> {inv.planilha_em ? `Na planilha ✓ ${fmtData(inv.planilha_em)}` : 'Alimentar planilha'}</>}
+              {planilha ? <><Spinner size={14} /> {planilha}</> : <><FileSpreadsheet size={14} /> {inv.planilha_importado_em ? `Na planilha ✓ ${fmtData(inv.planilha_importado_em)}` : inv.planilha_em ? 'Aguardando a planilha' : 'Alimentar planilha'}</>}
             </button>
           )}
           {emAndamento && <>
