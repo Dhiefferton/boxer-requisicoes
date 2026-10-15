@@ -306,11 +306,18 @@ export async function detalharInventario(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// Quem pode recontar: só admin (Matheus Sabino já é admin)
+const podeRecontar = (u) => u?.perfil === 'admin';
+
 // GET /inventarios/:id/meu — dados leves para a tela do celular
 export async function meuInventario(req, res, next) {
   try {
     await garantirEstrutura();
     const id = parseInt(req.params.id);
+    // Recontagem fica numa tela à parte, só para admin. Na contagem normal (coletor)
+    // os itens marcados para recontagem não aparecem.
+    const recontagem = req.query.modo === 'recontagem';
+    if (recontagem && !podeRecontar(req.usuario)) return res.status(403).json({ erro: 'A recontagem é só para administradores.' });
     const inv = await query(`SELECT id, status, criado_em FROM inventarios WHERE id = $1`, [id]);
     if (!inv.rows[0]) return res.status(404).json({ erro: 'Inventário não encontrado.' });
     const resumo = (await resumoInventarios([id]))[id];
@@ -322,13 +329,14 @@ export async function meuInventario(req, res, next) {
       [id, req.usuario.id]);
     const pendentes = await query(
       `SELECT id, codigo, descricao, curva, categoria, endereco, status FROM inventario_itens
-        WHERE inventario_id = $1 AND status IN ('pendente', 'recontagem')
-        ORDER BY NULLIF(endereco, '') COLLATE "C" NULLS LAST, codigo LIMIT 3000`, [id]);
+        WHERE inventario_id = $1 AND status = $2
+        ORDER BY NULLIF(endereco, '') COLLATE "C" NULLS LAST, codigo LIMIT 3000`, [id, recontagem ? 'recontagem' : 'pendente']);
     res.json({
       inventario: inv.rows[0],
       total: resumo.total, contados: resumo.contados, recontagem: resumo.recontagem,
       meu_tempo_seg: eu.segundos, minhas_contagens: eu.contagens, minha_ultima: eu.ultima,
       pausa_seg: PAUSA_SEG, ultimas: ultimas.rows, pendentes: pendentes.rows,
+      modo: recontagem ? 'recontagem' : 'contagem', pode_recontar: podeRecontar(req.usuario),
     });
   } catch (err) { next(err); }
 }
@@ -369,6 +377,12 @@ export async function buscarItemInventario(req, res, next) {
       }
     } catch (e) { console.error('[Inventario] endereco zen:', e.message); }
     const { saldo_inicial, saldo_zen, diferenca, ...cego } = item;
+    if (cego.status === 'recontagem' && req.query.modo !== 'recontagem') {
+      return res.status(409).json({ erro: `${item.codigo} está marcado para recontagem — ele é recontado pela tela Recontagem (admin).` });
+    }
+    if (req.query.modo === 'recontagem' && cego.status !== 'recontagem') {
+      return res.status(409).json({ erro: `${item.codigo} não está marcado para recontagem.` });
+    }
     res.json({ item: cego });
   } catch (err) { next(err); }
 }
@@ -386,6 +400,9 @@ export async function contarItem(req, res, next) {
     const it = await query(`SELECT * FROM inventario_itens WHERE id = $1 AND inventario_id = $2`, [itemId, id]);
     const item = it.rows[0];
     if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
+    if (item.status === 'recontagem' && !podeRecontar(req.usuario)) {
+      return res.status(403).json({ erro: 'Este item está em recontagem — só administradores recontam.' });
+    }
 
     // Saldo: o mesmo do catálogo (Partes e Peças / Máquinas) — quantidade_erp,
     // que a sincronização em lote do Zen (stockCube) atualiza a cada 5 min.
