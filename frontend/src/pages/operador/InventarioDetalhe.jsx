@@ -127,6 +127,12 @@ export default function InventarioDetalhe() {
             <button onClick={() => navigate(`/inventario/${inv.id}/contar`)} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-borda)] text-[var(--c-texto)]">
               <ScanLine size={14} /> Contar
             </button>
+            {usuario?.perfil === 'admin' && (
+              <button onClick={() => navigate(`/inventario/${inv.id}/recontar`)} disabled={!contagem.recontagem}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-500 text-white disabled:opacity-40">
+                <ScanLine size={14} /> Recontar ({contagem.recontagem})
+              </button>
+            )}
             <button disabled={ocupado || !contagem.divergente} onClick={() => acao(() => inventarioService.recontar(inv.id, []),
               `Mandar os ${contagem.divergente} itens divergentes para recontagem?`)}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-500/15 text-purple-300 disabled:opacity-40">

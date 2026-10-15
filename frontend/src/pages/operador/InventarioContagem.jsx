@@ -86,8 +86,9 @@ function LeitorQR({ ativo, onLer }) {
   );
 }
 
-export default function InventarioContagem() {
+export default function InventarioContagem({ modo }) {
   const { id } = useParams();
+  const recontagem = modo === 'recontagem';
   const navigate = useNavigate();
   const [info, setInfo] = useState(null);
   const [erro, setErro] = useState('');
@@ -112,7 +113,7 @@ export default function InventarioContagem() {
   estado.current = { item, qtd, buscando, salvando };
 
   async function carregar() {
-    try { const { data } = await inventarioService.meu(id); setInfo(data); }
+    try { const { data } = await inventarioService.meu(id, recontagem ? 'recontagem' : undefined); setInfo(data); }
     catch (e) { setErro(e.response?.data?.erro || 'Erro ao carregar o inventário.'); }
   }
   useEffect(() => { carregar(); }, [id]);
@@ -181,7 +182,7 @@ export default function InventarioContagem() {
     if (!t || buscando) return;
     setBuscando(true); setErro(''); setOk(null);
     try {
-      const { data } = await inventarioService.buscar(id, t);
+      const { data } = await inventarioService.buscar(id, t, recontagem ? 'recontagem' : undefined);
       if (navigator.vibrate) navigator.vibrate(60);
       setItem(data.item); setQtd(''); setObs(''); setCodigo(''); setCamera(false);
     } catch (e) {
@@ -194,7 +195,7 @@ export default function InventarioContagem() {
   async function registrar() {
     const n = Number(String(qtd).replace(',', '.'));
     if (qtd === '' || !Number.isFinite(n) || n < 0) { setErro('Informe a quantidade contada.'); return; }
-    if (item.contagens > 0 && item.status !== 'recontagem' &&
+    if (!recontagem && item.contagens > 0 &&
       !confirm(`Este item já foi contado (${fmtNum(item.contado)} por ${item.contado_por_nome?.split(' ')[0]}). Registrar nova contagem?`)) return;
     setSalvando(true); setErro('');
     try {
@@ -223,7 +224,7 @@ export default function InventarioContagem() {
         <div className="flex items-center gap-2 min-w-0">
           <button onClick={() => navigate('/inventario')} className="p-1.5 rounded-lg text-[var(--c-suave)]"><ArrowLeft size={18} /></button>
           <div className="min-w-0">
-            <b className="text-[var(--c-texto)]">Inventário #{id}</b>
+            <b className="text-[var(--c-texto)]">{recontagem ? `Recontagem — Inventário #${id}` : `Inventário #${id}`}</b>
             <p className="text-[11px] text-[var(--c-suave)]">{info ? `${fmtNum(info.minhas_contagens)} contagens minhas` : ''}</p>
           </div>
         </div>
@@ -237,7 +238,7 @@ export default function InventarioContagem() {
         <div>
           <div className="flex justify-between text-xs text-[var(--c-suave)] mb-1">
             <span>{fmtNum(info.contados)} de {fmtNum(info.total)} itens contados</span>
-            {info.recontagem > 0 && <span className="text-purple-300">{info.recontagem} para recontar</span>}
+            {recontagem && <span className="text-purple-300">{fmtNum(info.pendentes.length)} para recontar</span>}
           </div>
           <div className="h-2 rounded-full bg-[var(--c-borda)] overflow-hidden">
             <div className="h-full bg-[var(--c-destaque)] rounded-full" style={{ width: `${info.total ? (info.contados / info.total) * 100 : 0}%` }} />
@@ -289,7 +290,7 @@ export default function InventarioContagem() {
               )}
             </div>
           ) : info && (
-            <div className="text-center text-sm text-green-300 bg-green-500/10 border border-green-500/30 rounded-2xl py-4">Todos os itens foram contados.</div>
+            <div className="text-center text-sm text-green-300 bg-green-500/10 border border-green-500/30 rounded-2xl py-4">{recontagem ? 'Nenhum item aguardando recontagem.' : 'Todos os itens foram contados.'}</div>
           )}
           {buscando && <p className="text-center text-sm text-[var(--c-destaque)] flex items-center justify-center gap-2"><Spinner size={14} /> Buscando item…</p>}
           <button onClick={() => setVerPendentes(true)} className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-[var(--c-borda)] text-sm text-[var(--c-texto)] whitespace-nowrap">

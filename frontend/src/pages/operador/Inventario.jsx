@@ -6,11 +6,13 @@ import { useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { Plus, BarChart2, FileDown, ScanLine, ClipboardCheck, X, RefreshCw } from 'lucide-react';
 import { inventarioService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { Spinner, Empty } from '../../components/ui';
 import { Kpi, Progresso, TagStatus, fmtData, fmtHora, fmtPct, fmtNum, fmtTempo } from '../../components/inventario/util';
 
 export default function Inventario() {
   const navigate = useNavigate();
+  const { usuario } = useAuth();
   const [lista, setLista] = useState([]);
   const [saldoMax, setSaldoMax] = useState(30);
   const [carregando, setCarregando] = useState(true);
@@ -99,6 +101,12 @@ export default function Inventario() {
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-destaque)] text-white">
                     <ScanLine size={14} /> Contar
                   </button>
+                  {usuario?.perfil === 'admin' && andamento.resumo?.recontagem > 0 && (
+                    <button onClick={() => navigate(`/inventario/${andamento.id}/recontar`)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-500 text-white">
+                      <ScanLine size={14} /> Recontar ({fmtNum(andamento.resumo.recontagem)})
+                    </button>
+                  )}
                   <button onClick={() => navigate(`/inventario/${andamento.id}`)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-borda)] text-[var(--c-texto)]">
                     <ClipboardCheck size={14} /> Conferência
