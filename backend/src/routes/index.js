@@ -37,7 +37,7 @@ import {
   listarInventarios, previaInventario, criarInventario, detalharInventario, meuInventario,
   buscarItemInventario, contarItem, pedirRecontagem, historicoItem, finalizarInventario,
   cancelarInventario, indicadoresInventario,
-  configPlanilha, marcarPlanilha,
+  configPlanilha, marcarPlanilha, marcarAjusteZen,
 } from '../controllers/inventarioController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
@@ -170,6 +170,7 @@ router.get('/inventarios/:id/itens/:itemId/historico', ...inv, historicoItem);
 router.post('/inventarios/:id/recontar',           ...inv, pedirRecontagem);
 router.post('/inventarios/:id/finalizar',          ...inv, finalizarInventario);
 router.post('/inventarios/:id/planilha',           ...inv, marcarPlanilha);
+router.post('/inventarios/:id/itens/:itemId/ajuste-zen', autenticar, exigirPerfil('admin'), marcarAjusteZen);
 router.post('/inventarios/:id/cancelar',           autenticar, exigirPerfil('admin'), cancelarInventario);
 
 export default router;
