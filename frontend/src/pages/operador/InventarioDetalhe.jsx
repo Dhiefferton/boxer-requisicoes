@@ -181,7 +181,7 @@ export default function InventarioDetalhe() {
         <div className="overflow-x-auto">
           <table className="w-full text-xs sm:text-[13px]">
             <thead><tr className="text-left text-[var(--c-suave)] text-[11px]">
-              {['Código', 'Descrição', 'Endereço (Zen)', 'Curva', 'Saldo Zen', 'Contado', 'Diferença', 'Status', 'Contador', 'Hora', ''].map(h =>
+              {['Código', 'Descrição', 'Endereço (Zen)', 'Curva', 'Saldo Zen', 'Contado', 'Diferença', 'Status', 'Contador', 'Hora', 'Recontagem / Zen', ''].map(h =>
                 <th key={h} className={`px-2 py-2 font-semibold whitespace-nowrap ${['Saldo Zen', 'Contado', 'Diferença'].includes(h) ? 'text-right' : ''}`}>{h}</th>)}
             </tr></thead>
             <tbody>
@@ -202,6 +202,32 @@ export default function InventarioDetalhe() {
                     <td className="px-2 py-2"><TagStatus status={i.status} /></td>
                     <td className="px-2 py-2 whitespace-nowrap">{i.contado_por_nome?.split(' ')[0] || '—'}</td>
                     <td className="px-2 py-2 whitespace-nowrap">{i.contado_em ? fmtHora(i.contado_em) : '—'}</td>
+                    <td className="px-2 py-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                      <div className="flex flex-col gap-1 items-start">
+                        {i.recontado_em && (
+                          <span title={`Recontado por ${i.recontado_por_nome || '—'} em ${fmtDataHora(i.recontado_em)}`}
+                            className="inline-flex text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300">
+                            Recontado {fmtHora(i.recontado_em)}
+                          </span>
+                        )}
+                        {i.ajuste_zen_em ? (
+                          <button disabled={usuario?.perfil !== 'admin'}
+                            onClick={() => confirm('Desmarcar o ajuste no Zen deste item?') && acao(() => inventarioService.ajusteZen(inv.id, i.id, false))}
+                            title={`Ajustado por ${i.ajuste_zen_por_nome || '—'} em ${fmtDataHora(i.ajuste_zen_em)}`}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 disabled:cursor-default">
+                            <Check size={11} /> Ajustado no Zen
+                          </button>
+                        ) : (i.status === 'divergente' || i.recontado_em) && (
+                          usuario?.perfil === 'admin' ? (
+                            <button onClick={() => acao(() => inventarioService.ajusteZen(inv.id, i.id, true))}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-[var(--c-borda)] text-[11px] text-[var(--c-suave)] hover:border-green-500 hover:text-green-400">
+                              <Check size={11} /> Marcar ajustado
+                            </button>
+                          ) : <span className="text-[11px] text-amber-400">Ajuste pendente</span>
+                        )}
+                        {!i.recontado_em && !i.ajuste_zen_em && i.status !== 'divergente' && <span className="text-[var(--c-suave)]">—</span>}
+                      </div>
+                    </td>
                     <td className="px-2 py-2 whitespace-nowrap">
                       {emAndamento && i.status === 'divergente' && (
                         <button onClick={(e) => { e.stopPropagation(); acao(() => inventarioService.recontar(inv.id, [i.id])); }}
