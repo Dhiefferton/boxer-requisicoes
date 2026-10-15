@@ -89,6 +89,7 @@ export const inventarioService = {
   cancelar:     (id)                => api.post(`/inventarios/${id}/cancelar`),
   planilhaConfig: ()                => api.get('/inventarios/planilha/config'),
   marcarPlanilha: (id)              => api.post(`/inventarios/${id}/planilha`),
+  ajusteZen:    (id, itemId, ajustado) => api.post(`/inventarios/${id}/itens/${itemId}/ajuste-zen`, { ajustado }),
 };
 
 export const requisicoesService = {
