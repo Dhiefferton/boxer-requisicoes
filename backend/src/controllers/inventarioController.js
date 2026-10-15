@@ -76,6 +76,10 @@ function garantirEstrutura() {
         );
         CREATE INDEX IF NOT EXISTS idx_inv_cont_inv ON inventario_contagens(inventario_id, usuario_id, criado_em);
         ALTER TABLE materiais ADD COLUMN IF NOT EXISTS curva_abc CHAR(1);
+        ALTER TABLE inventario_itens ADD COLUMN IF NOT EXISTS recontado_em TIMESTAMPTZ;
+        ALTER TABLE inventario_itens ADD COLUMN IF NOT EXISTS recontado_por_nome VARCHAR(150);
+        ALTER TABLE inventario_itens ADD COLUMN IF NOT EXISTS ajuste_zen_em TIMESTAMPTZ;
+        ALTER TABLE inventario_itens ADD COLUMN IF NOT EXISTS ajuste_zen_por_nome VARCHAR(150);
         ALTER TABLE inventarios ADD COLUMN IF NOT EXISTS planilha_em TIMESTAMPTZ;
         ALTER TABLE inventarios ADD COLUMN IF NOT EXISTS planilha_por_nome VARCHAR(150);
       `);
@@ -425,9 +429,11 @@ export async function contarItem(req, res, next) {
       `UPDATE inventario_itens
           SET contado = $1::numeric, saldo_zen = $2::numeric, diferenca = $1::numeric - $2::numeric, status = $3, endereco = $4,
               contado_por = $5, contado_por_nome = $6, contado_em = NOW(), observacao = COALESCE($7, observacao),
-              contagens = contagens + 1
+              contagens = contagens + 1,
+              recontado_em = CASE WHEN $9 THEN NOW() ELSE recontado_em END,
+              recontado_por_nome = CASE WHEN $9 THEN $6 ELSE recontado_por_nome END
         WHERE id = $8 RETURNING id, codigo, contado, contado_em, contagens`,
-      [quantidade, saldo, status, endereco, req.usuario.id, req.usuario.nome, observacao, itemId]
+      [quantidade, saldo, status, endereco, req.usuario.id, req.usuario.nome, observacao, itemId, item.status === 'recontagem']
     );
     await query(
       `INSERT INTO inventario_contagens (inventario_id, item_id, quantidade, saldo_zen, endereco, curva, usuario_id, usuario_nome, observacao)
@@ -495,6 +501,25 @@ export async function marcarPlanilha(req, res, next) {
         WHERE id = $1 AND status = 'finalizado' RETURNING id, planilha_em, planilha_por_nome`,
       [parseInt(req.params.id), req.usuario.nome]);
     if (!r.rows[0]) return res.status(400).json({ erro: 'Só inventários finalizados vão para a planilha.' });
+    res.json(r.rows[0]);
+  } catch (err) { next(err); }
+}
+
+// POST /inventarios/:id/itens/:itemId/ajuste-zen  { ajustado: true|false }
+// Marca que a divergência do item já foi acertada no Zen (só admin).
+export async function marcarAjusteZen(req, res, next) {
+  try {
+    await garantirEstrutura();
+    if (req.usuario?.perfil !== 'admin') return res.status(403).json({ erro: 'Só administradores marcam o ajuste no Zen.' });
+    const ajustado = req.body?.ajustado !== false;
+    const r = await query(
+      `UPDATE inventario_itens
+          SET ajuste_zen_em = CASE WHEN $3 THEN NOW() ELSE NULL END,
+              ajuste_zen_por_nome = CASE WHEN $3 THEN $4 ELSE NULL END
+        WHERE id = $1 AND inventario_id = $2
+        RETURNING id, ajuste_zen_em, ajuste_zen_por_nome`,
+      [parseInt(req.params.itemId), parseInt(req.params.id), ajustado, req.usuario.nome]);
+    if (!r.rows[0]) return res.status(404).json({ erro: 'Item não encontrado.' });
     res.json(r.rows[0]);
   } catch (err) { next(err); }
 }
