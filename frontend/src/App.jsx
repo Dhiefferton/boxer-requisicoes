@@ -136,6 +136,9 @@ export default function App() {
             <Route path="/inventario/:id/contar" element={
               <RotaPerfil perfis={['operador', 'admin']}><InventarioContagem /></RotaPerfil>
             } />
+            <Route path="/inventario/:id/recontar" element={
+              <RotaPerfil perfis={['admin']}><InventarioContagem key="recontagem" modo="recontagem" /></RotaPerfil>
+            } />
             <Route path="/"  element={<Navigate to="/catalogo" replace />} />
             <Route path="*"  element={<Navigate to="/catalogo" replace />} />
           </Routes>
