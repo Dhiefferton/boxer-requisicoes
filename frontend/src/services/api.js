@@ -97,7 +97,8 @@ export const lojinhaService = {
   cliente: (documento) => api.get('/lojinha/cliente', { params: { documento }, timeout: 30000 }),
   produto: (sku)       => api.get('/lojinha/produto', { params: { sku } }),
   pedidos: ()          => api.get('/lojinha/pedidos'),
-  criar:   (dados)     => api.post('/lojinha/pedidos', dados),
+  criar:   (dados)     => api.post('/lojinha/pedidos', dados, { timeout: 120000 }),
+  reenviarZen: (id)    => api.post(`/lojinha/pedidos/${id}/zen`, null, { timeout: 120000 }),
 };
 
 export const requisicoesService = {
