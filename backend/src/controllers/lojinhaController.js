@@ -14,7 +14,17 @@ const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
 const SETORES = ['sac / suporte'];
 const lista = (v) => String(v || '').split(';').map(s => s.trim()).filter(Boolean);
 // Listas definitivas vêm depois (por enquanto, variáveis de ambiente; vazias = texto livre)
-const TRANSPORTADORAS = lista(process.env.LOJINHA_TRANSPORTADORAS);
+// Transportadoras e os estados que cada uma atende (lista da Boxer)
+const TRANSPORTADORAS = [
+  { nome: 'São Miguel', ufs: ['PR', 'SC', 'RS'] },
+  { nome: 'Rodo Cargo', ufs: ['SP', 'RJ'], obs: 'Também todo REDESPACHO' },
+  { nome: 'Rodonaves',  ufs: ['MG', 'ES'], obs: 'ES só se for agendado' },
+  { nome: 'Favorita',   ufs: ['AC', 'AP', 'AM', 'RO', 'RR', 'TO', 'DF', 'GO', 'MT', 'MS', 'MA'] },
+  { nome: 'Transuni',   ufs: ['CE', 'BA', 'AL', 'PB', 'PE', 'PI', 'SE', 'RN'] },
+  { nome: 'Troca',      ufs: ['ES'] },
+];
+// Estados sem transportadora definida
+const AVISOS_UF = { PA: 'PA — confirmar a transportadora com a Gessica.' };
 const VENDEDORAS = lista(process.env.LOJINHA_VENDEDORAS);
 
 let estruturaOk = null;
@@ -65,7 +75,7 @@ const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 
 // GET /lojinha/config
 export async function configLojinha(req, res) {
-  res.json({ tipos_envio: TIPOS_ENVIO, transportadoras: TRANSPORTADORAS, vendedoras: VENDEDORAS });
+  res.json({ tipos_envio: TIPOS_ENVIO, transportadoras: TRANSPORTADORAS, avisos_uf: AVISOS_UF, vendedoras: VENDEDORAS });
 }
 
 // GET /lojinha/cliente?documento=...
@@ -141,7 +151,7 @@ export async function criarPedidoLojinha(req, res, next) {
     if (!numero) return res.status(400).json({ erro: 'Informe o número do pedido da lojinha.' });
     if (!vendedora) return res.status(400).json({ erro: 'Informe a vendedora.' });
     if (!TIPOS_ENVIO.includes(tipo)) return res.status(400).json({ erro: 'Escolha o tipo de envio.' });
-    if (tipo === 'Transportadora' && !transportadora) return res.status(400).json({ erro: 'Escolha a transportadora.' });
+    if (tipo === 'Transportadora' && !TRANSPORTADORAS.some(t => t.nome === transportadora)) return res.status(400).json({ erro: 'Escolha a transportadora.' });
     if (!Number.isFinite(frete) || frete < 0) return res.status(400).json({ erro: 'Valor do frete inválido.' });
 
     // Produtos: confere de novo no catálogo (saldo pode ter mudado)
