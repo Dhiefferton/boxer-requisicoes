@@ -15,7 +15,7 @@
 import { query } from '../config/db.js';
 import { buscarClienteZen, excluirPedidoVendaZen } from '../integrations/zenPedidoVenda.js';
 import { criarPedidoLojinhaZen, listarVendedorasZen } from '../integrations/zenLojinha.js';
-import { criarCardsLojinha, excluirCardLojinha } from '../integrations/pipefyLojinha.js';
+import { criarCardsLojinha, excluirCardLojinha, fasesDosCards } from '../integrations/pipefyLojinha.js';
 import { buscarPedidoLI } from '../integrations/lojaIntegrada.js';
 
 const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
@@ -67,6 +67,7 @@ function garantirEstrutura() {
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS pipefy_erro TEXT;
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS pipefy_avisos TEXT;
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS separacao_em TIMESTAMPTZ;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS finalizado_em TIMESTAMPTZ;
       UPDATE lojinha_boxer_pedidos
          SET status = 'liberacao', qtd_cards = GREATEST(1, CEIL(jsonb_array_length(itens) / 7.0))::int
        WHERE status = 'entrada' AND zen_ordem_separacao_id IS NOT NULL;
@@ -158,7 +159,7 @@ export async function reenviarPipefyLojinha(req, res, next) {
     const p = r.rows[0];
     if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
     if (!p.zen_ordem_separacao_id) return res.status(409).json({ erro: 'O pedido ainda não tem ordem de separação no Zen.' });
-    if (p.status === 'separacao') return res.status(409).json({ erro: 'Os cards deste pedido já estão em Separação.' });
+    if (!['entrada', 'liberacao'].includes(p.status)) return res.status(409).json({ erro: 'Os cards deste pedido já estão no Pipefy (Separação ou depois).' });
     res.json({ pedido: await enviarPipefy(p) });
   } catch (err) { next(err); }
 }
@@ -263,11 +264,57 @@ export async function buscarPedidoLojaIntegrada(req, res) {
   res.json({ pedido: { ...li, itens, cliente, erro_cliente: erroCliente, duplicado } });
 }
 
+// ── Acompanhamento das fases do Pipefy (só leitura) ───────
+// Fase do pipe "Peças p/ Envio" → coluna da tela. Com vários cards,
+// o pedido fica na coluna do card mais atrasado.
+const ORDEM_STATUS = ['separacao', 'conferencia', 'teste_placas', 'preparacao', 'finalizado'];
+const STATUS_POR_FASE = {
+  '309953163': 'separacao',    // Entrada
+  '310139435': 'separacao',    // Liberação
+  '310137100': 'separacao',    // Separação
+  '333583933': 'conferencia',  // Conferência
+  '318632647': 'teste_placas', // TESTE DE PLACAS
+  '326808638': 'teste_placas', // FALTA DE PLACAS / PEÇAS
+  '340114338': 'preparacao',   // Pacote / Embalamento
+  '314012838': 'preparacao',   // Preparação (Exp.)
+  '309953164': 'preparacao',   // Definir transporte
+  '314012839': 'preparacao',   // Aguardando Saida
+  '309953165': 'finalizado',   // Expedição
+  '310336624': 'finalizado',   // Somente Prestação de Serviço
+};
+let ultimaSync = 0;
+async function sincronizarFasesPipefy() {
+  if (Date.now() - ultimaSync < 30000) return;
+  ultimaSync = Date.now();
+  const r = await query(`SELECT id, status, pipefy_cards FROM lojinha_boxer_pedidos
+                          WHERE status IN ('separacao', 'conferencia', 'teste_placas', 'preparacao')`);
+  if (!r.rows.length) return;
+  const ids = r.rows.flatMap(p => (p.pipefy_cards || []).map(c => c?.id).filter(Boolean));
+  const fases = await fasesDosCards(ids);
+  for (const p of r.rows) {
+    const cards = (p.pipefy_cards || []).map(c => (c?.id && fases[c.id] ? { ...c, fase: fases[c.id].fase, fase_id: fases[c.id].faseId } : c));
+    const st = cards.filter(c => c?.id && fases[c.id]).map(c => STATUS_POR_FASE[fases[c.id].faseId]).filter(Boolean);
+    if (!st.length) continue;
+    const novo = st.reduce((a, b) => (ORDEM_STATUS.indexOf(b) < ORDEM_STATUS.indexOf(a) ? b : a));
+    const mudouFase = JSON.stringify(cards) !== JSON.stringify(p.pipefy_cards);
+    if (novo === p.status && !mudouFase) continue;
+    await query(
+      `UPDATE lojinha_boxer_pedidos SET status = $2, pipefy_cards = $3,
+              finalizado_em = CASE WHEN $4 THEN COALESCE(finalizado_em, NOW()) ELSE NULL END
+        WHERE id = $1`, [p.id, novo, JSON.stringify(cards), novo === 'finalizado']);
+  }
+}
+
 // GET /lojinha/pedidos
 export async function listarPedidosLojinha(req, res, next) {
   try {
     await garantirEstrutura();
-    const r = await query(`SELECT * FROM lojinha_boxer_pedidos ORDER BY data DESC, id DESC LIMIT 300`);
+    await sincronizarFasesPipefy().catch(e => console.error('[Lojinha] sync Pipefy:', e.message));
+    const r = await query(
+      `(SELECT * FROM lojinha_boxer_pedidos WHERE status <> 'finalizado')
+       UNION ALL
+       (SELECT * FROM lojinha_boxer_pedidos WHERE status = 'finalizado' ORDER BY finalizado_em DESC NULLS LAST, id DESC LIMIT 60)
+       ORDER BY data DESC, id DESC`);
     res.json({ pedidos: r.rows });
   } catch (err) { next(err); }
 }
