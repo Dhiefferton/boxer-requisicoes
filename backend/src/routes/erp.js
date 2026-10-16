@@ -2,6 +2,7 @@ import express from 'express';
 import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncErpEstoque.js';
 import { getToken } from '../integrations/erpZen.js';
 import { pipefyQuery } from '../integrations/pipefyService.js';
+import { pedidoLIBruto, buscarPedidoLI } from '../integrations/lojaIntegrada.js';
 
 const router = express.Router();
 
@@ -46,6 +47,15 @@ router.get('/debug-pipefy', async (req, res) => {
   const gql = String(req.query.gql || '');
   if (!gql || /\bmutation\b/i.test(gql)) return res.status(400).json({ erro: 'Só consultas (query).' });
   try { res.json(await pipefyQuery(gql, {})); } catch (e) { res.status(502).json({ erro: e.message }); }
+});
+
+// DIAGNÓSTICO — pedido da Loja Integrada (cru e mapeado), só leitura.
+// Ex: GET /api/erp/debug-li?secret=...&numero=11131
+router.get('/debug-li', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  const numero = String(req.query.numero || '').replace(/\D/g, '');
+  try { res.json({ mapeado: await buscarPedidoLI(numero), bruto: req.query.bruto ? await pedidoLIBruto(numero) : undefined }); }
+  catch (e) { res.status(e.status || 502).json({ erro: e.message }); }
 });
 
 // Força sincronização manual (GET, testável no navegador, mesmo secret do cron)

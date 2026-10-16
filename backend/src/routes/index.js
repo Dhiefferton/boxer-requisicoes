@@ -40,7 +40,7 @@ import {
   configPlanilha, marcarPlanilha, marcarAjusteZen,
 } from '../controllers/inventarioController.js';
 import {
-  acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, excluirPedidoLojinha,
+  acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
 } from '../controllers/lojinhaController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
@@ -181,6 +181,7 @@ const loja = [autenticar, acessoLojinha];
 router.get('/lojinha/config',   ...loja, configLojinha);
 router.get('/lojinha/cliente',  ...loja, buscarClienteLojinha);
 router.get('/lojinha/produto',  ...loja, buscarProdutoLojinha);
+router.get('/lojinha/loja-integrada/:numero', ...loja, buscarPedidoLojaIntegrada);
 router.get('/lojinha/pedidos',  ...loja, listarPedidosLojinha);
 router.post('/lojinha/pedidos', ...loja, criarPedidoLojinha);
 router.post('/lojinha/pedidos/:id/zen', ...loja, reenviarZenLojinha);
