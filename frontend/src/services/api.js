@@ -75,9 +75,9 @@ export const pedidosOrcamentoService = {
 };
 
 export const inventarioService = {
-  listar:       ()                  => api.get('/inventarios'),
-  indicadores:  (meses)             => api.get('/inventarios/indicadores', { params: { meses }, timeout: 30000 }),
-  previa:       (filtros)           => api.post('/inventarios/previa', filtros),
+  listar:       (local)             => api.get('/inventarios', { params: { local } }),
+  indicadores:  (meses, local)      => api.get('/inventarios/indicadores', { params: { meses, local }, timeout: 30000 }),
+  previa:       (filtros)           => api.post('/inventarios/previa', filtros, { timeout: 120000 }),
   criar:        (filtros)           => api.post('/inventarios', filtros, { timeout: 120000 }),
   detalhar:     (id)                => api.get(`/inventarios/${id}`, { timeout: 30000 }),
   meu:          (id, modo)          => api.get(`/inventarios/${id}/meu`, { params: { modo }, timeout: 20000 }),
