@@ -33,12 +33,13 @@ router.get('/debug-pipefy', async (req, res) => {
   };
   if (!req.query.pipe && !req.query.tabela) {
     await tentar('pipes', `query { organization(id: 327351) { pipes { id name phases { id name } } } }`);
+    await tentar('tabelas', `query { organization(id: 327351) { tables(first: 50) { edges { node { id name } } } } }`);
   }
   if (req.query.pipe) {
     await tentar('pipe', `query($id: ID!) { pipe(id: $id) { id name
       phases { id name }
       start_form_fields { id label type required options description
-        connectedRepo { ... on Table { id name } ... on Pipe { id name } } } } }`, { id: String(req.query.pipe) });
+        connectedRepo { ... on PublicTable { id name } ... on PublicPipe { id name } } } } }`, { id: String(req.query.pipe) });
     if (out.pipe_erro) {
       await tentar('pipe_simples', `query($id: ID!) { pipe(id: $id) { id name phases { id name }
         start_form_fields { id label type required options } } }`, { id: String(req.query.pipe) });
