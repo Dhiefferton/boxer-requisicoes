@@ -32,6 +32,7 @@ function numBR(v) {
   if (!t) return NaN;
   return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
 }
+const ITENS_POR_CARD = 7; // limite do Pipefy
 const DESC_AUTORIZADO = 23; // % de desconto do Assistente Autorizado
 const totalItens = (itens) => itens.reduce((s, i) => s + Number(i.quantidade || 0) * Number(i.preco || 0), 0);
 const valorDesconto = (itens, autorizado) => (autorizado ? Math.round(totalItens(itens) * DESC_AUTORIZADO) / 100 : 0);
@@ -91,7 +92,7 @@ export default function LojinhaBoxer() {
           onSalvo={(p) => {
             setNovo(false);
             setAviso(p.zen_ordem_separacao_id
-              ? `Pedido ${p.numero_pedido} registrado — Zen: pedido ${p.zen_pedido_id}, ordem de separação ${p.zen_ordem_separacao_id}.`
+              ? `Pedido ${p.numero_pedido} criado no Zen (pedido ${p.zen_pedido_id}, ordem de separação ${p.zen_ordem_separacao_id}) e enviado para a Liberação — ${p.qtd_cards} card(s).`
               : `Pedido ${p.numero_pedido} registrado, mas o Zen deu erro: ${p.zen_erro || 'desconhecido'}. Use "Tentar de novo" no card.`);
             carregar();
           }} />
@@ -146,6 +147,33 @@ function StatusZen({ p, carregar }) {
   );
 }
 
+// Dados da coluna Liberação: Nº da ordem de separação e cards (7 itens por card)
+function InfoLiberacao({ p, itens }) {
+  const qtd = p.qtd_cards || Math.max(1, Math.ceil(itens.length / ITENS_POR_CARD));
+  const grupos = Array.from({ length: qtd }, (_, i) => itens.slice(i * ITENS_POR_CARD, (i + 1) * ITENS_POR_CARD));
+  return (
+    <div className="rounded-lg border border-[var(--c-destaque)]/40 bg-[var(--c-destaque)]/10 p-2.5 space-y-1.5">
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Nº Ordem de Separação (Zen)</p>
+          <p className="font-mono font-bold text-base text-[var(--c-texto)]">{p.zen_ordem_separacao_id}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Quantidade total de card</p>
+          <p className="font-bold text-base text-[var(--c-texto)]">{qtd}</p>
+        </div>
+      </div>
+      {qtd > 1 && (
+        <ul className="text-[11px] text-[var(--c-texto)] space-y-0.5">
+          {grupos.map((g, i) => (
+            <li key={i}><b>Card {i + 1}:</b> {g.map(x => x.codigo).join(', ')} <span className="text-[var(--c-suave)]">({g.length} {g.length === 1 ? 'item' : 'itens'})</span></li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function CardPedido({ p, carregar }) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
   const [aberto, setAberto] = useState(false);
@@ -157,6 +185,7 @@ function CardPedido({ p, carregar }) {
         <span className="text-[11px] text-[var(--c-suave)]">{fmtData(p.data)}</span>
       </div>
       <p className="text-[13px] font-semibold text-[var(--c-texto)] leading-snug">{p.cliente_nome}</p>
+      {p.status === 'liberacao' && p.zen_ordem_separacao_id && <InfoLiberacao p={p} itens={itens} />}
       {p.assistente_autorizado && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400"><BadgeCheck size={11} /> Assistente Autorizado</span>}
       <p className="text-[11px] text-[var(--c-suave)] font-mono">{mascararDocumento(p.documento)}{p.cliente_cidade ? ` · ${p.cliente_cidade}` : ''}</p>
       <div className="flex flex-wrap gap-1.5 pt-0.5">
