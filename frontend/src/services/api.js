@@ -92,6 +92,14 @@ export const inventarioService = {
   ajusteZen:    (id, itemId, ajustado) => api.post(`/inventarios/${id}/itens/${itemId}/ajuste-zen`, { ajustado }),
 };
 
+export const lojinhaService = {
+  config:  ()          => api.get('/lojinha/config'),
+  cliente: (documento) => api.get('/lojinha/cliente', { params: { documento }, timeout: 30000 }),
+  produto: (sku)       => api.get('/lojinha/produto', { params: { sku } }),
+  pedidos: ()          => api.get('/lojinha/pedidos'),
+  criar:   (dados)     => api.post('/lojinha/pedidos', dados),
+};
+
 export const requisicoesService = {
   criar:       (dados)           => api.post('/requisicoes', dados),
   listar:      (params)          => api.get('/requisicoes', { params }),
