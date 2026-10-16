@@ -5,15 +5,16 @@
 // Entrada: cliente (CPF/CNPJ buscado no Zen) e se é Assistente Autorizado,
 // data, produtos (SKU do catálogo, só com saldo em estoque, com preço),
 // nº do pedido da lojinha, vendedora, envio e valor do frete.
+// Ao salvar, cria o pedido de venda no Zen até a ordem de separação
+// (integrations/zenLojinha.js).
 // Acesso: admin, operador e o setor SAC / Suporte.
 // ============================================================
 import { query } from '../config/db.js';
 import { buscarClienteZen } from '../integrations/zenPedidoVenda.js';
+import { criarPedidoLojinhaZen, listarVendedorasZen } from '../integrations/zenLojinha.js';
 
 const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
 const SETORES = ['sac / suporte'];
-const lista = (v) => String(v || '').split(';').map(s => s.trim()).filter(Boolean);
-// Listas definitivas vêm depois (por enquanto, variáveis de ambiente; vazias = texto livre)
 // Transportadoras e os estados que cada uma atende (lista da Boxer)
 const TRANSPORTADORAS = [
   { nome: 'São Miguel', ufs: ['PR', 'SC', 'RS'] },
@@ -25,7 +26,6 @@ const TRANSPORTADORAS = [
 ];
 // Estados sem transportadora definida
 const AVISOS_UF = { PA: 'PA — confirmar a transportadora com a Gessica.' };
-const VENDEDORAS = lista(process.env.LOJINHA_VENDEDORAS);
 
 let estruturaOk = null;
 function garantirEstrutura() {
@@ -52,6 +52,11 @@ function garantirEstrutura() {
       CREATE INDEX IF NOT EXISTS idx_lojinha_boxer_pedidos_status ON lojinha_boxer_pedidos (status, data DESC, id DESC);
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS assistente_autorizado BOOLEAN NOT NULL DEFAULT FALSE;
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS valor_frete NUMERIC(12,2) NOT NULL DEFAULT 0;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS vendedora_id_zen INTEGER;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_pedido_id INTEGER;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_ordem_separacao_id INTEGER;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_cfop VARCHAR(10);
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_erro TEXT;
     `).catch(e => { estruturaOk = null; throw e; });
   }
   return estruturaOk;
@@ -75,7 +80,47 @@ const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 
 // GET /lojinha/config
 export async function configLojinha(req, res) {
-  res.json({ tipos_envio: TIPOS_ENVIO, transportadoras: TRANSPORTADORAS, avisos_uf: AVISOS_UF, vendedoras: VENDEDORAS });
+  let vendedoras = [], erroVendedoras = null;
+  try { vendedoras = await listarVendedorasZen(); } catch (e) { erroVendedoras = `Não consegui carregar as vendedoras do Zen: ${e.message}`; }
+  res.json({ tipos_envio: TIPOS_ENVIO, transportadoras: TRANSPORTADORAS, avisos_uf: AVISOS_UF, vendedoras, erro_vendedoras: erroVendedoras });
+}
+
+// Cria o pedido no Zen e grava o resultado (nunca lança erro)
+async function enviarZen(pedido) {
+  try {
+    // Pedidos antigos sem o ID da vendedora: acha pelo nome
+    if (!pedido.vendedora_id_zen && pedido.vendedora) {
+      const n = String(pedido.vendedora).trim().toLowerCase();
+      const achadas = (await listarVendedorasZen()).filter(v => v.nome.toLowerCase() === n || v.nome.toLowerCase().split(' ')[0] === n.split(' ')[0]);
+      if (achadas.length === 1) {
+        pedido.vendedora_id_zen = achadas[0].id;
+        await query(`UPDATE lojinha_boxer_pedidos SET vendedora_id_zen = $2 WHERE id = $1`, [pedido.id, achadas[0].id]);
+      }
+    }
+    const z = await criarPedidoLojinhaZen(pedido);
+    const r = await query(
+      `UPDATE lojinha_boxer_pedidos SET zen_pedido_id = $2, zen_ordem_separacao_id = $3, zen_cfop = $4, zen_erro = NULL
+        WHERE id = $1 RETURNING *`, [pedido.id, z.zenPedidoId, z.ordemSeparacaoId, z.cfop]);
+    return r.rows[0];
+  } catch (e) {
+    console.error('[Lojinha] Zen:', e.message);
+    const r = await query(
+      `UPDATE lojinha_boxer_pedidos SET zen_pedido_id = COALESCE($2, zen_pedido_id), zen_erro = $3 WHERE id = $1 RETURNING *`,
+      [pedido.id, e.zenPedidoId || null, e.message]);
+    return r.rows[0];
+  }
+}
+
+// POST /lojinha/pedidos/:id/zen — tenta de novo criar/completar o pedido no Zen
+export async function reenviarZenLojinha(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const r = await query(`SELECT * FROM lojinha_boxer_pedidos WHERE id = $1`, [parseInt(req.params.id)]);
+    const p = r.rows[0];
+    if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (p.zen_ordem_separacao_id) return res.status(409).json({ erro: 'Este pedido já tem ordem de separação no Zen.' });
+    res.json({ pedido: await enviarZen(p) });
+  } catch (err) { next(err); }
 }
 
 // GET /lojinha/cliente?documento=...
@@ -139,7 +184,8 @@ export async function criarPedidoLojinha(req, res, next) {
     const nome = String(b.cliente_nome || '').trim();
     const data = String(b.data || '').trim();
     const numero = String(b.numero_pedido || '').trim();
-    const vendedora = String(b.vendedora || '').trim();
+    const vendedoraId = Number(b.vendedora_id_zen) || null;
+    let vendedora = String(b.vendedora || '').trim();
     const tipo = String(b.tipo_envio || '').trim();
     const transportadora = String(b.transportadora || '').trim();
     const autorizado = b.assistente_autorizado === true;
@@ -149,7 +195,12 @@ export async function criarPedidoLojinha(req, res, next) {
     if (!nome) return res.status(400).json({ erro: 'Busque o cliente pelo documento antes de salvar.' });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return res.status(400).json({ erro: 'Informe a data.' });
     if (!numero) return res.status(400).json({ erro: 'Informe o número do pedido da lojinha.' });
-    if (!vendedora) return res.status(400).json({ erro: 'Informe a vendedora.' });
+    if (!vendedoraId) return res.status(400).json({ erro: 'Escolha a vendedora.' });
+    try {
+      const v = (await listarVendedorasZen()).find(x => x.id === vendedoraId);
+      if (!v) return res.status(400).json({ erro: 'Vendedora não encontrada no Zen.' });
+      vendedora = v.nome;
+    } catch { if (!vendedora) return res.status(400).json({ erro: 'Escolha a vendedora.' }); }
     if (!TIPOS_ENVIO.includes(tipo)) return res.status(400).json({ erro: 'Escolha o tipo de envio.' });
     if (tipo === 'Transportadora' && !TRANSPORTADORAS.some(t => t.nome === transportadora)) return res.status(400).json({ erro: 'Escolha a transportadora.' });
     if (!Number.isFinite(frete) || frete < 0) return res.status(400).json({ erro: 'Valor do frete inválido.' });
@@ -183,12 +234,14 @@ export async function criarPedidoLojinha(req, res, next) {
     const r = await query(
       `INSERT INTO lojinha_boxer_pedidos (documento, cliente_id_zen, cliente_nome, cliente_cidade, cliente_uf, data,
           numero_pedido, vendedora, tipo_envio, transportadora, itens, criado_por, criado_por_nome,
-          assistente_autorizado, valor_frete)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
+          assistente_autorizado, valor_frete, vendedora_id_zen)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
       [documento, Number(b.cliente_id_zen) || null, nome, String(b.cliente_cidade || '').trim() || null,
        String(b.cliente_uf || '').trim().toUpperCase().slice(0, 2) || null, data, numero, vendedora, tipo,
        tipo === 'Transportadora' ? transportadora : null, JSON.stringify(itens), req.usuario.id, req.usuario.nome,
-       autorizado, Math.round(frete * 100) / 100]);
-    res.status(201).json({ pedido: r.rows[0] });
+       autorizado, Math.round(frete * 100) / 100, vendedoraId]);
+    // Cria o pedido no Zen até a ordem de separação
+    const pedido = await enviarZen(r.rows[0]);
+    res.status(201).json({ pedido });
   } catch (err) { next(err); }
 }
