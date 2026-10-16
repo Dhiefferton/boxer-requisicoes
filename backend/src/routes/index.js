@@ -40,7 +40,7 @@ import {
   configPlanilha, marcarPlanilha, marcarAjusteZen,
 } from '../controllers/inventarioController.js';
 import {
-  acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha,
+  acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha,
 } from '../controllers/lojinhaController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
@@ -183,5 +183,6 @@ router.get('/lojinha/cliente',  ...loja, buscarClienteLojinha);
 router.get('/lojinha/produto',  ...loja, buscarProdutoLojinha);
 router.get('/lojinha/pedidos',  ...loja, listarPedidosLojinha);
 router.post('/lojinha/pedidos', ...loja, criarPedidoLojinha);
+router.post('/lojinha/pedidos/:id/zen', ...loja, reenviarZenLojinha);
 
 export default router;
