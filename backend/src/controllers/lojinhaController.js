@@ -16,6 +16,7 @@ import { query } from '../config/db.js';
 import { buscarClienteZen, excluirPedidoVendaZen } from '../integrations/zenPedidoVenda.js';
 import { criarPedidoLojinhaZen, listarVendedorasZen } from '../integrations/zenLojinha.js';
 import { criarCardsLojinha, excluirCardLojinha } from '../integrations/pipefyLojinha.js';
+import { buscarPedidoLI } from '../integrations/lojaIntegrada.js';
 
 const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
 const SETORES = ['sac / suporte'];
@@ -215,6 +216,51 @@ export async function buscarProdutoLojinha(req, res, next) {
     if (p.saldo <= 0) return res.status(409).json({ erro: `SKU ${p.codigo} sem saldo em estoque.`, produto: p });
     res.json({ produto: p });
   } catch (err) { next(err); }
+}
+
+// GET /lojinha/loja-integrada/:numero — busca o pedido na Loja Integrada e
+// já devolve o cliente do Zen e os itens conferidos no catálogo (saldo).
+export async function buscarPedidoLojaIntegrada(req, res) {
+  const numero = soDigitos(req.params.numero);
+  if (!numero) return res.status(400).json({ erro: 'Informe o número do pedido da lojinha.' });
+  let li;
+  try { li = await buscarPedidoLI(numero); }
+  catch (e) { return res.status(e.status || 502).json({ erro: e.message }); }
+
+  // Já foi lançado aqui?
+  let duplicado = null;
+  try {
+    await garantirEstrutura();
+    const d = await query(`SELECT id, status FROM lojinha_boxer_pedidos WHERE numero_pedido = $1 LIMIT 1`, [numero]);
+    duplicado = d.rows[0] || null;
+  } catch { /* segue */ }
+
+  let cliente = null, erroCliente = null;
+  if (li.documento) {
+    try {
+      const p = await buscarClienteZen(li.documento);
+      cliente = {
+        id: p?.id ?? null,
+        nome: p?.name || p?.corporateName || p?.companyName || p?.tradeName || p?.fantasyName || '',
+        cidade: p?.city?.name || null,
+        uf: p?.city?.state?.code || null,
+      };
+    } catch (e) {
+      erroCliente = /não está cadastrado/i.test(e.message)
+        ? 'Cliente não encontrado no Zen. Cadastre o cliente no Zen e busque de novo.'
+        : `Não consegui consultar o Zen agora: ${e.message}`;
+    }
+  } else erroCliente = 'O pedido da lojinha não tem CPF/CNPJ.';
+
+  const itens = [];
+  for (const i of li.itens) {
+    const p = await produtoPorSku(i.sku).catch(() => null);
+    if (!p) { itens.push({ codigo: i.sku, descricao: i.nome, quantidade: i.quantidade, preco: i.preco, erro: 'SKU não encontrado no catálogo.' }); continue; }
+    const erro = p.saldo <= 0 ? 'Sem saldo em estoque.' : (i.quantidade > p.saldo ? `Só há ${p.saldo} ${p.unidade} em estoque.` : null);
+    itens.push({ codigo: p.codigo, descricao: p.descricao, unidade: p.unidade, saldo: p.saldo, quantidade: i.quantidade, preco: i.preco, erro });
+  }
+
+  res.json({ pedido: { ...li, itens, cliente, erro_cliente: erroCliente, duplicado } });
 }
 
 // GET /lojinha/pedidos
