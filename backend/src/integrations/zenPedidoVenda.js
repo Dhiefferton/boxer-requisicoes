@@ -79,7 +79,7 @@ function mascararDocumento(doc) {
   return null;
 }
 
-export async function buscarClienteZen(documento) {
+async function buscarClienteZen(documento) {
   const mascarado = mascararDocumento(documento);
   if (!mascarado) throw new Error(`CNPJ/CPF do cliente inválido ou vazio no card ("${documento || ''}").`);
   const digitos = mascarado.replace(/\D/g, '');
