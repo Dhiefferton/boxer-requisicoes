@@ -17,6 +17,7 @@ export function lojaIntegradaConfigurada() {
 // Formas de autenticação aceitas pela API (a que funcionar fica memorizada)
 const AUTENTICACOES = [
   { nome: 'header chave_api/aplicacao', h: (k, a) => ({ Authorization: `chave_api ${k} aplicacao ${a}` }) },
+  { nome: 'header (chaves invertidas)', h: (k, a) => ({ Authorization: `chave_api ${a} aplicacao ${k}` }) },
   { nome: 'query chave_api/chave_aplicacao', q: (k, a) => ({ chave_api: k, chave_aplicacao: a }) },
   { nome: 'bearer personal token', h: (k, a) => ({ Authorization: `Bearer ${a}` }) },
   { nome: 'bearer + chave_api', h: (k, a) => ({ Authorization: `Bearer ${a}`, 'chave-api': k }) },
