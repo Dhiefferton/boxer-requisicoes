@@ -96,6 +96,7 @@ export const lojinhaService = {
   config:  ()          => api.get('/lojinha/config'),
   cliente: (documento) => api.get('/lojinha/cliente', { params: { documento }, timeout: 30000 }),
   produto: (sku)       => api.get('/lojinha/produto', { params: { sku } }),
+  lojaIntegrada: (numero) => api.get(`/lojinha/loja-integrada/${encodeURIComponent(numero)}`, { timeout: 60000 }),
   pedidos: ()          => api.get('/lojinha/pedidos'),
   criar:   (dados)     => api.post('/lojinha/pedidos', dados, { timeout: 120000 }),
   reenviarZen: (id)    => api.post(`/lojinha/pedidos/${id}/zen`, {}, { timeout: 120000 }),
