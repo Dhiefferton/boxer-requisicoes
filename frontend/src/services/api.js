@@ -99,6 +99,7 @@ export const lojinhaService = {
   pedidos: ()          => api.get('/lojinha/pedidos'),
   criar:   (dados)     => api.post('/lojinha/pedidos', dados, { timeout: 120000 }),
   reenviarZen: (id)    => api.post(`/lojinha/pedidos/${id}/zen`, {}, { timeout: 120000 }),
+  reenviarPipefy: (id) => api.post(`/lojinha/pedidos/${id}/pipefy`, {}, { timeout: 120000 }),
 };
 
 export const requisicoesService = {
