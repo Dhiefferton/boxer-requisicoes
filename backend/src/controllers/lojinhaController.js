@@ -6,7 +6,8 @@
 // data, produtos (SKU do catálogo, só com saldo em estoque, com preço),
 // nº do pedido da lojinha, vendedora, envio e valor do frete.
 // Ao salvar, cria o pedido de venda no Zen até a ordem de separação
-// (integrations/zenLojinha.js).
+// (integrations/zenLojinha.js) e o pedido passa sozinho para a Liberação,
+// com o Nº da ordem de separação e a quantidade de cards (7 itens por card).
 // Acesso: admin, operador e o setor SAC / Suporte.
 // ============================================================
 import { query } from '../config/db.js';
@@ -57,6 +58,10 @@ function garantirEstrutura() {
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_ordem_separacao_id INTEGER;
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_cfop VARCHAR(10);
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_erro TEXT;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS qtd_cards INTEGER;
+      UPDATE lojinha_boxer_pedidos
+         SET status = 'liberacao', qtd_cards = GREATEST(1, CEIL(jsonb_array_length(itens) / 7.0))::int
+       WHERE status = 'entrada' AND zen_ordem_separacao_id IS NOT NULL;
     `).catch(e => { estruturaOk = null; throw e; });
   }
   return estruturaOk;
@@ -75,6 +80,10 @@ export async function acessoLojinha(req, res, next) {
     res.status(403).json({ erro: 'Acesso restrito à Lojinha Boxer.' });
   } catch (err) { next(err); }
 }
+
+// Pipefy aceita no máximo 7 itens por card
+const ITENS_POR_CARD = 7;
+const qtdCards = (itens) => Math.max(1, Math.ceil((Array.isArray(itens) ? itens.length : 0) / ITENS_POR_CARD));
 
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 
@@ -99,8 +108,9 @@ async function enviarZen(pedido) {
     }
     const z = await criarPedidoLojinhaZen(pedido);
     const r = await query(
-      `UPDATE lojinha_boxer_pedidos SET zen_pedido_id = $2, zen_ordem_separacao_id = $3, zen_cfop = $4, zen_erro = NULL
-        WHERE id = $1 RETURNING *`, [pedido.id, z.zenPedidoId, z.ordemSeparacaoId, z.cfop]);
+      `UPDATE lojinha_boxer_pedidos SET zen_pedido_id = $2, zen_ordem_separacao_id = $3, zen_cfop = $4, zen_erro = NULL,
+              status = 'liberacao', qtd_cards = $5
+        WHERE id = $1 RETURNING *`, [pedido.id, z.zenPedidoId, z.ordemSeparacaoId, z.cfop, qtdCards(pedido.itens)]);
     return r.rows[0];
   } catch (e) {
     console.error('[Lojinha] Zen:', e.message);
