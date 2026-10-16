@@ -133,6 +133,20 @@ async function faseDoCard(cardId) {
   const r = await pipefyQuery(`query($id: ID!) { card(id: $id) { id url current_phase { id name } } }`, { id: String(cardId) });
   return r?.card || null;
 }
+// Fase atual de vários cards de uma vez (para acompanhar o pipe)
+export async function fasesDosCards(ids) {
+  const mapa = {};
+  const lista = [...new Set(ids.map(String).filter(x => /^\d+$/.test(x)))];
+  for (let i = 0; i < lista.length; i += 30) {
+    const parte = lista.slice(i, i + 30);
+    const gql = `{ ${parte.map((id, k) => `c${k}: card(id: ${id}) { id current_phase { id name } }`).join(' ')} }`;
+    let r = null;
+    try { r = await pipefyQuery(gql, {}); } catch { continue; }
+    parte.forEach((id, k) => { const c = r?.[`c${k}`]; if (c?.current_phase) mapa[id] = { faseId: String(c.current_phase.id), fase: c.current_phase.name }; });
+  }
+  return mapa;
+}
+
 async function preencher(cardId, campo, valor) {
   await pipefyQuery(`mutation($i: UpdateCardFieldInput!) { updateCardField(input: $i) { success } }`,
     { i: { card_id: String(cardId), field_id: campo, new_value: valor } });
