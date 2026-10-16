@@ -6,7 +6,7 @@
 // Próximas etapas: criar o pedido no Zen e o card no Pipefy.
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2 } from 'lucide-react';
+import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2, ExternalLink, AlertTriangle } from 'lucide-react';
 import { lojinhaService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -84,14 +84,28 @@ export default function LojinhaBoxer() {
     try {
       const { data: r } = await lojinhaService.criar({
         documento: soDigitos(documento), cliente_id_zen: cliente.id, cliente_nome: cliente.nome,
-        cliente_cidade: [cliente.cidade, cliente.uf].filter(Boolean).join(' / '),
+        cliente_cidade: [cliente.cidade, cliente.uf].filter(Boolean).join(' / '), cliente_uf: cliente.uf || '',
         data, numero_pedido: numero.trim(), tipo_envio: tipo, transportadora,
       });
-      setOk(`Pedido ${r.pedido.numero_pedido} registrado.`);
+      const pd = r.pedido;
+      setOk(pd.pipefy_card_id
+        ? `Pedido ${pd.numero_pedido} registrado e card criado no Pipefy (Peças p/ Envio → Entrada).${pd.pipefy_avisos ? ' ' + pd.pipefy_avisos : ''}`
+        : `Pedido ${pd.numero_pedido} registrado, mas o card do Pipefy não foi criado: ${pd.pipefy_erro || 'erro desconhecido'}. Use "Reenviar" na lista.`);
       setDocumento(''); setCliente(null); setNumero(''); setTipo(''); setTransportadora(''); setData(hojeISO());
       carregar();
     } catch (e2) { setErro(e2.response?.data?.erro || 'Erro ao salvar o pedido.'); }
     finally { setSalvando(false); }
+  }
+
+  const [reenviando, setReenviando] = useState(null);
+  async function reenviar(p) {
+    setReenviando(p.id);
+    try {
+      const { data: r } = await lojinhaService.reenviar(p.id);
+      if (!r.pedido.pipefy_card_id) alert(`Não consegui criar o card: ${r.pedido.pipefy_erro}`);
+      carregar();
+    } catch (e) { alert(e.response?.data?.erro || 'Erro ao reenviar.'); }
+    finally { setReenviando(null); }
   }
 
   const filtrados = useMemo(() => {
@@ -218,7 +232,7 @@ export default function LojinhaBoxer() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs sm:text-[13px]">
                 <thead><tr className="text-left text-[var(--c-suave)] text-[11px]">
-                  {['Data', 'Pedido', 'Cliente', 'CPF / CNPJ', 'Envio', 'Registrado por'].map(h => <th key={h} className="px-2 py-2 font-semibold whitespace-nowrap">{h}</th>)}
+                  {['Data', 'Pedido', 'Cliente', 'CPF / CNPJ', 'Envio', 'Pipefy', 'Registrado por'].map(h => <th key={h} className="px-2 py-2 font-semibold whitespace-nowrap">{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {filtrados.map(p => (
@@ -228,6 +242,25 @@ export default function LojinhaBoxer() {
                       <td className="px-2 py-2 min-w-[200px]">{p.cliente_nome}{p.cliente_cidade && <span className="block text-[11px] text-[var(--c-suave)]">{p.cliente_cidade}</span>}</td>
                       <td className="px-2 py-2 font-mono whitespace-nowrap">{mascararDocumento(p.documento)}</td>
                       <td className="px-2 py-2 whitespace-nowrap">{p.tipo_envio}{p.transportadora && <span className="block text-[11px] text-[var(--c-suave)]">{p.transportadora}</span>}</td>
+                      <td className="px-2 py-2 whitespace-nowrap">
+                        {p.pipefy_card_id ? (
+                          <a href={p.pipefy_url || `https://app.pipefy.com/open-cards/${p.pipefy_card_id}`} target="_blank" rel="noreferrer"
+                            title={p.pipefy_avisos || ''}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400">
+                            <Check size={11} /> Card {p.pipefy_card_id} <ExternalLink size={10} />
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span title={p.pipefy_erro || ''} className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-500/15 text-red-400">
+                              <AlertTriangle size={11} /> Sem card
+                            </span>
+                            <button onClick={() => reenviar(p)} disabled={reenviando === p.id}
+                              className="text-[11px] px-2 py-0.5 rounded-lg border border-[var(--c-borda)] text-[var(--c-texto)] disabled:opacity-50">
+                              {reenviando === p.id ? 'Enviando…' : 'Reenviar'}
+                            </button>
+                          </div>
+                        )}
+                      </td>
                       <td className="px-2 py-2 whitespace-nowrap">{p.criado_por_nome?.split(' ')[0]}<span className="block text-[11px] text-[var(--c-suave)]">{fmtDataHora(p.criado_em)}</span></td>
                     </tr>
                   ))}
