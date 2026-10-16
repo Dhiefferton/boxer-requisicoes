@@ -2,7 +2,8 @@
 // integrations/zenLojinha.js — Pedido de venda da Lojinha Boxer no ZenERP
 // ============================================================
 // Mesmo padrão dos pedidos da Lojinha feitos à mão no Zen:
-//   • Empresa TEKSP · perfil "Venda padrão" · operação fiscal "Venda"
+//   • Empresa TEKSP · perfil de venda "VendaConsumidor" (Venda consumidor final)
+//   • Operação fiscal: "Venda" (contribuinte) ou "Venda não contribuinte" (6.108)
 //   • Frete por conta do emitente (ISSUER) · forma de pagamento 0
 //   • Vendedora = vendedora escolhida na tela (pessoa do Zen)
 //   • Observação: "LB: <nº do pedido da lojinha>"
@@ -23,8 +24,9 @@ const ZEN_TENANT   = 'boxer';
 const CFG = {
   company:                Number(process.env.ZEN_LB_COMPANY_ID         || 1009),  // TEKSP
   ufEmpresa:              process.env.ZEN_LB_UF_EMPRESA || 'SP',
-  saleProfile:            Number(process.env.ZEN_LB_SALE_PROFILE_ID    || 1001),  // DEFAULT — Venda padrão
-  fiscalProfileOperation: Number(process.env.ZEN_LB_FISCAL_OP_ID       || 1061),  // Venda
+  saleProfile:            Number(process.env.ZEN_LB_SALE_PROFILE_ID    || 1007),  // VendaConsumidor — Venda consumidor final
+  fiscalOpVenda:          Number(process.env.ZEN_LB_FISCAL_OP_ID       || 1061),  // Venda
+  fiscalOpNaoContrib:     Number(process.env.ZEN_LB_FISCAL_OP_NC_ID    || 1070),  // VendaNaoContribuinte
   currency:               Number(process.env.ZEN_LB_CURRENCY_ID        || 1001),  // BRL
   pickingProfile:         Number(process.env.ZEN_LB_PICKING_PROFILE_ID || 1004),  // LOJINHA
   cfop5102:               1260,
@@ -149,7 +151,7 @@ export async function criarPedidoLojinhaZen(pedido) {
     const venda = await zen('POST', '/sale/sale', {
       company:                { id: CFG.company },
       saleProfile:            { id: CFG.saleProfile },
-      fiscalProfileOperation: { id: CFG.fiscalProfileOperation },
+      fiscalProfileOperation: { id: cfop.codigo === '6.108' ? CFG.fiscalOpNaoContrib : CFG.fiscalOpVenda },
       person:                 { id: pessoa.id },
       personSalesperson:      { id: Number(pedido.vendedora_id_zen) },
       freightType:            'ISSUER',
