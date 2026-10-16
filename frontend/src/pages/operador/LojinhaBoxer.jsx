@@ -165,6 +165,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
   const [frete, setFrete] = useState('');
   const [buscandoSku, setBuscandoSku] = useState(false);
   const [erroSku, setErroSku] = useState('');
+  const [previa, setPrevia] = useState(null); // { sku, produto?, erro? }
   const [numero, setNumero] = useState('');
   const [vendedora, setVendedora] = useState('');
   const [tipo, setTipo] = useState('');
@@ -173,6 +174,23 @@ function NovoPedido({ config, onFechar, onSalvo }) {
   const [erro, setErro] = useState('');
   const ultimaBusca = useRef('');
   const skuRef = useRef(null);
+
+  // Mostra a descrição do SKU enquanto digita
+  useEffect(() => {
+    const codigo = sku.trim();
+    if (!codigo) { setPrevia(null); return; }
+    let vivo = true;
+    const t = setTimeout(async () => {
+      setPrevia({ sku: codigo, carregando: true });
+      try {
+        const { data: r } = await lojinhaService.produto(codigo);
+        if (vivo) setPrevia({ sku: codigo, produto: r.produto });
+      } catch (e) {
+        if (vivo) setPrevia({ sku: codigo, produto: e.response?.data?.produto, erro: e.response?.data?.erro || 'Erro ao buscar o SKU.' });
+      }
+    }, 350);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [sku]);
 
   async function buscarCliente(doc = documento) {
     const d = soDigitos(doc);
@@ -331,6 +349,16 @@ function NovoPedido({ config, onFechar, onSalvo }) {
                 {buscandoSku ? <Spinner size={14} /> : <Plus size={15} />} Incluir
               </button>
             </form>
+            {previa && previa.sku === sku.trim() && (
+              <div className="mt-1.5 text-xs flex items-center gap-2 min-h-[18px]">
+                {previa.carregando ? <><Spinner size={12} /> <span className="text-[var(--c-suave)]">Buscando no catálogo…</span></>
+                  : previa.produto ? <>
+                    <span className="text-[var(--c-texto)] font-semibold truncate">{previa.produto.descricao}</span>
+                    <span className={`shrink-0 ${previa.produto.saldo > 0 ? 'text-green-400' : 'text-red-400'}`}>saldo {fmtQtd(previa.produto.saldo)} {previa.produto.unidade}</span>
+                  </> : null}
+                {!previa.carregando && previa.erro && !previa.produto && <span className="text-red-400">{previa.erro}</span>}
+              </div>
+            )}
             {erroSku && <p className="text-xs text-red-400 mt-1">{erroSku}</p>}
             {itens.length > 0 && (
               <div className="mt-2 rounded-xl border border-[var(--c-borda)] divide-y divide-[var(--c-borda)]">
