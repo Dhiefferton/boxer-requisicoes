@@ -8,11 +8,14 @@
 // Ao salvar, cria o pedido de venda no Zen até a ordem de separação
 // (integrations/zenLojinha.js) e o pedido passa sozinho para a Liberação,
 // com o Nº da ordem de separação e a quantidade de cards (7 itens por card).
+// Em seguida cria os cards no Pipefy (Peças p/ Envio) e os leva até
+// Separação; aqui o pedido vai para a coluna "Em Separação".
 // Acesso: admin, operador e o setor SAC / Suporte.
 // ============================================================
 import { query } from '../config/db.js';
 import { buscarClienteZen } from '../integrations/zenPedidoVenda.js';
 import { criarPedidoLojinhaZen, listarVendedorasZen } from '../integrations/zenLojinha.js';
+import { criarCardsLojinha } from '../integrations/pipefyLojinha.js';
 
 const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
 const SETORES = ['sac / suporte'];
@@ -59,6 +62,10 @@ function garantirEstrutura() {
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_cfop VARCHAR(10);
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_erro TEXT;
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS qtd_cards INTEGER;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS pipefy_cards JSONB NOT NULL DEFAULT '[]';
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS pipefy_erro TEXT;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS pipefy_avisos TEXT;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS separacao_em TIMESTAMPTZ;
       UPDATE lojinha_boxer_pedidos
          SET status = 'liberacao', qtd_cards = GREATEST(1, CEIL(jsonb_array_length(itens) / 7.0))::int
        WHERE status = 'entrada' AND zen_ordem_separacao_id IS NOT NULL;
@@ -111,7 +118,8 @@ async function enviarZen(pedido) {
       `UPDATE lojinha_boxer_pedidos SET zen_pedido_id = $2, zen_ordem_separacao_id = $3, zen_cfop = $4, zen_erro = NULL,
               status = 'liberacao', qtd_cards = $5
         WHERE id = $1 RETURNING *`, [pedido.id, z.zenPedidoId, z.ordemSeparacaoId, z.cfop, qtdCards(pedido.itens)]);
-    return r.rows[0];
+    // Liberação automática: cria os cards no Pipefy e leva até Separação
+    return await enviarPipefy(r.rows[0]);
   } catch (e) {
     console.error('[Lojinha] Zen:', e.message);
     const r = await query(
@@ -119,6 +127,39 @@ async function enviarZen(pedido) {
       [pedido.id, e.zenPedidoId || null, e.message]);
     return r.rows[0];
   }
+}
+
+// Cria os cards no Pipefy e move até Separação (nunca lança erro)
+async function enviarPipefy(pedido) {
+  const salvar = (cards) => query(`UPDATE lojinha_boxer_pedidos SET pipefy_cards = $2 WHERE id = $1`, [pedido.id, JSON.stringify(cards)]);
+  try {
+    const u = pedido.criado_por
+      ? (await query(`SELECT nome, email FROM usuarios WHERE id = $1`, [pedido.criado_por])).rows[0]
+      : null;
+    const { cards, avisos } = await criarCardsLojinha(pedido, u || { nome: pedido.criado_por_nome }, pedido.pipefy_cards || [], salvar);
+    const r = await query(
+      `UPDATE lojinha_boxer_pedidos SET pipefy_cards = $2, pipefy_erro = NULL, pipefy_avisos = $3,
+              status = 'separacao', separacao_em = COALESCE(separacao_em, NOW())
+        WHERE id = $1 RETURNING *`, [pedido.id, JSON.stringify(cards), avisos.join(' ') || null]);
+    return r.rows[0];
+  } catch (e) {
+    console.error('[Lojinha] Pipefy:', e.message);
+    const r = await query(`UPDATE lojinha_boxer_pedidos SET pipefy_erro = $2 WHERE id = $1 RETURNING *`, [pedido.id, e.message]);
+    return r.rows[0];
+  }
+}
+
+// POST /lojinha/pedidos/:id/pipefy — tenta de novo criar/mover os cards no Pipefy
+export async function reenviarPipefyLojinha(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const r = await query(`SELECT * FROM lojinha_boxer_pedidos WHERE id = $1`, [parseInt(req.params.id)]);
+    const p = r.rows[0];
+    if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (!p.zen_ordem_separacao_id) return res.status(409).json({ erro: 'O pedido ainda não tem ordem de separação no Zen.' });
+    if (p.status === 'separacao') return res.status(409).json({ erro: 'Os cards deste pedido já estão em Separação.' });
+    res.json({ pedido: await enviarPipefy(p) });
+  } catch (err) { next(err); }
 }
 
 // POST /lojinha/pedidos/:id/zen — tenta de novo criar/completar o pedido no Zen
