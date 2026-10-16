@@ -38,7 +38,7 @@ const campo = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[v
 const rotulo = 'block text-xs text-[var(--c-suave)] mb-1.5';
 
 export default function LojinhaBoxer() {
-  const [config, setConfig] = useState({ tipos_envio: ['Sedex', 'PAC', 'Próprio', 'Transportadora'], transportadoras: [], vendedoras: [] });
+  const [config, setConfig] = useState({ tipos_envio: ['Sedex', 'PAC', 'Próprio', 'Transportadora'], transportadoras: [], avisos_uf: {}, vendedoras: [] });
   const [pedidos, setPedidos] = useState(null);
   const [novo, setNovo] = useState(false);
   const [aviso, setAviso] = useState('');
@@ -242,6 +242,14 @@ function NovoPedido({ config, onFechar, onSalvo }) {
     finally { setSalvando(false); }
   }
 
+  const uf = (cliente?.uf || '').toUpperCase();
+  const indicadas = config.transportadoras.filter(t => uf && t.ufs.includes(uf));
+  function escolherEnvio(t) {
+    setTipo(t);
+    if (t !== 'Transportadora') setTransportadora('');
+    else if (!transportadora && indicadas.length === 1) setTransportadora(indicadas[0].nome);
+  }
+
   const botao = (ativo) => `flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-medium transition-colors ${ativo
     ? 'bg-[var(--c-destaque)] border-[var(--c-destaque)] text-white'
     : 'border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)]'}`;
@@ -348,7 +356,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
               {config.tipos_envio.map(t => {
                 const Icone = ICONE_ENVIO[t] || Package;
                 return (
-                  <button key={t} type="button" onClick={() => { setTipo(t); if (t !== 'Transportadora') setTransportadora(''); }} className={botao(tipo === t)}>
+                  <button key={t} type="button" onClick={() => escolherEnvio(t)} className={botao(tipo === t)}>
                     <Icone size={15} /> {t}
                   </button>
                 );
@@ -357,17 +365,20 @@ function NovoPedido({ config, onFechar, onSalvo }) {
             {tipo === 'Transportadora' && (
               <div className="max-w-md mt-3">
                 <label className={rotulo}>Transportadora</label>
-                {config.transportadoras.length ? (
-                  <select value={transportadora} onChange={e => setTransportadora(e.target.value)} className={campo}>
-                    <option value="">Selecione…</option>
-                    {config.transportadoras.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                ) : (
-                  <>
-                    <input value={transportadora} onChange={e => setTransportadora(e.target.value)} placeholder="Nome da transportadora" className={campo} />
-                    <p className="text-[11px] text-[var(--c-suave)] mt-1">A lista de transportadoras ainda vai ser cadastrada — por enquanto, digite o nome.</p>
-                  </>
-                )}
+                <select value={transportadora} onChange={e => setTransportadora(e.target.value)} className={campo}>
+                  <option value="">Selecione…</option>
+                  {config.transportadoras.map(t => (
+                    <option key={t.nome} value={t.nome}>
+                      {uf && t.ufs.includes(uf) ? '★ ' : ''}{t.nome} — {t.ufs.join(', ')}
+                    </option>
+                  ))}
+                </select>
+                {uf && (indicadas.length || config.avisos_uf[uf]) ? (
+                  <p className="text-xs mt-1.5 text-amber-400">
+                    {config.avisos_uf[uf] || `Cliente em ${uf}: ${indicadas.map(t => t.nome + (t.obs ? ` (${t.obs})` : '')).join(' ou ')}.`}
+                  </p>
+                ) : null}
+                <p className="text-[11px] text-[var(--c-suave)] mt-1">Tudo que for REDESPACHO vai pela Rodo Cargo.</p>
               </div>
             )}
           </div>
