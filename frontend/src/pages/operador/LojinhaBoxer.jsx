@@ -236,11 +236,31 @@ function CardPedido({ p, carregar }) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
   const [aberto, setAberto] = useState(false);
   const desconto = valorDesconto(itens, p.assistente_autorizado);
+  const [excluindo, setExcluindo] = useState(false);
+  async function excluir() {
+    const cards = (p.pipefy_cards || []).filter(c => c?.id).length;
+    const partes = [
+      p.zen_pedido_id && `o pedido ${p.zen_pedido_id} no Zen (desfazendo a ordem de separação ${p.zen_ordem_separacao_id || ''})`,
+      cards && `${cards} card(s) no Pipefy`,
+      'o pedido na Lojinha',
+    ].filter(Boolean);
+    if (!window.confirm(`Excluir o pedido ${p.numero_pedido}?\n\nIsso vai excluir ${partes.join(', ')}.\nNão dá para desfazer.`)) return;
+    setExcluindo(true);
+    try { await lojinhaService.excluir(p.id); carregar(); }
+    catch (e) { alert(e.response?.data?.erro || 'Erro ao excluir.'); carregar(); }
+    finally { setExcluindo(false); }
+  }
   return (
     <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-fundo)] p-3 space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
-        <span className="text-[11px] text-[var(--c-suave)]">{fmtData(p.data)}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-[var(--c-suave)]">{fmtData(p.data)}</span>
+          <button onClick={excluir} disabled={excluindo} title="Excluir pedido (Zen, Pipefy e Lojinha)"
+            className="p-1 rounded-lg text-[var(--c-suave)] hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50">
+            {excluindo ? <Spinner size={13} /> : <Trash2 size={14} />}
+          </button>
+        </div>
       </div>
       <p className="text-[13px] font-semibold text-[var(--c-texto)] leading-snug">{p.cliente_nome}</p>
       {['liberacao', 'separacao'].includes(p.status) && p.zen_ordem_separacao_id && <InfoLiberacao p={p} itens={itens} />}
