@@ -2,11 +2,12 @@
 // pages/operador/LojinhaBoxer.jsx — Lojinha Boxer
 // ============================================================
 // Duas colunas: Entrada e Liberação.
-// Entrada: cliente (CPF/CNPJ buscado no Zen), data, produtos (SKU do
-// catálogo, só com saldo), nº do pedido da lojinha, vendedora e envio.
+// Entrada: cliente (CPF/CNPJ buscado no Zen) e se é Assistente Autorizado,
+// data, produtos (SKU do catálogo, só com saldo, com preço), nº do pedido
+// da lojinha, vendedora, envio e valor do frete.
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, ClipboardList, Send, User } from 'lucide-react';
+import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, ClipboardList, Send, User, BadgeCheck } from 'lucide-react';
 import { lojinhaService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -24,6 +25,13 @@ function mascararDocumento(v) {
 
 const fmtData = (d) => (d ? new Date(`${String(d).slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR') : '—');
 const fmtQtd = (n) => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+const fmtR$ = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function numBR(v) {
+  const t = String(v ?? '').trim().replace(/^R\$\s*/, '');
+  if (!t) return NaN;
+  return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
+}
+const totalItens = (itens) => itens.reduce((s, i) => s + Number(i.quantidade || 0) * Number(i.preco || 0), 0);
 const ICONE_ENVIO = { Sedex: Mail, PAC: Package, 'Próprio': Truck, Transportadora: Building2 };
 
 const campo = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[var(--c-destaque)]';
@@ -111,6 +119,7 @@ function CardPedido({ p }) {
         <span className="text-[11px] text-[var(--c-suave)]">{fmtData(p.data)}</span>
       </div>
       <p className="text-[13px] font-semibold text-[var(--c-texto)] leading-snug">{p.cliente_nome}</p>
+      {p.assistente_autorizado && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400"><BadgeCheck size={11} /> Assistente Autorizado</span>}
       <p className="text-[11px] text-[var(--c-suave)] font-mono">{mascararDocumento(p.documento)}{p.cliente_cidade ? ` · ${p.cliente_cidade}` : ''}</p>
       <div className="flex flex-wrap gap-1.5 pt-0.5">
         <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[var(--c-borda)] text-[var(--c-texto)]"><User size={11} /> {p.vendedora}</span>
@@ -126,12 +135,17 @@ function CardPedido({ p }) {
           {itens.map(i => (
             <li key={i.codigo} className="flex justify-between gap-2 text-[12px] text-[var(--c-texto)]">
               <span className="truncate"><b className="font-mono">{i.codigo}</b> {i.descricao}</span>
-              <span className="shrink-0 font-semibold">{fmtQtd(i.quantidade)} {i.unidade}</span>
+              <span className="shrink-0 font-semibold">{fmtQtd(i.quantidade)} {i.unidade} × {fmtR$(i.preco)}</span>
             </li>
           ))}
+          <li className="flex justify-between text-[12px] text-[var(--c-suave)] pt-1 border-t border-[var(--c-borda)]"><span>Produtos</span><span>{fmtR$(totalItens(itens))}</span></li>
+          <li className="flex justify-between text-[12px] text-[var(--c-suave)]"><span>Frete</span><span>{fmtR$(p.valor_frete)}</span></li>
         </ul>
       )}
-      <p className="text-[10px] text-[var(--c-suave)]">Registrado por {p.criado_por_nome?.split(' ')[0] || '—'}</p>
+      <div className="flex items-center justify-between text-[10px] text-[var(--c-suave)]">
+        <span>Registrado por {p.criado_por_nome?.split(' ')[0] || '—'}</span>
+        <b className="text-[12px] text-[var(--c-texto)]">{fmtR$(totalItens(itens) + Number(p.valor_frete || 0))}</b>
+      </div>
     </div>
   );
 }
@@ -146,6 +160,9 @@ function NovoPedido({ config, onFechar, onSalvo }) {
   const [itens, setItens] = useState([]);
   const [sku, setSku] = useState('');
   const [qtd, setQtd] = useState('1');
+  const [preco, setPreco] = useState('');
+  const [autorizado, setAutorizado] = useState(false);
+  const [frete, setFrete] = useState('');
   const [buscandoSku, setBuscandoSku] = useState(false);
   const [erroSku, setErroSku] = useState('');
   const [numero, setNumero] = useState('');
@@ -183,6 +200,8 @@ function NovoPedido({ config, onFechar, onSalvo }) {
     setErroSku('');
     if (!codigo) { setErroSku('Informe o SKU.'); return; }
     if (!(q > 0)) { setErroSku('Informe a quantidade.'); return; }
+    const pr = numBR(preco);
+    if (!(pr >= 0)) { setErroSku('Informe o preço unitário.'); return; }
     setBuscandoSku(true);
     try {
       const { data: r } = await lojinhaService.produto(codigo);
@@ -191,9 +210,9 @@ function NovoPedido({ config, onFechar, onSalvo }) {
       const total = (jaTem?.quantidade || 0) + q;
       if (total > p.saldo) { setErroSku(`SKU ${p.codigo}: só há ${fmtQtd(p.saldo)} ${p.unidade} em estoque.`); return; }
       setItens(lista => jaTem
-        ? lista.map(i => (i.codigo === p.codigo ? { ...i, quantidade: total } : i))
-        : [...lista, { codigo: p.codigo, descricao: p.descricao, unidade: p.unidade, saldo: p.saldo, quantidade: q }]);
-      setSku(''); setQtd('1');
+        ? lista.map(i => (i.codigo === p.codigo ? { ...i, quantidade: total, preco: pr } : i))
+        : [...lista, { codigo: p.codigo, descricao: p.descricao, unidade: p.unidade, saldo: p.saldo, quantidade: q, preco: pr }]);
+      setSku(''); setQtd('1'); setPreco('');
       skuRef.current?.focus();
     } catch (e2) { setErroSku(e2.response?.data?.erro || 'Erro ao buscar o SKU.'); }
     finally { setBuscandoSku(false); }
@@ -207,12 +226,15 @@ function NovoPedido({ config, onFechar, onSalvo }) {
     if (!vendedora.trim()) { setErro('Informe a vendedora.'); return; }
     if (!tipo) { setErro('Escolha o tipo de envio.'); return; }
     if (tipo === 'Transportadora' && !transportadora.trim()) { setErro('Escolha a transportadora.'); return; }
+    const vFrete = frete.trim() === '' ? 0 : numBR(frete);
+    if (!(vFrete >= 0)) { setErro('Valor do frete inválido.'); return; }
     setSalvando(true);
     try {
       const { data: r } = await lojinhaService.criar({
         documento: soDigitos(documento), cliente_id_zen: cliente.id, cliente_nome: cliente.nome,
         cliente_cidade: [cliente.cidade, cliente.uf].filter(Boolean).join(' / '), cliente_uf: cliente.uf || '',
-        data, itens: itens.map(i => ({ codigo: i.codigo, quantidade: i.quantidade })),
+        data, itens: itens.map(i => ({ codigo: i.codigo, quantidade: i.quantidade, preco: i.preco })),
+        assistente_autorizado: autorizado, valor_frete: vFrete,
         numero_pedido: numero.trim(), vendedora: vendedora.trim(), tipo_envio: tipo, transportadora: transportadora.trim(),
       });
       onSalvo(r.pedido);
@@ -260,6 +282,11 @@ function NovoPedido({ config, onFechar, onSalvo }) {
               {erroCliente && <p className="text-xs text-red-400 mt-1">{erroCliente}</p>}
             </div>
           </div>
+          <label className="flex items-center gap-2.5 w-fit cursor-pointer select-none text-sm text-[var(--c-texto)]">
+            <input type="checkbox" checked={autorizado} onChange={e => setAutorizado(e.target.checked)}
+              className="w-4 h-4 accent-[var(--c-destaque)]" />
+            Cliente é <b>Assistente Autorizado</b>
+          </label>
 
           {/* 2. Data / 4. Nº pedido / 5. Vendedora */}
           <div className="grid gap-4 sm:grid-cols-3">
@@ -287,11 +314,12 @@ function NovoPedido({ config, onFechar, onSalvo }) {
           {/* 3. Produtos */}
           <div>
             <label className={rotulo}>Produtos</label>
-            <form onSubmit={incluirProduto} className="flex gap-2">
-              <input ref={skuRef} value={sku} onChange={e => { setSku(e.target.value); setErroSku(''); }} placeholder="SKU" className={`${campo} font-mono`} />
-              <input value={qtd} onChange={e => setQtd(e.target.value)} inputMode="decimal" className={`${campo} w-24 text-center`} title="Quantidade" />
+            <form onSubmit={incluirProduto} className="grid grid-cols-[70px_1fr_auto] sm:grid-cols-[1fr_80px_130px_auto] gap-2">
+              <input ref={skuRef} value={sku} onChange={e => { setSku(e.target.value); setErroSku(''); }} placeholder="SKU" className={`${campo} font-mono col-span-3 sm:col-span-1`} />
+              <input value={qtd} onChange={e => setQtd(e.target.value)} inputMode="decimal" className={`${campo} text-center`} title="Quantidade" placeholder="Qtd" />
+              <input value={preco} onChange={e => setPreco(e.target.value)} inputMode="decimal" className={`${campo} text-right`} title="Preço unitário (R$)" placeholder="Preço R$" />
               <button type="submit" disabled={buscandoSku}
-                className="flex items-center gap-1.5 px-4 rounded-xl bg-[var(--c-borda)] text-[var(--c-texto)] text-sm font-semibold disabled:opacity-50 shrink-0">
+                className="flex items-center justify-center gap-1.5 px-4 rounded-xl bg-[var(--c-borda)] text-[var(--c-texto)] text-sm font-semibold disabled:opacity-50 shrink-0">
                 {buscandoSku ? <Spinner size={14} /> : <Plus size={15} />} Incluir
               </button>
             </form>
@@ -299,14 +327,16 @@ function NovoPedido({ config, onFechar, onSalvo }) {
             {itens.length > 0 && (
               <div className="mt-2 rounded-xl border border-[var(--c-borda)] divide-y divide-[var(--c-borda)]">
                 {itens.map(i => (
-                  <div key={i.codigo} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <div key={i.codigo} className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-0.5 px-3 py-2 text-sm">
                     <span className="font-mono font-semibold text-[var(--c-texto)] shrink-0">{i.codigo}</span>
-                    <span className="flex-1 min-w-0 truncate text-[var(--c-texto)]">{i.descricao}</span>
+                    <span className="basis-[calc(100%-5rem)] sm:basis-auto flex-1 min-w-0 truncate text-[var(--c-texto)]">{i.descricao}</span>
                     <span className="text-[11px] text-[var(--c-suave)] shrink-0 hidden sm:inline">saldo {fmtQtd(i.saldo)}</span>
-                    <b className="shrink-0 text-[var(--c-texto)]">{fmtQtd(i.quantidade)} {i.unidade}</b>
+                    <span className="shrink-0 text-[var(--c-texto)]">{fmtQtd(i.quantidade)} {i.unidade} × {fmtR$(i.preco)}</span>
+                    <b className="shrink-0 w-24 text-right text-[var(--c-texto)]">{fmtR$(i.quantidade * i.preco)}</b>
                     <button onClick={() => setItens(l => l.filter(x => x.codigo !== i.codigo))} className="p-1 text-[var(--c-suave)] hover:text-red-400" title="Remover"><Trash2 size={14} /></button>
                   </div>
                 ))}
+                <div className="flex justify-between px-3 py-2 text-sm text-[var(--c-suave)]"><span>Total dos produtos</span><b className="text-[var(--c-texto)]">{fmtR$(totalItens(itens))}</b></div>
               </div>
             )}
           </div>
@@ -340,6 +370,16 @@ function NovoPedido({ config, onFechar, onSalvo }) {
                 )}
               </div>
             )}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-[200px_1fr] items-end">
+            <div>
+              <label className={rotulo}>Valor do frete (R$)</label>
+              <input value={frete} onChange={e => setFrete(e.target.value)} inputMode="decimal" placeholder="0,00" className={`${campo} text-right`} />
+            </div>
+            <div className="text-right text-sm text-[var(--c-suave)] pb-2.5">
+              Total do pedido <b className="text-lg text-[var(--c-texto)] ml-2">{fmtR$(totalItens(itens) + (numBR(frete) >= 0 ? numBR(frete) : 0))}</b>
+            </div>
           </div>
 
           {erro && <p className="text-sm text-red-400">{erro}</p>}
