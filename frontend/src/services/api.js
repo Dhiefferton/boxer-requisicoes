@@ -96,7 +96,8 @@ export const lojinhaService = {
   config:  ()          => api.get('/lojinha/config'),
   cliente: (documento) => api.get('/lojinha/cliente', { params: { documento }, timeout: 30000 }),
   pedidos: ()          => api.get('/lojinha/pedidos'),
-  criar:   (dados)     => api.post('/lojinha/pedidos', dados),
+  criar:   (dados)     => api.post('/lojinha/pedidos', dados, { timeout: 60000 }),
+  reenviar: (id)       => api.post(`/lojinha/pedidos/${id}/pipefy`, null, { timeout: 60000 }),
 };
 
 export const requisicoesService = {
