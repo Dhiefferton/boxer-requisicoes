@@ -236,3 +236,14 @@ export async function criarCardsLojinha(pedido, usuario, progresso = [], salvar 
   }
   return { cards, avisos };
 }
+
+// Exclui um card (card que já não existe conta como excluído)
+export async function excluirCardLojinha(cardId) {
+  if (!cardId) return;
+  try {
+    await pipefyQuery(`mutation($id: ID!) { deleteCard(input: { id: $id }) { success } }`, { id: String(cardId) });
+  } catch (e) {
+    if (/not found|não encontrad|record not found|permission/i.test(e.message) && !(await faseDoCard(cardId).catch(() => null))) return;
+    throw e;
+  }
+}
