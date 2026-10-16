@@ -110,16 +110,6 @@ export default function PedidosOrcamento() {
 
       {verMovimentacao && usuario?.perfil === 'admin' && <PainelMovimentacao onFechar={() => setVerMovimentacao(false)} />}
 
-      {/* ── Cards de resumo ──────────────────────────────── */}
-      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-        {COLUNAS.map(({ status, resumo }) => (
-          <div key={status} className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-3 text-center">
-            <p className="text-xl font-bold text-[var(--c-texto)]">{pedidos.filter(p => p.status === status).length}</p>
-            <p className="text-[10px] text-[var(--c-suave)] mt-0.5">{resumo}</p>
-          </div>
-        ))}
-      </div>
-
       {msgSync && <p className="text-xs text-[var(--c-suave)] bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-3 py-2">{msgSync}</p>}
 
       {loading ? (

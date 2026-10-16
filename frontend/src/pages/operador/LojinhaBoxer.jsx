@@ -92,16 +92,6 @@ export default function LojinhaBoxer() {
         </div>
       </div>
 
-      {/* ── Cards de resumo ──────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-2">
-        {COLUNAS.map(({ status, resumo }) => (
-          <div key={status} className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-3 text-center">
-            <p className="text-xl font-bold text-[var(--c-texto)]">{lista.filter(p => p.status === status).length}</p>
-            <p className="text-[10px] text-[var(--c-suave)] mt-0.5">{resumo}</p>
-          </div>
-        ))}
-      </div>
-
       {aviso && <p className="text-xs text-[var(--c-suave)] bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-3 py-2">{aviso}</p>}
 
       {!pedidos ? (
