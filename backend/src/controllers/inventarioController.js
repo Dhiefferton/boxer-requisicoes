@@ -82,6 +82,7 @@ function garantirEstrutura() {
         ALTER TABLE inventario_itens ADD COLUMN IF NOT EXISTS ajuste_zen_por_nome VARCHAR(150);
         ALTER TABLE inventarios ADD COLUMN IF NOT EXISTS planilha_em TIMESTAMPTZ;
         ALTER TABLE inventarios ADD COLUMN IF NOT EXISTS planilha_por_nome VARCHAR(150);
+        ALTER TABLE inventarios ADD COLUMN IF NOT EXISTS local VARCHAR(20) NOT NULL DEFAULT 'almoxarifado';
       `);
       // Curva ABC da planilha (só preenche quem ainda não tem)
       const r = await query(`SELECT COUNT(*)::int AS n FROM materiais WHERE curva_abc IS NOT NULL`);
@@ -96,6 +97,66 @@ function garantirEstrutura() {
     })().catch(e => { estruturaOk = null; throw e; });
   }
   return estruturaOk;
+}
+
+// ── Locais de inventário ───────────────────────────────────────
+// almoxarifado: endereços PE/PEC (e MAQ para Máquinas), saldo do catálogo.
+// marketplace: depósito MKT_PLACE do Zen (endereço MERCADO_LIVRE), saldo
+// lido direto do Zen. Cada local tem seus próprios inventários.
+export const LOCAIS = {
+  almoxarifado: { nome: 'Almoxarifado' },
+  marketplace:  { nome: 'Marketplace (Mercado Livre)', deposito: 'MKT_PLACE' },
+};
+const localDe = (v) => (LOCAIS[v] ? v : 'almoxarifado');
+const DEPOSITO_MKT = LOCAIS.marketplace.deposito;
+
+// Estoque inteiro do depósito do marketplace (reserva SISTEMA), por produto
+async function estoqueMarketplace() {
+  const token = await getToken();
+  const filtro = `address.warehouse.code=="${DEPOSITO_MKT}";type=="REGULAR";reservation.id==0`;
+  const porProduto = {};
+  const PAGINA = 500;
+  for (let first = 0; first < 40000; first += PAGINA) {
+    const j = await stockPorFiltroPagina(token, filtro, first, PAGINA);
+    for (const it of j) {
+      const prod = it.productPacking?.product;
+      const cod = prod?.code;
+      const q = Number(it.quantity) || 0;
+      if (!cod || !(q > 0)) continue;
+      const x = (porProduto[cod] ||= { codigo: cod, descricao: prod.description || '', perfil: prod.productProfile?.description || '', saldo: 0, enderecos: {} });
+      x.saldo += q;
+      const e = it.address?.code;
+      if (e) x.enderecos[e] = (x.enderecos[e] || 0) + q;
+    }
+    if (j.length < PAGINA) break;
+  }
+  return Object.values(porProduto).map(x => ({
+    ...x, endereco: Object.entries(x.enderecos).sort((a, b) => b[1] - a[1]).map(([e]) => e).join(' / '),
+  }));
+}
+async function stockPorFiltroPagina(token, filtro, first, max) {
+  const r = await fetch(`https://api.zenerp.app.br/material/stock?q=${encodeURIComponent(filtro)}&first=${first}&max=${max}`, {
+    headers: { accept: 'application/json', Authorization: `Bearer ${token}`, tenant: 'boxer' },
+  });
+  if (!r.ok) throw new Error(`ZenERP respondeu ${r.status}`);
+  const j = await r.json();
+  return Array.isArray(j) ? j : [];
+}
+
+// Itens do marketplace com curva/categoria do catálogo (quando existir)
+async function candidatosMarketplace(curvas) {
+  const estoque = await estoqueMarketplace();
+  if (!estoque.length) return [];
+  const m = await query(
+    `SELECT m.id, m.codigo, m.curva_abc, c.nome AS categoria FROM materiais m LEFT JOIN categorias c ON c.id = m.categoria_id
+      WHERE m.codigo = ANY($1::text[])`, [estoque.map(e => e.codigo)]);
+  const cat = Object.fromEntries(m.rows.map(r => [r.codigo, r]));
+  return estoque.map(e => ({
+    id: cat[e.codigo]?.id ?? null, codigo: e.codigo, descricao: e.descricao,
+    categoria: cat[e.codigo]?.categoria || e.perfil || 'Marketplace',
+    curva: cat[e.codigo]?.curva_abc || null, saldo: e.saldo, endereco: e.endereco,
+  })).filter(i => curvas.includes(i.curva || '-'))
+    .sort((a, b) => (a.curva || 'Z').localeCompare(b.curva || 'Z') || a.codigo.localeCompare(b.codigo));
 }
 
 // ── Zen ────────────────────────────────────────────────────────
@@ -122,8 +183,18 @@ async function enderecosZenEmLote() {
 }
 
 // Saldo e endereço atuais de um produto (na hora da contagem)
-async function saldoZenAgora(codigo, categoria) {
+async function saldoZenAgora(codigo, categoria, local = 'almoxarifado') {
   const token = await getToken();
+  if (local === 'marketplace') {
+    const itens = await stockPorFiltro(token,
+      `productPacking.product.code=="${codigo}";address.warehouse.code=="${DEPOSITO_MKT}";type=="REGULAR";reservation.id==0`, 1000);
+    let saldo = 0; const porEndereco = {};
+    for (const it of itens) {
+      const q = Number(it.quantity) || 0; saldo += q;
+      const e = it.address?.code; if (e && q > 0) porEndereco[e] = (porEndereco[e] || 0) + q;
+    }
+    return { saldo, endereco: Object.entries(porEndereco).sort((a, b) => b[1] - a[1]).map(([e]) => e).join(' / ') };
+  }
   const maq = categoria === 'Máquinas';
   const filtro = maq
     ? `productPacking.product.code=="${codigo}";type=="REGULAR";address.id==${ENDERECO_MAQ_ID};reservation.id==0`
@@ -203,9 +274,11 @@ function statusDaContagem(contado, saldo) {
 export async function listarInventarios(req, res, next) {
   try {
     await garantirEstrutura();
-    const r = await query(`SELECT * FROM inventarios WHERE status <> 'cancelado' ORDER BY id DESC LIMIT 200`);
+    const local = localDe(req.query.local);
+    const r = await query(`SELECT * FROM inventarios WHERE status <> 'cancelado' AND local = $1 ORDER BY id DESC LIMIT 200`, [local]);
     const resumo = await resumoInventarios(r.rows.map(i => i.id));
-    res.json({ inventarios: r.rows.map(i => ({ ...i, resumo: resumo[i.id] })), saldo_maximo: SALDO_MAXIMO });
+    res.json({ inventarios: r.rows.map(i => ({ ...i, resumo: resumo[i.id] })), saldo_maximo: SALDO_MAXIMO,
+      local, locais: Object.entries(LOCAIS).map(([id, l]) => ({ id, nome: l.nome })) });
   } catch (err) { next(err); }
 }
 
@@ -215,7 +288,7 @@ function filtrosCandidatos(body) {
   const curvas = (Array.isArray(body.curvas) && body.curvas.length ? body.curvas : ['A', 'B', 'C', '-'])
     .filter(c => ['A', 'B', 'C', '-'].includes(c));
   const incluirZerados = body.incluirZerados !== false;
-  return { categorias, curvas, incluirZerados };
+  return { local: localDe(body.local), categorias, curvas, incluirZerados };
 }
 
 function sqlCandidatos(f) {
@@ -239,6 +312,15 @@ export async function previaInventario(req, res, next) {
   try {
     await garantirEstrutura();
     const f = filtrosCandidatos(req.body || {});
+    if (f.local === 'marketplace') {
+      let itens;
+      try { itens = await candidatosMarketplace(f.curvas); }
+      catch (e) { return res.status(503).json({ erro: `Não consegui ler o estoque do marketplace no Zen: ${e.message}` }); }
+      const g = {};
+      for (const i of itens) { const k = `${i.categoria}|${i.curva || '-'}`; g[k] = (g[k] || 0) + 1; }
+      return res.json({ total: itens.length, grupos: Object.entries(g).map(([k, n]) => ({ categoria: k.split('|')[0], curva: k.split('|')[1], n })),
+        filtros: f, saldo_maximo: null, unidades: itens.reduce((s, i) => s + i.saldo, 0) });
+    }
     const { sql, params } = sqlCandidatos(f);
     const r = await query(`SELECT categoria, COALESCE(curva, '-') AS curva, COUNT(*)::int AS n FROM (${sql}) x GROUP BY 1, 2`, params);
     const total = r.rows.reduce((s, x) => s + x.n, 0);
@@ -250,11 +332,23 @@ export async function previaInventario(req, res, next) {
 export async function criarInventario(req, res, next) {
   try {
     await garantirEstrutura();
-    const aberto = await query(`SELECT id FROM inventarios WHERE status = 'andamento' LIMIT 1`);
-    if (aberto.rows[0]) {
-      return res.status(409).json({ erro: `Já existe um inventário em andamento (#${aberto.rows[0].id}). Finalize ou cancele antes de abrir outro.` });
-    }
     const f = filtrosCandidatos(req.body || {});
+    const aberto = await query(`SELECT id FROM inventarios WHERE status = 'andamento' AND local = $1 LIMIT 1`, [f.local]);
+    if (aberto.rows[0]) {
+      return res.status(409).json({ erro: `Já existe um inventário do ${LOCAIS[f.local].nome} em andamento (#${aberto.rows[0].id}). Finalize ou cancele antes de abrir outro.` });
+    }
+    if (f.local === 'marketplace') {
+      let itens;
+      try { itens = await candidatosMarketplace(f.curvas); }
+      catch (e) { return res.status(503).json({ erro: `Não consegui ler o estoque do marketplace no Zen: ${e.message}` }); }
+      if (!itens.length) return res.status(400).json({ erro: 'Nenhum item com saldo no depósito MKT_PLACE com esses filtros.' });
+      const inv = await query(
+        `INSERT INTO inventarios (filtros, criado_por, criado_por_nome, local) VALUES ($1, $2, $3, 'marketplace') RETURNING *`,
+        [JSON.stringify({ ...f, categorias: ['Marketplace'] }), req.usuario.id, req.usuario.nome]);
+      const id = inv.rows[0].id;
+      await inserirItens(id, itens, (i) => i.endereco);
+      return res.status(201).json({ inventario: inv.rows[0], itens: itens.length });
+    }
     const { sql, params } = sqlCandidatos(f);
     const candidatos = (await query(sql, params)).rows;
     if (!candidatos.length) return res.status(400).json({ erro: 'Nenhum item com esses filtros.' });
@@ -280,17 +374,21 @@ export async function criarInventario(req, res, next) {
       [JSON.stringify(f), req.usuario.id, req.usuario.nome]
     );
     const id = inv.rows[0].id;
-    await query(
-      `INSERT INTO inventario_itens (inventario_id, material_id, codigo, descricao, categoria, curva, endereco, saldo_inicial)
-       SELECT $1, d.mid, d.cod, d.descr, d.cat, NULLIF(d.cur, ''), NULLIF(d.ende, ''), d.saldo
-         FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::numeric[])
-              AS d(mid, cod, descr, cat, cur, ende, saldo)
-       ON CONFLICT (inventario_id, codigo) DO NOTHING`,
-      [id, itens.map(i => i.id), itens.map(i => i.codigo), itens.map(i => i.descricao), itens.map(i => i.categoria),
-       itens.map(i => i.curva || ''), itens.map(i => enderecoDe(i)), itens.map(i => Number(i.saldo) || 0)]
-    );
+    await inserirItens(id, itens, enderecoDe);
     res.status(201).json({ inventario: inv.rows[0], itens: itens.length, fora_do_pe: foraDoPE, aviso: avisoEndereco });
   } catch (err) { next(err); }
+}
+
+async function inserirItens(id, itens, enderecoDe) {
+  await query(
+    `INSERT INTO inventario_itens (inventario_id, material_id, codigo, descricao, categoria, curva, endereco, saldo_inicial)
+     SELECT $1, d.mid, d.cod, d.descr, d.cat, NULLIF(d.cur, ''), NULLIF(d.ende, ''), d.saldo
+       FROM UNNEST($2::int[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::numeric[])
+            AS d(mid, cod, descr, cat, cur, ende, saldo)
+     ON CONFLICT (inventario_id, codigo) DO NOTHING`,
+    [id, itens.map(i => i.id), itens.map(i => i.codigo), itens.map(i => i.descricao), itens.map(i => i.categoria),
+     itens.map(i => i.curva || ''), itens.map(i => enderecoDe(i) || ''), itens.map(i => Number(i.saldo) || 0)]
+  );
 }
 
 // GET /inventarios/:id
@@ -322,7 +420,7 @@ export async function meuInventario(req, res, next) {
     // os itens marcados para recontagem não aparecem.
     const recontagem = req.query.modo === 'recontagem';
     if (recontagem && !podeRecontar(req.usuario)) return res.status(403).json({ erro: 'A recontagem é só para administradores.' });
-    const inv = await query(`SELECT id, status, criado_em FROM inventarios WHERE id = $1`, [id]);
+    const inv = await query(`SELECT id, status, criado_em, local FROM inventarios WHERE id = $1`, [id]);
     if (!inv.rows[0]) return res.status(404).json({ erro: 'Inventário não encontrado.' });
     const resumo = (await resumoInventarios([id]))[id];
     const eu = resumo.contadores.find(c => c.usuario_id === req.usuario.id) || { segundos: 0, contagens: 0, ultima: null };
@@ -352,7 +450,7 @@ export async function buscarItemInventario(req, res, next) {
     const id = parseInt(req.params.id);
     const texto = String(req.query.texto || '').trim();
     if (!texto) return res.status(400).json({ erro: 'Informe o código.' });
-    const inv = await query(`SELECT status FROM inventarios WHERE id = $1`, [id]);
+    const inv = await query(`SELECT status, local FROM inventarios WHERE id = $1`, [id]);
     if (!inv.rows[0] || inv.rows[0].status !== 'andamento') {
       return res.status(410).json({ erro: 'Este inventário não está mais em andamento. Volte para a tela Inventário e abra a contagem de novo.' });
     }
@@ -366,6 +464,11 @@ export async function buscarItemInventario(req, res, next) {
       const m = await query(
         `SELECT m.codigo, m.descricao, m.quantidade_erp FROM materiais m WHERE UPPER(m.codigo) = ANY($1::text[]) LIMIT 1`, [pedacos]);
       const mat = m.rows[0];
+      if (inv.rows[0].local === 'marketplace') {
+        return res.status(404).json({ erro: mat
+          ? `${mat.codigo} — ${mat.descricao} não está neste inventário (não tinha saldo no Marketplace / MKT_PLACE quando ele foi aberto).`
+          : `Código "${texto}" não encontrado.` });
+      }
       return res.status(404).json({
         erro: mat
           ? `${mat.codigo} — ${mat.descricao} não está neste inventário (saldo no sistema: ${mat.quantidade_erp ?? 0}; só entram itens com saldo até ${SALDO_MAXIMO}).`
@@ -374,7 +477,7 @@ export async function buscarItemInventario(req, res, next) {
     }
     // Endereço atualizado do Zen (sem mostrar saldo — contagem às cegas)
     try {
-      const z = await saldoZenAgora(item.codigo, item.categoria);
+      const z = await saldoZenAgora(item.codigo, item.categoria, inv.rows[0].local);
       if ((z.endereco || null) !== (item.endereco || null)) {
         await query(`UPDATE inventario_itens SET endereco = $1 WHERE id = $2`, [z.endereco || null, item.id]);
         item.endereco = z.endereco || null;
@@ -399,8 +502,9 @@ export async function contarItem(req, res, next) {
     const itemId = parseInt(req.params.itemId);
     const quantidade = Number(req.body?.quantidade);
     if (!Number.isFinite(quantidade) || quantidade < 0) return res.status(400).json({ erro: 'Quantidade inválida.' });
-    const inv = await query(`SELECT status FROM inventarios WHERE id = $1`, [id]);
+    const inv = await query(`SELECT status, local FROM inventarios WHERE id = $1`, [id]);
     if (inv.rows[0]?.status !== 'andamento') return res.status(400).json({ erro: 'Este inventário não está em andamento.' });
+    const local = inv.rows[0].local || 'almoxarifado';
     const it = await query(`SELECT * FROM inventario_itens WHERE id = $1 AND inventario_id = $2`, [itemId, id]);
     const item = it.rows[0];
     if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
@@ -411,17 +515,24 @@ export async function contarItem(req, res, next) {
     // Saldo: o mesmo do catálogo (Partes e Peças / Máquinas) — quantidade_erp,
     // que a sincronização em lote do Zen (stockCube) atualiza a cada 5 min.
     let saldo = Number(item.saldo_inicial) || 0;
-    const mat = await query(
-      `SELECT quantidade_erp FROM materiais WHERE id = $1 OR (codigo = $2 AND $1::int IS NULL) LIMIT 1`,
-      [item.material_id, item.codigo]);
-    if (mat.rows[0] && mat.rows[0].quantidade_erp != null) saldo = Number(mat.rows[0].quantidade_erp) || 0;
+    if (local !== 'marketplace') {
+      const mat = await query(
+        `SELECT quantidade_erp FROM materiais WHERE id = $1 OR (codigo = $2 AND $1::int IS NULL) LIMIT 1`,
+        [item.material_id, item.codigo]);
+      if (mat.rows[0] && mat.rows[0].quantidade_erp != null) saldo = Number(mat.rows[0].quantidade_erp) || 0;
+    }
 
-    // Endereço atualizado do Zen (só PE)
+    // Endereço atualizado do Zen (almoxarifado: só PE). No marketplace o
+    // saldo também vem do Zen na hora (depósito MKT_PLACE).
     let endereco = item.endereco;
     try {
-      const z = await saldoZenAgora(item.codigo, item.categoria);
+      const z = await saldoZenAgora(item.codigo, item.categoria, local);
       endereco = z.endereco || null;
-    } catch (e) { console.error('[Inventario] endereco zen:', e.message); }
+      if (local === 'marketplace') saldo = z.saldo;
+    } catch (e) {
+      console.error('[Inventario] zen:', e.message);
+      if (local === 'marketplace') return res.status(503).json({ erro: 'Não consegui ler o saldo do marketplace no Zen agora. Tente de novo.' });
+    }
 
     const status = statusDaContagem(quantidade, saldo);
     const observacao = String(req.body?.observacao || '').trim() || null;
@@ -543,7 +654,8 @@ export async function indicadoresInventario(req, res, next) {
     const meses = Math.min(Math.max(parseInt(req.query.meses) || 12, 1), 120);
     const inv = await query(
       `SELECT id, criado_em FROM inventarios
-        WHERE status = 'finalizado' AND criado_em >= NOW() - ($1 || ' months')::interval ORDER BY criado_em`, [String(meses)]);
+        WHERE status = 'finalizado' AND local = $2 AND criado_em >= NOW() - ($1 || ' months')::interval ORDER BY criado_em`,
+      [String(meses), localDe(req.query.local)]);
     const ids = inv.rows.map(i => i.id);
     const resumo = await resumoInventarios(ids);
     const porCurva = ids.length ? (await query(
