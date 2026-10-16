@@ -335,6 +335,9 @@ function NovoPedido({ config, onFechar, onSalvo }) {
   const [transportadora, setTransportadora] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+  const [buscandoLI, setBuscandoLI] = useState(false);
+  const [infoLI, setInfoLI] = useState(null); // { numero, situacao, envio_nome, avisos[] }
+  const [erroLI, setErroLI] = useState('');
   const ultimaBusca = useRef('');
   const skuRef = useRef(null);
 
@@ -372,6 +375,37 @@ function NovoPedido({ config, onFechar, onSalvo }) {
     setDocumento(m); setCliente(null); setErroCliente('');
     const d = soDigitos(m);
     if (d.length === 11 || d.length === 14) buscarCliente(m);
+  }
+
+  // Busca o pedido na Loja Integrada e preenche o formulário
+  async function importarLI(e) {
+    e?.preventDefault();
+    const n = soDigitos(numero);
+    if (!n) { setErroLI('Informe o número do pedido da lojinha.'); return; }
+    setBuscandoLI(true); setErroLI(''); setInfoLI(null);
+    try {
+      const { data: r } = await lojinhaService.lojaIntegrada(n);
+      const p = r.pedido;
+      const avisos = [];
+      if (p.duplicado) avisos.push(`Este pedido já foi lançado aqui (status: ${p.duplicado.status}).`);
+      setNumero(p.numero);
+      ultimaBusca.current = soDigitos(p.documento);
+      setDocumento(mascararDocumento(p.documento || ''));
+      setCliente(p.cliente); setErroCliente(p.erro_cliente || ''); setBuscandoCliente(false);
+      if (p.data) setData(p.data);
+      setItens(p.itens.filter(i => !i.erro).map(({ erro, ...i }) => i));
+      p.itens.filter(i => i.erro).forEach(i => avisos.push(`SKU ${i.codigo}${i.descricao ? ` (${i.descricao})` : ''}: ${i.erro} Não foi incluído.`));
+      setFrete(p.valor_frete ? p.valor_frete.toFixed(2).replace('.', ',') : '');
+      const ufCli = (p.cliente?.uf || p.uf || '').toUpperCase();
+      setTipo(p.tipo_envio || '');
+      if (p.tipo_envio === 'Transportadora') {
+        const ind = config.transportadoras.filter(t => ufCli && t.ufs.includes(ufCli));
+        setTransportadora(ind.length === 1 ? ind[0].nome : '');
+      } else setTransportadora('');
+      if (!p.tipo_envio) avisos.push('Forma de envio não identificada — escolha abaixo.');
+      setInfoLI({ numero: p.numero, situacao: p.situacao, envio_nome: p.envio_nome, avisos });
+    } catch (e2) { setErroLI(e2.response?.data?.erro || 'Erro ao buscar o pedido na Loja Integrada.'); }
+    finally { setBuscandoLI(false); }
   }
 
   async function incluirProduto(e) {
@@ -444,12 +478,33 @@ function NovoPedido({ config, onFechar, onSalvo }) {
         </div>
 
         <div className="p-4 sm:p-5 space-y-5">
+          {/* 0. Pedido da Loja Integrada */}
+          <div className="rounded-xl border border-[var(--c-destaque)] p-3">
+            <label className={rotulo}>Número do pedido da lojinha</label>
+            <form onSubmit={importarLI} className="flex gap-2 max-w-md">
+              <input value={numero} onChange={e => { setNumero(e.target.value); setErroLI(''); }} inputMode="numeric" autoFocus
+                placeholder="Ex.: 11131" className={campo} />
+              <button type="submit" disabled={buscandoLI}
+                className="flex items-center gap-1.5 px-4 rounded-xl bg-[var(--c-destaque)] text-white text-sm font-semibold disabled:opacity-50 shrink-0">
+                {buscandoLI ? <Spinner size={14} /> : <Search size={15} />} Buscar na lojinha
+              </button>
+            </form>
+            <p className="text-[11px] text-[var(--c-suave)] mt-1.5">Puxa cliente, data, produtos, preços, frete e envio da Loja Integrada. Confira, escolha a vendedora e salve.</p>
+            {erroLI && <p className="text-xs text-red-400 mt-1.5">{erroLI}</p>}
+            {infoLI && (
+              <div className="mt-2 text-xs space-y-1">
+                <p className="text-green-400 flex items-center gap-1.5"><Check size={13} /> Pedido #{infoLI.numero} carregado{infoLI.situacao ? ` — ${infoLI.situacao}` : ''}{infoLI.envio_nome ? ` — ${infoLI.envio_nome}` : ''}</p>
+                {infoLI.avisos.map((a, k) => <p key={k} className="text-amber-400 flex items-start gap-1.5"><AlertTriangle size={13} className="shrink-0 mt-px" /> {a}</p>)}
+              </div>
+            )}
+          </div>
+
           {/* 1. Cliente */}
           <div className="grid gap-4 md:grid-cols-[1fr_2fr]">
             <div>
               <label className={rotulo}>CPF / CNPJ do cliente</label>
               <div className="flex gap-2">
-                <input value={documento} onChange={e => mudarDocumento(e.target.value)} inputMode="numeric" autoFocus
+                <input value={documento} onChange={e => mudarDocumento(e.target.value)} inputMode="numeric"
                   placeholder="000.000.000-00" className={campo} />
                 <button type="button" onClick={() => buscarCliente()} disabled={buscandoCliente}
                   className="px-3 rounded-xl bg-[var(--c-borda)] text-[var(--c-texto)] disabled:opacity-50" title="Buscar no Zen">
@@ -478,14 +533,10 @@ function NovoPedido({ config, onFechar, onSalvo }) {
           </label>
 
           {/* 2. Data / 4. Nº pedido / 5. Vendedora */}
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className={rotulo}>Data</label>
               <input type="date" value={data} onChange={e => setData(e.target.value)} className={campo} />
-            </div>
-            <div>
-              <label className={rotulo}>Número do pedido da lojinha</label>
-              <input value={numero} onChange={e => setNumero(e.target.value)} placeholder="Ex.: 3625" className={campo} />
             </div>
             <div>
               <label className={rotulo}>Vendedora</label>
