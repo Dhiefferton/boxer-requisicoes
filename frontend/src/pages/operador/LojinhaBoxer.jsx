@@ -35,11 +35,11 @@ function numBR(v) {
 const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
 const linkZenPedido = (id) => `${ZEN_APP_URL}/sale/sale?q=id==${id}`;
 const linkZenOrdem = (id) => `${ZEN_APP_URL}/material/pickingOrder?q=id==${id}`;
-// Colunas (mesmo visual da tela de Orçamentos)
+// Colunas (mesmo visual da tela de Orçamentos). A liberação é automática
+// (Zen + Pipefy); pedido que parou no Pipefy fica na Entrada com o erro.
 const COLUNAS = [
-  { status: 'entrada',   titulo: 'Entrada',      resumo: 'Entrada',      cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
-  { status: 'liberacao', titulo: 'Liberação',    resumo: 'Liberação',    cor: 'border-amber-500/40',  badge: 'bg-amber-500/15 text-amber-400' },
-  { status: 'separacao', titulo: 'Em Separação', resumo: 'Em Separação', cor: 'border-purple-500/40', badge: 'bg-purple-500/15 text-purple-400' },
+  { status: 'entrada',   inclui: ['entrada', 'liberacao'], titulo: 'Entrada',      cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
+  { status: 'separacao', inclui: ['separacao'],            titulo: 'Em Separação', cor: 'border-purple-500/40', badge: 'bg-purple-500/15 text-purple-400' },
 ];
 const ITENS_POR_CARD = 7; // limite do Pipefy
 const DESC_AUTORIZADO = 23; // % de desconto do Assistente Autorizado
@@ -97,9 +97,9 @@ export default function LojinhaBoxer() {
       {!pedidos ? (
         <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-rows-1 xl:flex-1 xl:min-h-0 gap-4">
-          {COLUNAS.map(({ status, titulo, cor, badge }) => {
-            const doStatus = lista.filter(p => p.status === status);
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-rows-1 xl:flex-1 xl:min-h-0 gap-4">
+          {COLUNAS.map(({ status, inclui, titulo, cor, badge }) => {
+            const doStatus = lista.filter(p => inclui.includes(p.status));
             return (
               <Coluna key={status} titulo={titulo} cor={cor} badge={badge} total={doStatus.length}>
                 {doStatus.length === 0 ? (
@@ -121,7 +121,7 @@ export default function LojinhaBoxer() {
             setAviso(p.zen_ordem_separacao_id
               ? (p.status === 'separacao'
                 ? `Pedido ${p.numero_pedido}: Zen pedido ${p.zen_pedido_id} / ordem ${p.zen_ordem_separacao_id} e ${p.qtd_cards} card(s) no Pipefy — já em Separação.`
-                : `Pedido ${p.numero_pedido} criado no Zen e na Liberação, mas o Pipefy deu erro: ${p.pipefy_erro || 'desconhecido'}. Use "Criar cards no Pipefy" no card.`)
+                : `Pedido ${p.numero_pedido} criado no Zen, mas o Pipefy deu erro: ${p.pipefy_erro || 'desconhecido'}. Use "Criar cards no Pipefy" no card.`)
               : `Pedido ${p.numero_pedido} registrado, mas o Zen deu erro: ${p.zen_erro || 'desconhecido'}. Use "Tentar de novo" no card.`);
             carregar();
           }} />
