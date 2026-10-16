@@ -18,6 +18,7 @@ import RegistroEntradas from './pages/operador/RegistroEntradas';
 import MRP             from './pages/operador/MRP';
 import Compras         from './pages/operador/Compras';
 import NecessidadePecas from './pages/operador/NecessidadePecas';
+import LojinhaBoxer from './pages/operador/LojinhaBoxer';
 import PedidosOrcamento from './pages/operador/PedidosOrcamento';
 import Inventario       from './pages/operador/Inventario';
 import InventarioDetalhe from './pages/operador/InventarioDetalhe';
@@ -67,7 +68,7 @@ function RotaPerfil({ perfis, children }) {
 
 // Libera acesso pra admin (qualquer setor) OU usuários de um setor específico
 // (por nome do departamento, não por perfil).
-function RotaAdminOuSetor({ setores, children }) {
+function RotaAdminOuSetor({ setores, perfis = ['admin'], children }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -77,7 +78,7 @@ function RotaAdminOuSetor({ setores, children }) {
   if (!usuario) return <Navigate to="/login" replace />;
   if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
   const setoresNormalizados = setores.map(s => s.trim().toLowerCase());
-  const liberado = usuario.perfil === 'admin' || setoresNormalizados.includes((usuario.departamento_nome || '').trim().toLowerCase());
+  const liberado = perfis.includes(usuario.perfil) || setoresNormalizados.includes((usuario.departamento_nome || '').trim().toLowerCase());
   if (!liberado) return <Navigate to="/catalogo" replace />;
   return <AppLayout>{children}</AppLayout>;
 }
@@ -117,6 +118,9 @@ export default function App() {
             } />
             <Route path="/compras" element={
               <RotaPerfil perfis={['admin']}><Compras /></RotaPerfil>
+            } />
+            <Route path="/lojinha" element={
+              <RotaAdminOuSetor perfis={['admin', 'operador']} setores={['Sac / Suporte']}><LojinhaBoxer /></RotaAdminOuSetor>
             } />
             <Route path="/necessidade-pecas" element={
               <RotaAdminOuSetor setores={['Sac / Suporte']}><NecessidadePecas /></RotaAdminOuSetor>
