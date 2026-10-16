@@ -2,7 +2,7 @@ import express from 'express';
 import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncErpEstoque.js';
 import { getToken } from '../integrations/erpZen.js';
 import { pipefyQuery } from '../integrations/pipefyService.js';
-import { pedidoLIBruto, buscarPedidoLI } from '../integrations/lojaIntegrada.js';
+import { pedidoLIBruto, buscarPedidoLI, tentativasLI } from '../integrations/lojaIntegrada.js';
 
 const router = express.Router();
 
@@ -55,7 +55,7 @@ router.get('/debug-li', async (req, res) => {
   if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
   const numero = String(req.query.numero || '').replace(/\D/g, '');
   try { res.json({ mapeado: await buscarPedidoLI(numero), bruto: req.query.bruto ? await pedidoLIBruto(numero) : undefined }); }
-  catch (e) { res.status(e.status || 502).json({ erro: e.message }); }
+  catch (e) { res.status(e.status || 502).json({ erro: e.message, tentativas: tentativasLI }); }
 });
 
 // Força sincronização manual (GET, testável no navegador, mesmo secret do cron)
