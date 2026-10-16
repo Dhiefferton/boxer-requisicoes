@@ -13,9 +13,9 @@
 // Acesso: admin, operador e o setor SAC / Suporte.
 // ============================================================
 import { query } from '../config/db.js';
-import { buscarClienteZen } from '../integrations/zenPedidoVenda.js';
+import { buscarClienteZen, excluirPedidoVendaZen } from '../integrations/zenPedidoVenda.js';
 import { criarPedidoLojinhaZen, listarVendedorasZen } from '../integrations/zenLojinha.js';
-import { criarCardsLojinha } from '../integrations/pipefyLojinha.js';
+import { criarCardsLojinha, excluirCardLojinha } from '../integrations/pipefyLojinha.js';
 
 const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
 const SETORES = ['sac / suporte'];
@@ -294,5 +294,45 @@ export async function criarPedidoLojinha(req, res, next) {
     // Cria o pedido no Zen até a ordem de separação
     const pedido = await enviarZen(r.rows[0]);
     res.status(201).json({ pedido });
+  } catch (err) { next(err); }
+}
+
+// DELETE /lojinha/pedidos/:id — exclui o pedido no Zen (desfaz a ordem de
+// separação), os cards do Pipefy e o pedido da Lojinha
+export async function excluirPedidoLojinha(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const r = await query(`SELECT * FROM lojinha_boxer_pedidos WHERE id = $1`, [parseInt(req.params.id)]);
+    const p = r.rows[0];
+    if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+
+    // 1. Zen
+    if (p.zen_pedido_id) {
+      try {
+        await excluirPedidoVendaZen({ zen_pedido_id: p.zen_pedido_id });
+        await query(`UPDATE lojinha_boxer_pedidos SET zen_pedido_id = NULL, zen_ordem_separacao_id = NULL WHERE id = $1`, [p.id]);
+      } catch (e) {
+        await query(`UPDATE lojinha_boxer_pedidos SET zen_erro = $2 WHERE id = $1`, [p.id, `Exclusão: ${e.message}`]);
+        return res.status(502).json({ erro: `Não consegui excluir o pedido ${p.zen_pedido_id} no Zen: ${e.message}` });
+      }
+    }
+
+    // 2. Pipefy
+    const cards = (Array.isArray(p.pipefy_cards) ? p.pipefy_cards : []).filter(c => c?.id);
+    const restantes = [];
+    const erros = [];
+    for (const c of cards) {
+      try { await excluirCardLojinha(c.id); }
+      catch (e) { restantes.push(c); erros.push(`card ${c.id}: ${e.message}`); }
+    }
+    if (erros.length) {
+      await query(`UPDATE lojinha_boxer_pedidos SET pipefy_cards = $2, pipefy_erro = $3 WHERE id = $1`,
+        [p.id, JSON.stringify(restantes), `Exclusão: ${erros.join(' | ')}`]);
+      return res.status(502).json({ erro: `O pedido do Zen foi excluído, mas não consegui excluir no Pipefy: ${erros.join(' | ')}` });
+    }
+
+    // 3. Lojinha
+    await query(`DELETE FROM lojinha_boxer_pedidos WHERE id = $1`, [p.id]);
+    res.json({ ok: true, numero_pedido: p.numero_pedido, zen_pedido_id: p.zen_pedido_id, cards: cards.length });
   } catch (err) { next(err); }
 }
