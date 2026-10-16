@@ -7,8 +7,8 @@
 // da lojinha, vendedora, envio e valor do frete.
 // Ao salvar, o sistema cria o pedido no Zen até a ordem de separação.
 // ============================================================
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, ClipboardList, Send, User, BadgeCheck, AlertTriangle, ExternalLink, PackageSearch } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, User, BadgeCheck, AlertTriangle, ExternalLink } from 'lucide-react';
 import { lojinhaService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -35,6 +35,12 @@ function numBR(v) {
 const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
 const linkZenPedido = (id) => `${ZEN_APP_URL}/sale/sale?q=id==${id}`;
 const linkZenOrdem = (id) => `${ZEN_APP_URL}/material/pickingOrder?q=id==${id}`;
+// Colunas (mesmo visual da tela de Orçamentos)
+const COLUNAS = [
+  { status: 'entrada',   titulo: 'Entrada',      resumo: 'Entrada',      cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
+  { status: 'liberacao', titulo: 'Liberação',    resumo: 'Liberação',    cor: 'border-amber-500/40',  badge: 'bg-amber-500/15 text-amber-400' },
+  { status: 'separacao', titulo: 'Em Separação', resumo: 'Em Separação', cor: 'border-purple-500/40', badge: 'bg-purple-500/15 text-purple-400' },
+];
 const ITENS_POR_CARD = 7; // limite do Pipefy
 const DESC_AUTORIZADO = 23; // % de desconto do Assistente Autorizado
 const totalItens = (itens) => itens.reduce((s, i) => s + Number(i.quantidade || 0) * Number(i.preco || 0), 0);
@@ -59,39 +65,64 @@ export default function LojinhaBoxer() {
     carregar();
   }, []);
 
-  const entrada = useMemo(() => (pedidos || []).filter(p => p.status === 'entrada'), [pedidos]);
-  const liberacao = useMemo(() => (pedidos || []).filter(p => p.status === 'liberacao'), [pedidos]);
-  const separacao = useMemo(() => (pedidos || []).filter(p => p.status === 'separacao'), [pedidos]);
+  const lista = pedidos || [];
+  const ativos = lista.length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Store size={20} className="text-[var(--c-destaque)]" />
-          <div>
-            <h1 className="text-lg sm:text-xl font-bold text-[var(--c-texto)]">Lojinha Boxer</h1>
-            <p className="text-xs sm:text-sm text-[var(--c-suave)]">Pedidos da Lojinha</p>
-          </div>
+    // Tela grande: travada na altura da janela e cada coluna rola sozinha (igual Orçamentos)
+    <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-3.1rem)]">
+      {/* ── Cabeçalho ───────────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-lg font-bold text-[var(--c-texto)]">Lojinha Boxer</h1>
+          <p className="text-sm text-[var(--c-suave)] mt-0.5">
+            {ativos} pedido{ativos !== 1 ? 's' : ''} ativo{ativos !== 1 ? 's' : ''}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={carregar} className="p-2.5 rounded-xl border border-[var(--c-borda)] text-[var(--c-suave)]" title="Atualizar"><RefreshCw size={15} /></button>
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => { setNovo(true); setAviso(''); }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--c-destaque)] text-white text-sm font-semibold">
-            <Plus size={16} /> Novo pedido
+            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
+              bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 transition-colors">
+            <Plus size={13} /> Novo pedido
+          </button>
+          <button onClick={carregar} title="Recarregar"
+            className="p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)] transition-colors">
+            <RefreshCw size={16} className={!pedidos ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
-      {aviso && <p className="text-sm text-green-400">{aviso}</p>}
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 items-start">
-        <Coluna titulo="1. Entrada" Icone={ClipboardList} pedidos={entrada} carregando={!pedidos}
-          vazio="Nenhum pedido na Entrada." onNovo={() => setNovo(true)} carregar={carregar} />
-        <Coluna titulo="2. Liberação" Icone={Send} pedidos={liberacao} carregando={!pedidos}
-          vazio="Nenhum pedido em Liberação." carregar={carregar} />
-        <Coluna titulo="3. Em Separação" Icone={PackageSearch} pedidos={separacao} carregando={!pedidos}
-          vazio="Nenhum pedido em separação." carregar={carregar} />
+      {/* ── Cards de resumo ──────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-2">
+        {COLUNAS.map(({ status, resumo }) => (
+          <div key={status} className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-3 text-center">
+            <p className="text-xl font-bold text-[var(--c-texto)]">{lista.filter(p => p.status === status).length}</p>
+            <p className="text-[10px] text-[var(--c-suave)] mt-0.5">{resumo}</p>
+          </div>
+        ))}
       </div>
+
+      {aviso && <p className="text-xs text-[var(--c-suave)] bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-3 py-2">{aviso}</p>}
+
+      {!pedidos ? (
+        <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-rows-1 xl:flex-1 xl:min-h-0 gap-4">
+          {COLUNAS.map(({ status, titulo, cor, badge }) => {
+            const doStatus = lista.filter(p => p.status === status);
+            return (
+              <Coluna key={status} titulo={titulo} cor={cor} badge={badge} total={doStatus.length}>
+                {doStatus.length === 0 ? (
+                  <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
+                    <p className="text-xs text-[var(--c-suave)]">Sem pedidos</p>
+                    {status === 'entrada' && <button onClick={() => setNovo(true)} className="mt-1 text-xs text-[var(--c-destaque)] font-semibold">+ Novo pedido</button>}
+                  </div>
+                ) : doStatus.map(p => <CardPedido key={p.id} p={p} carregar={carregar} />)}
+              </Coluna>
+            );
+          })}
+        </div>
+      )}
 
       {novo && (
         <NovoPedido config={config} onFechar={() => setNovo(false)}
@@ -109,20 +140,14 @@ export default function LojinhaBoxer() {
   );
 }
 
-function Coluna({ titulo, Icone, pedidos, carregando, vazio, onNovo, carregar }) {
+function Coluna({ titulo, cor, badge, total, children }) {
   return (
-    <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-3 space-y-3 min-h-[200px]">
-      <div className="flex items-center justify-between px-1">
-        <b className="flex items-center gap-2 text-sm text-[var(--c-texto)]"><Icone size={15} className="text-[var(--c-destaque)]" /> {titulo}</b>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--c-borda)] text-[var(--c-texto)]">{pedidos.length}</span>
+    <div className="space-y-2 min-w-0 xl:min-h-0 xl:flex xl:flex-col">
+      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[var(--c-superficie)] xl:shrink-0`}>
+        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>
+        <span className="text-xs font-bold text-[var(--c-suave)]">{total}</span>
       </div>
-      {carregando ? <div className="flex justify-center py-8"><Spinner size={22} className="text-[var(--c-destaque)]" /></div>
-        : !pedidos.length ? (
-          <div className="text-center py-8 text-sm text-[var(--c-suave)]">
-            {vazio}
-            {onNovo && <button onClick={onNovo} className="block mx-auto mt-2 text-[var(--c-destaque)] font-semibold">+ Novo pedido</button>}
-          </div>
-        ) : pedidos.map(p => <CardPedido key={p.id} p={p} carregar={carregar} />)}
+      <div className="space-y-2 xl:flex-1 xl:min-h-0 xl:overflow-y-auto xl:pr-1 xl:-mr-1 xl:pb-2">{children}</div>
     </div>
   );
 }
@@ -251,7 +276,7 @@ function CardPedido({ p, carregar }) {
     finally { setExcluindo(false); }
   }
   return (
-    <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-fundo)] p-3 space-y-1.5">
+    <div className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-1.5 min-w-0 break-words">
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
         <div className="flex items-center gap-1.5">
