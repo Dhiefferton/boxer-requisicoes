@@ -8,7 +8,7 @@
 // Ao salvar, o sistema cria o pedido no Zen até a ordem de separação.
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, ClipboardList, Send, User, BadgeCheck, AlertTriangle } from 'lucide-react';
+import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, ClipboardList, Send, User, BadgeCheck, AlertTriangle, ExternalLink } from 'lucide-react';
 import { lojinhaService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -32,6 +32,9 @@ function numBR(v) {
   if (!t) return NaN;
   return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
 }
+const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
+const linkZenPedido = (id) => `${ZEN_APP_URL}/sale/sale?q=id==${id}`;
+const linkZenOrdem = (id) => `${ZEN_APP_URL}/material/pickingOrder?q=id==${id}`;
 const ITENS_POR_CARD = 7; // limite do Pipefy
 const DESC_AUTORIZADO = 23; // % de desconto do Assistente Autorizado
 const totalItens = (itens) => itens.reduce((s, i) => s + Number(i.quantidade || 0) * Number(i.preco || 0), 0);
@@ -132,13 +135,19 @@ function StatusZen({ p, carregar }) {
   }
   if (p.zen_ordem_separacao_id) return (
     <div className="text-[11px] px-2 py-1 rounded-lg bg-green-500/10 text-green-400">
-      <Check size={11} className="inline -mt-0.5" /> Zen: pedido <b>{p.zen_pedido_id}</b> · ordem de separação <b>{p.zen_ordem_separacao_id}</b>{p.zen_cfop ? ` · CFOP ${p.zen_cfop}` : ''}
+      <Check size={11} className="inline -mt-0.5" /> Zen:{' '}
+      <a href={linkZenPedido(p.zen_pedido_id)} target="_blank" rel="noreferrer" title="Abrir pedido no Zen" className="hover:underline">
+        pedido <b>{p.zen_pedido_id}</b> <ExternalLink size={10} className="inline -mt-0.5" /></a>
+      {' · '}
+      <a href={linkZenOrdem(p.zen_ordem_separacao_id)} target="_blank" rel="noreferrer" title="Abrir ordem de separação no Zen" className="hover:underline">
+        ordem de separação <b>{p.zen_ordem_separacao_id}</b> <ExternalLink size={10} className="inline -mt-0.5" /></a>
+      {p.zen_cfop ? ` · CFOP ${p.zen_cfop}` : ''}
     </div>
   );
   return (
     <div className="text-[11px] px-2 py-1.5 rounded-lg bg-red-500/10 text-red-400 space-y-1">
       <div className="flex items-start gap-1"><AlertTriangle size={12} className="shrink-0 mt-0.5" />
-        <span>Zen: {p.zen_erro || 'pedido ainda não criado'}{p.zen_pedido_id ? ` (pedido ${p.zen_pedido_id})` : ''}</span></div>
+        <span>Zen: {p.zen_erro || 'pedido ainda não criado'}{p.zen_pedido_id && <> (<a href={linkZenPedido(p.zen_pedido_id)} target="_blank" rel="noreferrer" className="underline">pedido {p.zen_pedido_id} <ExternalLink size={10} className="inline -mt-0.5" /></a>)</>}</span></div>
       <button onClick={tentar} disabled={enviando}
         className="px-2 py-0.5 rounded-lg border border-red-400/40 text-red-300 font-semibold disabled:opacity-50">
         {enviando ? 'Enviando ao Zen…' : 'Tentar de novo'}
@@ -156,7 +165,10 @@ function InfoLiberacao({ p, itens }) {
       <div className="grid grid-cols-2 gap-2">
         <div>
           <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Nº Ordem de Separação (Zen)</p>
-          <p className="font-mono font-bold text-base text-[var(--c-texto)]">{p.zen_ordem_separacao_id}</p>
+          <a href={linkZenOrdem(p.zen_ordem_separacao_id)} target="_blank" rel="noreferrer" title="Abrir ordem de separação no Zen"
+            className="inline-flex items-center gap-1 font-mono font-bold text-base text-[var(--c-texto)] hover:text-[var(--c-destaque)]">
+            {p.zen_ordem_separacao_id} <ExternalLink size={13} />
+          </a>
         </div>
         <div>
           <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Quantidade total de card</p>
