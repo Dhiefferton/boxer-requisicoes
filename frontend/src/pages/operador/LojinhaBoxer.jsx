@@ -5,9 +5,10 @@
 // Entrada: cliente (CPF/CNPJ buscado no Zen) e se é Assistente Autorizado,
 // data, produtos (SKU do catálogo, só com saldo, com preço), nº do pedido
 // da lojinha, vendedora, envio e valor do frete.
+// Ao salvar, o sistema cria o pedido no Zen até a ordem de separação.
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, ClipboardList, Send, User, BadgeCheck } from 'lucide-react';
+import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, ClipboardList, Send, User, BadgeCheck, AlertTriangle } from 'lucide-react';
 import { lojinhaService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -31,14 +32,16 @@ function numBR(v) {
   if (!t) return NaN;
   return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
 }
+const DESC_AUTORIZADO = 23; // % de desconto do Assistente Autorizado
 const totalItens = (itens) => itens.reduce((s, i) => s + Number(i.quantidade || 0) * Number(i.preco || 0), 0);
+const valorDesconto = (itens, autorizado) => (autorizado ? Math.round(totalItens(itens) * DESC_AUTORIZADO) / 100 : 0);
 const ICONE_ENVIO = { Sedex: Mail, PAC: Package, 'Próprio': Truck, Transportadora: Building2 };
 
 const campo = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[var(--c-destaque)]';
 const rotulo = 'block text-xs text-[var(--c-suave)] mb-1.5';
 
 export default function LojinhaBoxer() {
-  const [config, setConfig] = useState({ tipos_envio: ['Sedex', 'PAC', 'Próprio', 'Transportadora'], transportadoras: [], avisos_uf: {}, vendedoras: [] });
+  const [config, setConfig] = useState({ tipos_envio: ['Sedex', 'PAC', 'Próprio', 'Transportadora'], transportadoras: [], avisos_uf: {}, vendedoras: [], erro_vendedoras: null });
   const [pedidos, setPedidos] = useState(null);
   const [novo, setNovo] = useState(false);
   const [aviso, setAviso] = useState('');
@@ -78,20 +81,26 @@ export default function LojinhaBoxer() {
 
       <div className="grid gap-4 md:grid-cols-2 items-start">
         <Coluna titulo="1. Entrada" Icone={ClipboardList} pedidos={entrada} carregando={!pedidos}
-          vazio="Nenhum pedido na Entrada." onNovo={() => setNovo(true)} />
+          vazio="Nenhum pedido na Entrada." onNovo={() => setNovo(true)} carregar={carregar} />
         <Coluna titulo="2. Liberação" Icone={Send} pedidos={liberacao} carregando={!pedidos}
-          vazio="Nenhum pedido em Liberação." />
+          vazio="Nenhum pedido em Liberação." carregar={carregar} />
       </div>
 
       {novo && (
         <NovoPedido config={config} onFechar={() => setNovo(false)}
-          onSalvo={(p) => { setNovo(false); setAviso(`Pedido ${p.numero_pedido} registrado na Entrada.`); carregar(); }} />
+          onSalvo={(p) => {
+            setNovo(false);
+            setAviso(p.zen_ordem_separacao_id
+              ? `Pedido ${p.numero_pedido} registrado — Zen: pedido ${p.zen_pedido_id}, ordem de separação ${p.zen_ordem_separacao_id}.`
+              : `Pedido ${p.numero_pedido} registrado, mas o Zen deu erro: ${p.zen_erro || 'desconhecido'}. Use "Tentar de novo" no card.`);
+            carregar();
+          }} />
       )}
     </div>
   );
 }
 
-function Coluna({ titulo, Icone, pedidos, carregando, vazio, onNovo }) {
+function Coluna({ titulo, Icone, pedidos, carregando, vazio, onNovo, carregar }) {
   return (
     <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-3 space-y-3 min-h-[200px]">
       <div className="flex items-center justify-between px-1">
@@ -104,14 +113,43 @@ function Coluna({ titulo, Icone, pedidos, carregando, vazio, onNovo }) {
             {vazio}
             {onNovo && <button onClick={onNovo} className="block mx-auto mt-2 text-[var(--c-destaque)] font-semibold">+ Novo pedido</button>}
           </div>
-        ) : pedidos.map(p => <CardPedido key={p.id} p={p} />)}
+        ) : pedidos.map(p => <CardPedido key={p.id} p={p} carregar={carregar} />)}
     </div>
   );
 }
 
-function CardPedido({ p }) {
+function StatusZen({ p, carregar }) {
+  const [enviando, setEnviando] = useState(false);
+  async function tentar() {
+    setEnviando(true);
+    try {
+      const { data: r } = await lojinhaService.reenviarZen(p.id);
+      if (!r.pedido.zen_ordem_separacao_id) alert(`O Zen ainda deu erro: ${r.pedido.zen_erro}`);
+      carregar();
+    } catch (e) { alert(e.response?.data?.erro || 'Erro ao enviar ao Zen.'); }
+    finally { setEnviando(false); }
+  }
+  if (p.zen_ordem_separacao_id) return (
+    <div className="text-[11px] px-2 py-1 rounded-lg bg-green-500/10 text-green-400">
+      <Check size={11} className="inline -mt-0.5" /> Zen: pedido <b>{p.zen_pedido_id}</b> · ordem de separação <b>{p.zen_ordem_separacao_id}</b>{p.zen_cfop ? ` · CFOP ${p.zen_cfop}` : ''}
+    </div>
+  );
+  return (
+    <div className="text-[11px] px-2 py-1.5 rounded-lg bg-red-500/10 text-red-400 space-y-1">
+      <div className="flex items-start gap-1"><AlertTriangle size={12} className="shrink-0 mt-0.5" />
+        <span>Zen: {p.zen_erro || 'pedido ainda não criado'}{p.zen_pedido_id ? ` (pedido ${p.zen_pedido_id})` : ''}</span></div>
+      <button onClick={tentar} disabled={enviando}
+        className="px-2 py-0.5 rounded-lg border border-red-400/40 text-red-300 font-semibold disabled:opacity-50">
+        {enviando ? 'Enviando ao Zen…' : 'Tentar de novo'}
+      </button>
+    </div>
+  );
+}
+
+function CardPedido({ p, carregar }) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
   const [aberto, setAberto] = useState(false);
+  const desconto = valorDesconto(itens, p.assistente_autorizado);
   return (
     <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-fundo)] p-3 space-y-1.5">
       <div className="flex items-center justify-between gap-2">
@@ -139,13 +177,15 @@ function CardPedido({ p }) {
             </li>
           ))}
           <li className="flex justify-between text-[12px] text-[var(--c-suave)] pt-1 border-t border-[var(--c-borda)]"><span>Produtos</span><span>{fmtR$(totalItens(itens))}</span></li>
+          {desconto > 0 && <li className="flex justify-between text-[12px] text-green-400"><span>Desconto Assistente Autorizado ({DESC_AUTORIZADO}%)</span><span>− {fmtR$(desconto)}</span></li>}
           <li className="flex justify-between text-[12px] text-[var(--c-suave)]"><span>Frete</span><span>{fmtR$(p.valor_frete)}</span></li>
         </ul>
       )}
       <div className="flex items-center justify-between text-[10px] text-[var(--c-suave)]">
         <span>Registrado por {p.criado_por_nome?.split(' ')[0] || '—'}</span>
-        <b className="text-[12px] text-[var(--c-texto)]">{fmtR$(totalItens(itens) + Number(p.valor_frete || 0))}</b>
+        <b className="text-[12px] text-[var(--c-texto)]">{fmtR$(totalItens(itens) - desconto + Number(p.valor_frete || 0))}</b>
       </div>
+      <StatusZen p={p} carregar={carregar} />
     </div>
   );
 }
@@ -167,7 +207,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
   const [erroSku, setErroSku] = useState('');
   const [previa, setPrevia] = useState(null); // { sku, produto?, erro? }
   const [numero, setNumero] = useState('');
-  const [vendedora, setVendedora] = useState('');
+  const [vendedoraId, setVendedoraId] = useState('');
   const [tipo, setTipo] = useState('');
   const [transportadora, setTransportadora] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -241,7 +281,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
     if (!cliente) { setErro('Busque o cliente pelo CPF/CNPJ.'); return; }
     if (!itens.length) { setErro('Inclua pelo menos um produto.'); return; }
     if (!numero.trim()) { setErro('Informe o número do pedido da lojinha.'); return; }
-    if (!vendedora.trim()) { setErro('Informe a vendedora.'); return; }
+    if (!vendedoraId) { setErro('Escolha a vendedora.'); return; }
     if (!tipo) { setErro('Escolha o tipo de envio.'); return; }
     if (tipo === 'Transportadora' && !transportadora.trim()) { setErro('Escolha a transportadora.'); return; }
     const vFrete = frete.trim() === '' ? 0 : numBR(frete);
@@ -253,7 +293,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
         cliente_cidade: [cliente.cidade, cliente.uf].filter(Boolean).join(' / '), cliente_uf: cliente.uf || '',
         data, itens: itens.map(i => ({ codigo: i.codigo, quantidade: i.quantidade, preco: i.preco })),
         assistente_autorizado: autorizado, valor_frete: vFrete,
-        numero_pedido: numero.trim(), vendedora: vendedora.trim(), tipo_envio: tipo, transportadora: transportadora.trim(),
+        numero_pedido: numero.trim(), vendedora_id_zen: Number(vendedoraId), vendedora: config.vendedoras.find(v => String(v.id) === String(vendedoraId))?.nome || '', tipo_envio: tipo, transportadora: transportadora.trim(),
       });
       onSalvo(r.pedido);
     } catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar o pedido.'); }
@@ -326,14 +366,11 @@ function NovoPedido({ config, onFechar, onSalvo }) {
             </div>
             <div>
               <label className={rotulo}>Vendedora</label>
-              {config.vendedoras.length ? (
-                <select value={vendedora} onChange={e => setVendedora(e.target.value)} className={campo}>
-                  <option value="">Selecione…</option>
-                  {config.vendedoras.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              ) : (
-                <input value={vendedora} onChange={e => setVendedora(e.target.value)} placeholder="Nome da vendedora" className={campo} />
-              )}
+              <select value={vendedoraId} onChange={e => setVendedoraId(e.target.value)} className={campo}>
+                <option value="">{config.vendedoras.length ? 'Selecione…' : 'Carregando do Zen…'}</option>
+                {config.vendedoras.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
+              </select>
+              {config.erro_vendedoras && <p className="text-xs text-red-400 mt-1">{config.erro_vendedoras}</p>}
             </div>
           </div>
 
@@ -368,11 +405,12 @@ function NovoPedido({ config, onFechar, onSalvo }) {
                     <span className="basis-[calc(100%-5rem)] sm:basis-auto flex-1 min-w-0 truncate text-[var(--c-texto)]">{i.descricao}</span>
                     <span className="text-[11px] text-[var(--c-suave)] shrink-0 hidden sm:inline">saldo {fmtQtd(i.saldo)}</span>
                     <span className="shrink-0 text-[var(--c-texto)]">{fmtQtd(i.quantidade)} {i.unidade} × {fmtR$(i.preco)}</span>
-                    <b className="shrink-0 w-24 text-right text-[var(--c-texto)]">{fmtR$(i.quantidade * i.preco)}</b>
+                    <b className="shrink-0 w-24 text-right text-[var(--c-texto)]">{fmtR$(totalItens([i]) - valorDesconto([i], autorizado))}</b>
                     <button onClick={() => setItens(l => l.filter(x => x.codigo !== i.codigo))} className="p-1 text-[var(--c-suave)] hover:text-red-400" title="Remover"><Trash2 size={14} /></button>
                   </div>
                 ))}
-                <div className="flex justify-between px-3 py-2 text-sm text-[var(--c-suave)]"><span>Total dos produtos</span><b className="text-[var(--c-texto)]">{fmtR$(totalItens(itens))}</b></div>
+                {autorizado && <div className="flex justify-between px-3 py-2 text-sm text-green-400"><span>Desconto Assistente Autorizado ({DESC_AUTORIZADO}% em cada peça)</span><b>− {fmtR$(valorDesconto(itens, true))}</b></div>}
+                <div className="flex justify-between px-3 py-2 text-sm text-[var(--c-suave)]"><span>Total dos produtos</span><b className="text-[var(--c-texto)]">{fmtR$(totalItens(itens) - valorDesconto(itens, autorizado))}</b></div>
               </div>
             )}
           </div>
@@ -417,7 +455,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
               <input value={frete} onChange={e => setFrete(e.target.value)} inputMode="decimal" placeholder="0,00" className={`${campo} text-right`} />
             </div>
             <div className="text-right text-sm text-[var(--c-suave)] pb-2.5">
-              Total do pedido <b className="text-lg text-[var(--c-texto)] ml-2">{fmtR$(totalItens(itens) + (numBR(frete) >= 0 ? numBR(frete) : 0))}</b>
+              Total do pedido <b className="text-lg text-[var(--c-texto)] ml-2">{fmtR$(totalItens(itens) - valorDesconto(itens, autorizado) + (numBR(frete) >= 0 ? numBR(frete) : 0))}</b>
             </div>
           </div>
 
@@ -426,7 +464,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
             <button onClick={onFechar} className="px-4 py-2.5 rounded-xl border border-[var(--c-borda)] text-sm text-[var(--c-texto)]">Cancelar</button>
             <button onClick={salvar} disabled={salvando}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--c-destaque)] text-white text-sm font-semibold disabled:opacity-50">
-              {salvando ? <><Spinner size={14} /> Salvando…</> : <><Check size={15} /> Salvar na Entrada</>}
+              {salvando ? <><Spinner size={14} /> Salvando e criando no Zen…</> : <><Check size={15} /> Salvar na Entrada</>}
             </button>
           </div>
         </div>
