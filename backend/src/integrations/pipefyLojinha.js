@@ -4,7 +4,7 @@
 // Pipe "Peças p/ Envio". Para cada card do pedido (máx. 7 itens por card):
 //   1. Cria o card (formulário inicial): Cliente (tabela Cadastro, achado
 //      pelo CPF/CNPJ ou criado), Data de entrada, Estado, Envio de
-//      "Venda de Peça" e Responsável (tabela Funcionários: quem registrou)
+//      "Venda de Peça" e Responsável (tabela Funcionários, pelo nome de quem registrou)
 //   2. Entrada: Solicitação recebida, Nº Pedido Lojinha, Tipo de Envio e
 //      Observação (itens do card e envio)        -> move para Liberação
 //   3. Liberação: Nº Ordem de Separação (Zen) e Quantidade total de card
@@ -110,26 +110,21 @@ async function criarCliente({ documento, nome, uf }) {
   return String(id);
 }
 
-// Funcionário do Pipefy correspondente a quem está logado
-async function acharFuncionario({ email, nome }) {
-  const lista = await registrosDaTabela(CFG.tabelaFuncs, 500);
-  const e = norm(email);
-  if (e) {
-    const porEmail = lista.find(f => norm(f.campos.e_mail) === e);
-    if (porEmail) return porEmail.id;
-  }
+// Funcionário do Pipefy (tabela Funcionários) pelo NOME de quem registrou:
+// nome completo igual -> primeiro + último nome -> primeiro nome (se único)
+async function acharFuncionario({ nome }) {
   const n = norm(nome);
   if (!n) return null;
-  const exato = lista.find(f => [f.titulo, f.campos.nome, f.campos.nome_resumido].some(v => norm(v) === n));
+  const lista = await registrosDaTabela(CFG.tabelaFuncs, 500);
+  const nomesDe = (f) => [f.titulo, f.campos.nome, f.campos.nome_resumido].map(norm).filter(Boolean);
+  const exato = lista.find(f => nomesDe(f).includes(n));
   if (exato) return exato.id;
-  // primeiro + último nome
   const partes = n.split(' ');
   const pu = `${partes[0]} ${partes[partes.length - 1]}`;
-  const aprox = lista.filter(f => [f.titulo, f.campos.nome, f.campos.nome_resumido].some(v => {
-    const x = norm(v).split(' ');
-    return x.length && `${x[0]} ${x[x.length - 1]}` === pu;
-  }));
-  return aprox.length === 1 ? aprox[0].id : null;
+  const primUlt = lista.filter(f => nomesDe(f).some(v => { const x = v.split(' '); return `${x[0]} ${x[x.length - 1]}` === pu; }));
+  if (primUlt.length === 1) return primUlt[0].id;
+  const primeiro = lista.filter(f => nomesDe(f).some(v => v.split(' ')[0] === partes[0]));
+  return primeiro.length === 1 ? primeiro[0].id : null;
 }
 
 async function faseDoCard(cardId) {
@@ -174,7 +169,7 @@ export async function criarCardsLojinha(pedido, usuario, progresso = [], salvar 
       avisos.push('Cliente cadastrado na tabela Cadastro do Pipefy.');
     }
     let responsavelId = null;
-    try { responsavelId = await acharFuncionario({ email: usuario?.email, nome: usuario?.nome }); } catch { /* segue sem */ }
+    try { responsavelId = await acharFuncionario({ nome: usuario?.nome }); } catch { /* segue sem */ }
     if (!responsavelId) avisos.push(`Não achei ${usuario?.nome || 'o usuário'} na tabela Funcionários do Pipefy — card sem responsável.`);
     comum = { clienteId, responsavelId };
     return comum;
