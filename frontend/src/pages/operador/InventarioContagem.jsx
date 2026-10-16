@@ -212,7 +212,7 @@ export default function InventarioContagem({ modo }) {
     return (
       <div className="max-w-md mx-auto text-center py-16 space-y-3">
         <p className="text-[var(--c-texto)] font-semibold">Este inventário não está mais em andamento.</p>
-        <button onClick={() => navigate('/inventario')} className="text-sm text-[var(--c-destaque)]">Voltar</button>
+        <button onClick={() => navigate(info?.inventario?.local === 'marketplace' ? '/inventario?local=marketplace' : '/inventario')} className="text-sm text-[var(--c-destaque)]">Voltar</button>
       </div>
     );
   }
@@ -222,9 +222,9 @@ export default function InventarioContagem({ modo }) {
       {/* Cabeçalho */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <button onClick={() => navigate('/inventario')} className="p-1.5 rounded-lg text-[var(--c-suave)]"><ArrowLeft size={18} /></button>
+          <button onClick={() => navigate(info?.inventario?.local === 'marketplace' ? '/inventario?local=marketplace' : '/inventario')} className="p-1.5 rounded-lg text-[var(--c-suave)]"><ArrowLeft size={18} /></button>
           <div className="min-w-0">
-            <b className="text-[var(--c-texto)]">{recontagem ? `Recontagem — Inventário #${id}` : `Inventário #${id}`}</b>
+            <b className="text-[var(--c-texto)]">{recontagem ? `Recontagem — Inventário #${id}` : `Inventário #${id}`}{info?.inventario?.local === 'marketplace' ? ' · Marketplace' : ''}</b>
             <p className="text-[11px] text-[var(--c-suave)]">{info ? `${fmtNum(info.minhas_contagens)} contagens minhas` : ''}</p>
           </div>
         </div>

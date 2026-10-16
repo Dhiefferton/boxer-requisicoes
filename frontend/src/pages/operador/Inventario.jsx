@@ -2,16 +2,26 @@
 // pages/operador/Inventario.jsx — Painel do Inventário
 // ============================================================
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import { Plus, BarChart2, FileDown, ScanLine, ClipboardCheck, X, RefreshCw } from 'lucide-react';
+import { Plus, BarChart2, FileDown, ScanLine, ClipboardCheck, X, RefreshCw, MapPin } from 'lucide-react';
 import { inventarioService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Spinner, Empty } from '../../components/ui';
 import { Kpi, Progresso, TagStatus, fmtData, fmtHora, fmtPct, fmtNum, fmtTempo } from '../../components/inventario/util';
 
+// Onde o inventário é feito — cada local tem seus próprios inventários
+export const LOCAIS_INVENTARIO = [
+  { id: 'almoxarifado', nome: 'Almoxarifado' },
+  { id: 'marketplace', nome: 'Marketplace (Mercado Livre)' },
+];
+const nomeLocal = (id) => LOCAIS_INVENTARIO.find(l => l.id === id)?.nome || 'Almoxarifado';
+
 export default function Inventario() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const local = LOCAIS_INVENTARIO.some(l => l.id === params.get('local')) ? params.get('local') : 'almoxarifado';
+  const mkt = local === 'marketplace';
   const { usuario } = useAuth();
   const [lista, setLista] = useState([]);
   const [saldoMax, setSaldoMax] = useState(30);
@@ -22,12 +32,12 @@ export default function Inventario() {
   async function carregar() {
     setCarregando(true); setErro('');
     try {
-      const { data } = await inventarioService.listar();
+      const { data } = await inventarioService.listar(local);
       setLista(data.inventarios); setSaldoMax(data.saldo_maximo);
     } catch (e) { setErro(e.response?.data?.erro || 'Erro ao carregar os inventários.'); }
     finally { setCarregando(false); }
   }
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => { setLista([]); carregar(); }, [local]);
 
   const andamento = lista.find(i => i.status === 'andamento');
   const finalizados = lista.filter(i => i.status === 'finalizado');
@@ -45,7 +55,7 @@ export default function Inventario() {
     const ws = XLSX.utils.json_to_sheet(linhas);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Inventarios');
-    XLSX.writeFile(wb, `inventarios-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `inventarios-${local}-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   return (
@@ -54,10 +64,19 @@ export default function Inventario() {
         <div className="min-w-0">
           <h1 className="text-lg sm:text-xl font-bold text-[var(--c-texto)]">Inventário</h1>
           <p className="text-xs sm:text-sm text-[var(--c-suave)]">
-            Contagem cíclica dos itens com saldo até {saldoMax} — saldo e endereço vêm do Zen na hora da contagem
+            {mkt
+              ? 'Itens com saldo no depósito MKT_PLACE (endereço MERCADO_LIVRE) — saldo e endereço vêm do Zen na hora da contagem'
+              : `Contagem cíclica dos itens com saldo até ${saldoMax} — saldo e endereço vêm do Zen na hora da contagem`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <label className="flex items-center gap-1.5 pl-3 pr-1 rounded-xl border border-[var(--c-destaque)] bg-[var(--c-superficie)]" title="Local do inventário">
+            <MapPin size={14} className="text-[var(--c-destaque)]" />
+            <select value={local} onChange={e => setParams(e.target.value === 'almoxarifado' ? {} : { local: e.target.value })}
+              className="bg-transparent text-xs font-semibold text-[var(--c-texto)] py-2 pr-1 focus:outline-none cursor-pointer">
+              {LOCAIS_INVENTARIO.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
+            </select>
+          </label>
           <button onClick={carregar} className="p-2 rounded-xl border border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]" title="Atualizar">
             <RefreshCw size={15} />
           </button>
@@ -65,7 +84,7 @@ export default function Inventario() {
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 disabled:opacity-40">
             <FileDown size={14} /> Exportar Excel
           </button>
-          <button onClick={() => navigate('/inventario/indicadores')}
+          <button onClick={() => navigate(`/inventario/indicadores${mkt ? '?local=marketplace' : ''}`)}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)]">
             <BarChart2 size={14} /> Indicadores
           </button>
@@ -93,7 +112,7 @@ export default function Inventario() {
             <div className="bg-[var(--c-superficie)] border border-[var(--c-destaque)]/40 rounded-2xl p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <b className="text-sm text-[var(--c-texto)]">Inventário #{andamento.id}</b>
+                  <b className="text-sm text-[var(--c-texto)]">Inventário #{andamento.id} · {nomeLocal(local)}</b>
                   <TagStatus status="andamento" />
                 </div>
                 <div className="flex gap-2">
@@ -115,7 +134,7 @@ export default function Inventario() {
               </div>
               <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-xs">
                 <Info rotulo="Início" valor={`${fmtData(andamento.criado_em)} ${fmtHora(andamento.criado_em)}`} />
-                <Info rotulo="Categorias" valor={(andamento.filtros?.categorias || []).join(', ')} />
+                <Info rotulo={mkt ? 'Local' : 'Categorias'} valor={mkt ? 'MKT_PLACE' : (andamento.filtros?.categorias || []).join(', ')} />
                 <Info rotulo="Contadores" valor={andamento.resumo.contadores.map(c => c.nome?.split(' ')[0]).join(', ') || '—'} />
                 <Info rotulo="OK / Diverg." valor={<><span className="text-green-400">{andamento.resumo.ok}</span> / <span className="text-red-400">{andamento.resumo.divergentes + andamento.resumo.recontagem}</span></>} />
                 <Info rotulo="Tempo" valor={fmtTempo(andamento.resumo.tempo_seg)} />
@@ -126,7 +145,7 @@ export default function Inventario() {
           )}
 
           <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-4">
-            <b className="text-sm text-[var(--c-texto)]">Histórico</b>
+            <b className="text-sm text-[var(--c-texto)]">Histórico — {nomeLocal(local)}</b>
             {!finalizados.length ? (
               <Empty icon={ClipboardCheck} titulo="Nenhum inventário finalizado ainda" descricao="Clique em “Novo inventário” para começar." />
             ) : (
@@ -161,7 +180,7 @@ export default function Inventario() {
         </>
       )}
 
-      {novo && <NovoInventario saldoMax={saldoMax} onFechar={() => setNovo(false)}
+      {novo && <NovoInventario local={local} saldoMax={saldoMax} onFechar={() => setNovo(false)}
         onCriado={(id) => { setNovo(false); navigate(`/inventario/${id}`); }} />}
     </div>
   );
@@ -171,7 +190,8 @@ function Info({ rotulo, valor }) {
   return <div className="min-w-0"><p className="text-[var(--c-suave)] mb-0.5">{rotulo}</p><p className="text-[var(--c-texto)] font-medium truncate">{valor}</p></div>;
 }
 
-function NovoInventario({ saldoMax, onFechar, onCriado }) {
+function NovoInventario({ local, saldoMax, onFechar, onCriado }) {
+  const mkt = local === 'marketplace';
   const [categorias, setCategorias] = useState(['Partes e Peças']);
   const [curvas, setCurvas] = useState(['A', 'B', 'C', '-']);
   const [incluirZerados, setIncluirZerados] = useState(true);
@@ -182,17 +202,19 @@ function NovoInventario({ saldoMax, onFechar, onCriado }) {
   useEffect(() => {
     let vivo = true;
     setPrevia(null);
-    inventarioService.previa({ categorias, curvas, incluirZerados })
-      .then(r => vivo && setPrevia(r.data)).catch(() => vivo && setPrevia({ total: 0, grupos: [] }));
+    setErro('');
+    inventarioService.previa({ local, categorias, curvas, incluirZerados })
+      .then(r => vivo && setPrevia(r.data))
+      .catch(e => { if (vivo) { setPrevia({ total: 0, grupos: [] }); setErro(e.response?.data?.erro || ''); } });
     return () => { vivo = false; };
-  }, [categorias.join(), curvas.join(), incluirZerados]);
+  }, [local, categorias.join(), curvas.join(), incluirZerados]);
 
   const alternar = (lista, set, v) => set(lista.includes(v) ? lista.filter(x => x !== v) : [...lista, v]);
 
   async function criar() {
     setCriando(true); setErro('');
     try {
-      const { data } = await inventarioService.criar({ categorias, curvas, incluirZerados });
+      const { data } = await inventarioService.criar({ local, categorias, curvas, incluirZerados });
       if (data.aviso) alert(data.aviso);
       onCriado(data.inventario.id);
     } catch (e) { setErro(e.response?.data?.erro || 'Erro ao criar o inventário.'); }
@@ -206,38 +228,40 @@ function NovoInventario({ saldoMax, onFechar, onCriado }) {
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3" onClick={onFechar}>
       <div onClick={e => e.stopPropagation()} className="w-full max-w-md bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-4">
         <div className="flex items-center justify-between">
-          <b className="text-[var(--c-texto)]">Novo inventário</b>
+          <b className="text-[var(--c-texto)]">Novo inventário — {nomeLocal(local)}</b>
           <button onClick={onFechar} className="text-[var(--c-suave)]"><X size={18} /></button>
         </div>
-        <p className="text-xs text-[var(--c-suave)]">Entram os itens com saldo no sistema até <b className="text-[var(--c-texto)]">{saldoMax}</b>. O endereço é buscado no Zen.</p>
-        <div><p className="text-xs text-[var(--c-suave)] mb-2">Categorias</p>
+        {mkt
+          ? <p className="text-xs text-[var(--c-suave)]">Entram todos os itens com saldo no depósito <b className="text-[var(--c-texto)]">MKT_PLACE</b> do Zen (endereço MERCADO_LIVRE). Separado do inventário do almoxarifado.</p>
+          : <p className="text-xs text-[var(--c-suave)]">Entram os itens com saldo no sistema até <b className="text-[var(--c-texto)]">{saldoMax}</b>. O endereço é buscado no Zen.</p>}
+        {!mkt && <div><p className="text-xs text-[var(--c-suave)] mb-2">Categorias</p>
           <div className="flex flex-wrap gap-2">{['Partes e Peças', 'Máquinas'].map(c =>
-            <button key={c} onClick={() => alternar(categorias, setCategorias, c)} className={chip(categorias.includes(c))}>{c}</button>)}</div></div>
+            <button key={c} onClick={() => alternar(categorias, setCategorias, c)} className={chip(categorias.includes(c))}>{c}</button>)}</div></div>}
         <div><p className="text-xs text-[var(--c-suave)] mb-2">Curvas</p>
           <div className="flex flex-wrap gap-2">{[['A', 'Curva A'], ['B', 'Curva B'], ['C', 'Curva C'], ['-', 'Sem curva']].map(([v, l]) =>
             <button key={v} onClick={() => alternar(curvas, setCurvas, v)} className={chip(curvas.includes(v))}>{l}</button>)}</div></div>
-        <label className="flex items-center gap-2 text-sm text-[var(--c-texto)]">
+        {!mkt && <label className="flex items-center gap-2 text-sm text-[var(--c-texto)]">
           <input type="checkbox" checked={incluirZerados} onChange={e => setIncluirZerados(e.target.checked)} />
           Incluir itens com saldo 0
-        </label>
+        </label>}
         <div className="rounded-xl bg-[var(--c-fundo)] border border-[var(--c-borda)] p-3">
-          {!previa ? <Spinner size={16} className="text-[var(--c-destaque)]" /> : (
+          {!previa ? <div className="flex items-center gap-2 text-xs text-[var(--c-suave)]"><Spinner size={16} className="text-[var(--c-destaque)]" />{mkt && 'Lendo o estoque do marketplace no Zen…'}</div> : (
             <>
-              <p className="text-2xl font-bold text-[var(--c-texto)]">{fmtNum(previa.total)} <span className="text-sm font-normal text-[var(--c-suave)]">itens com saldo até {saldoMax}</span></p>
+              <p className="text-2xl font-bold text-[var(--c-texto)]">{fmtNum(previa.total)} <span className="text-sm font-normal text-[var(--c-suave)]">{mkt ? `itens no marketplace${previa.unidades != null ? ` (${fmtNum(previa.unidades)} unidades)` : ''}` : `itens com saldo até ${saldoMax}`}</span></p>
               <p className="text-xs text-[var(--c-suave)] mt-1">
                 {['A', 'B', 'C', '-'].map(c => {
                   const n = previa.grupos.filter(g => g.curva === c).reduce((s, g) => s + g.n, 0);
                   return n ? `${c === '-' ? 'Sem curva' : 'Curva ' + c}: ${fmtNum(n)}` : null;
                 }).filter(Boolean).join(' · ')}
               </p>
-              <p className="text-[11px] text-[var(--c-suave)] mt-1">Ao criar, saem os itens que só têm saldo fora dos endereços PE (Mercado Livre, AVA, Devolução…).</p>
+              {!mkt && <p className="text-[11px] text-[var(--c-suave)] mt-1">Ao criar, saem os itens que só têm saldo fora dos endereços PE (Mercado Livre, AVA, Devolução…).</p>}
             </>
           )}
         </div>
         {erro && <p className="text-sm text-red-400">{erro}</p>}
-        <button onClick={criar} disabled={criando || !previa?.total || !categorias.length || !curvas.length}
+        <button onClick={criar} disabled={criando || !previa?.total || (!mkt && !categorias.length) || !curvas.length}
           className="w-full py-3 rounded-xl text-sm font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40 flex items-center justify-center gap-2">
-          {criando ? <><Spinner size={14} /> Buscando endereços no Zen…</> : 'Criar inventário'}
+          {criando ? <><Spinner size={14} /> Buscando no Zen…</> : `Criar inventário — ${nomeLocal(local)}`}
         </button>
       </div>
     </div>

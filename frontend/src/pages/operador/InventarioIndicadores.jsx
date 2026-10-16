@@ -2,7 +2,7 @@
 // pages/operador/InventarioIndicadores.jsx — KPIs do inventário
 // ============================================================
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { inventarioService } from '../../services/api';
@@ -13,15 +13,17 @@ const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'o
 
 export default function InventarioIndicadores() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const local = params.get('local') === 'marketplace' ? 'marketplace' : 'almoxarifado';
   const [meses, setMeses] = useState(12);
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
 
   useEffect(() => {
     setDados(null); setErro('');
-    inventarioService.indicadores(meses).then(r => setDados(r.data))
+    inventarioService.indicadores(meses, local).then(r => setDados(r.data))
       .catch(e => setErro(e.response?.data?.erro || 'Erro ao carregar os indicadores.'));
-  }, [meses]);
+  }, [meses, local]);
 
   const t = dados?.totais;
   const grafico = (dados?.por_mes || []).map(m => {
@@ -33,11 +35,11 @@ export default function InventarioIndicadores() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <button onClick={() => navigate('/inventario')} className="flex items-center gap-1 text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)] mb-1">
+          <button onClick={() => navigate(local === 'marketplace' ? '/inventario?local=marketplace' : '/inventario')} className="flex items-center gap-1 text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)] mb-1">
             <ArrowLeft size={13} /> Inventários
           </button>
           <h1 className="text-lg sm:text-xl font-bold text-[var(--c-texto)]">Indicadores do inventário</h1>
-          <p className="text-xs sm:text-sm text-[var(--c-suave)]">Somente inventários finalizados</p>
+          <p className="text-xs sm:text-sm text-[var(--c-suave)]">{local === 'marketplace' ? 'Marketplace (Mercado Livre)' : 'Almoxarifado'} · somente inventários finalizados</p>
         </div>
         <div className="flex gap-2">
           {[[3, '3 meses'], [12, '12 meses'], [120, 'Tudo']].map(([v, l]) => (

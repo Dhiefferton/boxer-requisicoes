@@ -101,12 +101,13 @@ export default function InventarioDetalhe() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <button onClick={() => navigate('/inventario')} className="flex items-center gap-1 text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)] mb-1">
+          <button onClick={() => navigate(inv.local === 'marketplace' ? '/inventario?local=marketplace' : '/inventario')} className="flex items-center gap-1 text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)] mb-1">
             <ArrowLeft size={13} /> Inventários
           </button>
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-lg sm:text-xl font-bold text-[var(--c-texto)]">Inventário #{inv.id} — {fmtData(inv.criado_em)}</h1>
             <TagStatus status={inv.status} />
+            {inv.local === 'marketplace' && <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-yellow-500/15 text-yellow-500">Marketplace</span>}
           </div>
           <p className="text-xs sm:text-sm text-[var(--c-suave)]">
             Iniciado {fmtHora(inv.criado_em)} por {inv.criado_por_nome} · {fmtTempo(r.tempo_seg)} de contagem
