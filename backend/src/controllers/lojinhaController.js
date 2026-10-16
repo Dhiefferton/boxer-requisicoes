@@ -2,9 +2,9 @@
 // controllers/lojinhaController.js — Lojinha Boxer
 // ============================================================
 // Duas colunas: Entrada e Liberação.
-// Entrada: cliente (CPF/CNPJ buscado no Zen), data, produtos (SKU do
-// catálogo, só com saldo em estoque), nº do pedido da lojinha,
-// vendedora e envio (Sedex / PAC / Próprio / Transportadora).
+// Entrada: cliente (CPF/CNPJ buscado no Zen) e se é Assistente Autorizado,
+// data, produtos (SKU do catálogo, só com saldo em estoque, com preço),
+// nº do pedido da lojinha, vendedora, envio e valor do frete.
 // Acesso: admin, operador e o setor SAC / Suporte.
 // ============================================================
 import { query } from '../config/db.js';
@@ -40,6 +40,8 @@ function garantirEstrutura() {
         criado_em       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_lojinha_boxer_pedidos_status ON lojinha_boxer_pedidos (status, data DESC, id DESC);
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS assistente_autorizado BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS valor_frete NUMERIC(12,2) NOT NULL DEFAULT 0;
     `).catch(e => { estruturaOk = null; throw e; });
   }
   return estruturaOk;
@@ -130,6 +132,8 @@ export async function criarPedidoLojinha(req, res, next) {
     const vendedora = String(b.vendedora || '').trim();
     const tipo = String(b.tipo_envio || '').trim();
     const transportadora = String(b.transportadora || '').trim();
+    const autorizado = b.assistente_autorizado === true;
+    const frete = b.valor_frete === '' || b.valor_frete == null ? 0 : Number(b.valor_frete);
 
     if (documento.length !== 11 && documento.length !== 14) return res.status(400).json({ erro: 'CPF/CNPJ inválido.' });
     if (!nome) return res.status(400).json({ erro: 'Busque o cliente pelo documento antes de salvar.' });
@@ -138,6 +142,7 @@ export async function criarPedidoLojinha(req, res, next) {
     if (!vendedora) return res.status(400).json({ erro: 'Informe a vendedora.' });
     if (!TIPOS_ENVIO.includes(tipo)) return res.status(400).json({ erro: 'Escolha o tipo de envio.' });
     if (tipo === 'Transportadora' && !transportadora) return res.status(400).json({ erro: 'Escolha a transportadora.' });
+    if (!Number.isFinite(frete) || frete < 0) return res.status(400).json({ erro: 'Valor do frete inválido.' });
 
     // Produtos: confere de novo no catálogo (saldo pode ter mudado)
     const entrada = Array.isArray(b.itens) ? b.itens : [];
@@ -145,17 +150,20 @@ export async function criarPedidoLojinha(req, res, next) {
     const itens = [];
     for (const it of entrada) {
       const qtd = Number(it.quantidade);
+      const preco = Number(it.preco);
       const p = await produtoPorSku(it.codigo);
       if (!p) return res.status(400).json({ erro: `SKU ${it.codigo} não encontrado no catálogo.` });
       if (!(qtd > 0)) return res.status(400).json({ erro: `Quantidade inválida para o SKU ${p.codigo}.` });
+      if (it.preco === '' || it.preco == null || !Number.isFinite(preco) || preco < 0) return res.status(400).json({ erro: `Informe o preço do SKU ${p.codigo}.` });
       if (p.saldo <= 0) return res.status(409).json({ erro: `SKU ${p.codigo} sem saldo em estoque.` });
       if (qtd > p.saldo) return res.status(409).json({ erro: `SKU ${p.codigo}: só há ${p.saldo} em estoque.` });
       const ja = itens.find(x => x.codigo === p.codigo);
       if (ja) {
         ja.quantidade += qtd;
+        ja.preco = preco;
         if (ja.quantidade > p.saldo) return res.status(409).json({ erro: `SKU ${p.codigo}: só há ${p.saldo} em estoque.` });
       } else {
-        itens.push({ material_id: p.id, codigo: p.codigo, descricao: p.descricao, unidade: p.unidade, quantidade: qtd });
+        itens.push({ material_id: p.id, codigo: p.codigo, descricao: p.descricao, unidade: p.unidade, quantidade: qtd, preco });
       }
     }
 
@@ -164,11 +172,13 @@ export async function criarPedidoLojinha(req, res, next) {
 
     const r = await query(
       `INSERT INTO lojinha_boxer_pedidos (documento, cliente_id_zen, cliente_nome, cliente_cidade, cliente_uf, data,
-          numero_pedido, vendedora, tipo_envio, transportadora, itens, criado_por, criado_por_nome)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+          numero_pedido, vendedora, tipo_envio, transportadora, itens, criado_por, criado_por_nome,
+          assistente_autorizado, valor_frete)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
       [documento, Number(b.cliente_id_zen) || null, nome, String(b.cliente_cidade || '').trim() || null,
        String(b.cliente_uf || '').trim().toUpperCase().slice(0, 2) || null, data, numero, vendedora, tipo,
-       tipo === 'Transportadora' ? transportadora : null, JSON.stringify(itens), req.usuario.id, req.usuario.nome]);
+       tipo === 'Transportadora' ? transportadora : null, JSON.stringify(itens), req.usuario.id, req.usuario.nome,
+       autorizado, Math.round(frete * 100) / 100]);
     res.status(201).json({ pedido: r.rows[0] });
   } catch (err) { next(err); }
 }
