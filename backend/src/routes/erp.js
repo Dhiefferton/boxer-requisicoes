@@ -1,6 +1,7 @@
 import express from 'express';
 import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncErpEstoque.js';
 import { pipefyQuery } from '../integrations/pipefyService.js';
+import { diagnosticoLojinha } from '../integrations/pipefyLojinha.js';
 
 const router = express.Router();
 
@@ -49,6 +50,9 @@ router.get('/debug-pipefy', async (req, res) => {
     await tentar('tabela', `query($id: ID!) { table(id: $id) { id name
       table_fields { id label type options }
       table_records(first: 30) { edges { node { id title } } } } }`, { id: String(req.query.tabela) });
+  }
+  if (req.query.lojinha) {
+    out.lojinha = await diagnosticoLojinha({ documento: req.query.doc, email: req.query.email, nome: req.query.nome });
   }
   res.json(out);
 });

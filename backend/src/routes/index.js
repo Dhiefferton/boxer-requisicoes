@@ -40,7 +40,7 @@ import {
   configPlanilha, marcarPlanilha, marcarAjusteZen,
 } from '../controllers/inventarioController.js';
 import {
-  acessoLojinha, configLojinha, buscarClienteLojinha, listarPedidosLojinha, criarPedidoLojinha,
+  acessoLojinha, configLojinha, buscarClienteLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarPipefyLojinha,
 } from '../controllers/lojinhaController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
@@ -182,5 +182,6 @@ router.get('/lojinha/config',   ...loja, configLojinha);
 router.get('/lojinha/cliente',  ...loja, buscarClienteLojinha);
 router.get('/lojinha/pedidos',  ...loja, listarPedidosLojinha);
 router.post('/lojinha/pedidos', ...loja, criarPedidoLojinha);
+router.post('/lojinha/pedidos/:id/pipefy', ...loja, reenviarPipefyLojinha);
 
 export default router;
