@@ -76,20 +76,22 @@ async function registrosDaTabela(tableId, limite = 3000) {
   return lista;
 }
 
-// Cliente na tabela "Cadastro" pelo CPF/CNPJ (findRecords; se falhar, varre a tabela)
+// Cliente na tabela "Cadastro" pelo CPF/CNPJ (findRecords; se falhar, varre a tabela).
+// O campo é numérico: zeros à esquerda podem ter sido perdidos.
 async function acharCliente(documento) {
   const d = soDigitos(documento);
-  for (const valor of [d, mascarar(d)]) {
+  const semZeros = d.replace(/^0+/, '');
+  for (const valor of [...new Set([d, semZeros, mascarar(d)])]) {
     try {
       const r = await pipefyQuery(
-        `query($t: ID!, $v: String!) { findRecords(tableId: $t, first: 5, search: { fieldId: "cpf_cnpj", fieldValue: $v }) {
-           edges { node { id title } } } }`, { t: CFG.tabelaClientes, v: valor });
+        `{ findRecords(tableId: ${JSON.stringify(CFG.tabelaClientes)}, first: 5, search: { fieldId: "cpf_cnpj", fieldValue: ${JSON.stringify(valor)} }) {
+           edges { node { id } } } }`, {});
       const id = r?.findRecords?.edges?.[0]?.node?.id;
       if (id) return String(id);
-    } catch { /* tenta o próximo formato / varredura */ }
+    } catch (e) { console.error('[Lojinha] findRecords:', e.message); }
   }
-  const todos = await registrosDaTabela(CFG.tabelaClientes);
-  return todos.find(x => soDigitos(x.campos.cpf_cnpj) === d)?.id || null;
+  const todos = await registrosDaTabela(CFG.tabelaClientes, 20000);
+  return todos.find(x => soDigitos(x.campos.cpf_cnpj).replace(/^0+/, '') === semZeros)?.id || null;
 }
 
 async function criarCliente({ documento, nome, uf }) {
@@ -165,8 +167,14 @@ export async function criarCardsLojinha(pedido, usuario, progresso = [], salvar 
     if (comum) return comum;
     let clienteId = await acharCliente(pedido.documento);
     if (!clienteId) {
-      clienteId = await criarCliente({ documento: pedido.documento, nome: pedido.cliente_nome, uf: pedido.cliente_uf });
-      avisos.push('Cliente cadastrado na tabela Cadastro do Pipefy.');
+      try {
+        clienteId = await criarCliente({ documento: pedido.documento, nome: pedido.cliente_nome, uf: pedido.cliente_uf });
+        avisos.push('Cliente cadastrado na tabela Cadastro do Pipefy.');
+      } catch (e) {
+        // Já existe (CPF/CNPJ único) mas a busca não achou: tenta de novo
+        clienteId = /único|unique/i.test(e.message) ? await acharCliente(pedido.documento) : null;
+        if (!clienteId) throw e;
+      }
     }
     let responsavelId = null;
     try { responsavelId = await acharFuncionario({ nome: usuario?.nome }); } catch { /* segue sem */ }
