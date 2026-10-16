@@ -40,7 +40,13 @@ const linkZenOrdem = (id) => `${ZEN_APP_URL}/material/pickingOrder?q=id==${id}`;
 const COLUNAS = [
   { status: 'entrada',   inclui: ['entrada', 'liberacao'], titulo: 'Entrada',      cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
   { status: 'separacao', inclui: ['separacao'],            titulo: 'Em Separação', cor: 'border-purple-500/40', badge: 'bg-purple-500/15 text-purple-400' },
+  // Acompanhamento: andam sozinhas conforme o card avança no Pipefy
+  { status: 'conferencia',  inclui: ['conferencia'],  titulo: 'Em Conferência',        cor: 'border-cyan-500/40',   badge: 'bg-cyan-500/15 text-cyan-400' },
+  { status: 'teste_placas', inclui: ['teste_placas'], titulo: 'Em Teste de Placas',    cor: 'border-amber-500/40',  badge: 'bg-amber-500/15 text-amber-400' },
+  { status: 'preparacao',   inclui: ['preparacao'],   titulo: 'Em Preparação (Exp.)',  cor: 'border-orange-500/40', badge: 'bg-orange-500/15 text-orange-400' },
+  { status: 'finalizado',   inclui: ['finalizado'],   titulo: 'Finalizado',            cor: 'border-green-500/40',  badge: 'bg-green-500/15 text-green-400' },
 ];
+const NO_PIPEFY = ['separacao', 'conferencia', 'teste_placas', 'preparacao', 'finalizado'];
 const ITENS_POR_CARD = 7; // limite do Pipefy
 const DESC_AUTORIZADO = 23; // % de desconto do Assistente Autorizado
 const totalItens = (itens) => itens.reduce((s, i) => s + Number(i.quantidade || 0) * Number(i.preco || 0), 0);
@@ -63,10 +69,13 @@ export default function LojinhaBoxer() {
   useEffect(() => {
     lojinhaService.config().then(r => setConfig(c => ({ ...c, ...r.data }))).catch(() => {});
     carregar();
+    // Acompanha o Pipefy: atualiza sozinho a cada minuto
+    const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
+    return () => clearInterval(t);
   }, []);
 
   const lista = pedidos || [];
-  const ativos = lista.length;
+  const ativos = lista.filter(p => p.status !== 'finalizado').length;
 
   return (
     // Tela grande: travada na altura da janela e cada coluna rola sozinha (igual Orçamentos)
@@ -97,7 +106,7 @@ export default function LojinhaBoxer() {
       {!pedidos ? (
         <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-rows-1 xl:flex-1 xl:min-h-0 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-rows-1 xl:grid-cols-none xl:grid-flow-col xl:auto-cols-[minmax(280px,1fr)] xl:overflow-x-auto xl:flex-1 xl:min-h-0 gap-4">
           {COLUNAS.map(({ status, inclui, titulo, cor, badge }) => {
             const doStatus = lista.filter(p => inclui.includes(p.status));
             return (
@@ -119,7 +128,7 @@ export default function LojinhaBoxer() {
           onSalvo={(p) => {
             setNovo(false);
             setAviso(p.zen_ordem_separacao_id
-              ? (p.status === 'separacao'
+              ? (NO_PIPEFY.includes(p.status)
                 ? `Pedido ${p.numero_pedido}: Zen pedido ${p.zen_pedido_id} / ordem ${p.zen_ordem_separacao_id} e ${p.qtd_cards} card(s) no Pipefy — já em Separação.`
                 : `Pedido ${p.numero_pedido} criado no Zen, mas o Pipefy deu erro: ${p.pipefy_erro || 'desconhecido'}. Use "Criar cards no Pipefy" no card.`)
               : `Pedido ${p.numero_pedido} registrado, mas o Zen deu erro: ${p.zen_erro || 'desconhecido'}. Use "Tentar de novo" no card.`);
@@ -213,12 +222,12 @@ function StatusPipefy({ p, carregar }) {
     setEnviando(true);
     try {
       const { data: r } = await lojinhaService.reenviarPipefy(p.id);
-      if (r.pedido.status !== 'separacao') alert(`O Pipefy deu erro: ${r.pedido.pipefy_erro}`);
+      if (!NO_PIPEFY.includes(r.pedido.status)) alert(`O Pipefy deu erro: ${r.pedido.pipefy_erro}`);
       carregar();
     } catch (e) { alert(e.response?.data?.erro || 'Erro ao enviar ao Pipefy.'); }
     finally { setEnviando(false); }
   }
-  const ok = p.status === 'separacao';
+  const ok = NO_PIPEFY.includes(p.status);
   return (
     <div className={`text-[11px] px-2 py-1.5 rounded-lg space-y-1 ${ok ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
       {cards.length > 0 && (
@@ -278,7 +287,7 @@ function CardPedido({ p, carregar }) {
         </div>
       </div>
       <p className="text-[13px] font-semibold text-[var(--c-texto)] leading-snug">{p.cliente_nome}</p>
-      {['liberacao', 'separacao'].includes(p.status) && p.zen_ordem_separacao_id && <InfoLiberacao p={p} itens={itens} />}
+      {['liberacao', ...NO_PIPEFY].includes(p.status) && p.zen_ordem_separacao_id && <InfoLiberacao p={p} itens={itens} />}
       {p.assistente_autorizado && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400"><BadgeCheck size={11} /> Assistente Autorizado</span>}
       <p className="text-[11px] text-[var(--c-suave)] font-mono">{mascararDocumento(p.documento)}{p.cliente_cidade ? ` · ${p.cliente_cidade}` : ''}</p>
       <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -308,7 +317,7 @@ function CardPedido({ p, carregar }) {
         <b className="text-[12px] text-[var(--c-texto)]">{fmtR$(totalItens(itens) - desconto + Number(p.valor_frete || 0))}</b>
       </div>
       <StatusZen p={p} carregar={carregar} />
-      {['liberacao', 'separacao'].includes(p.status) && <StatusPipefy p={p} carregar={carregar} />}
+      {['liberacao', ...NO_PIPEFY].includes(p.status) && <StatusPipefy p={p} carregar={carregar} />}
     </div>
   );
 }
