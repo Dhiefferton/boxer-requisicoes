@@ -8,7 +8,7 @@
 // Ao salvar, o sistema cria o pedido no Zen até a ordem de separação.
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, ClipboardList, Send, User, BadgeCheck, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Store, Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, ClipboardList, Send, User, BadgeCheck, AlertTriangle, ExternalLink, PackageSearch } from 'lucide-react';
 import { lojinhaService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -61,6 +61,7 @@ export default function LojinhaBoxer() {
 
   const entrada = useMemo(() => (pedidos || []).filter(p => p.status === 'entrada'), [pedidos]);
   const liberacao = useMemo(() => (pedidos || []).filter(p => p.status === 'liberacao'), [pedidos]);
+  const separacao = useMemo(() => (pedidos || []).filter(p => p.status === 'separacao'), [pedidos]);
 
   return (
     <div className="space-y-4">
@@ -83,11 +84,13 @@ export default function LojinhaBoxer() {
 
       {aviso && <p className="text-sm text-green-400">{aviso}</p>}
 
-      <div className="grid gap-4 md:grid-cols-2 items-start">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 items-start">
         <Coluna titulo="1. Entrada" Icone={ClipboardList} pedidos={entrada} carregando={!pedidos}
           vazio="Nenhum pedido na Entrada." onNovo={() => setNovo(true)} carregar={carregar} />
         <Coluna titulo="2. Liberação" Icone={Send} pedidos={liberacao} carregando={!pedidos}
           vazio="Nenhum pedido em Liberação." carregar={carregar} />
+        <Coluna titulo="3. Em Separação" Icone={PackageSearch} pedidos={separacao} carregando={!pedidos}
+          vazio="Nenhum pedido em separação." carregar={carregar} />
       </div>
 
       {novo && (
@@ -95,7 +98,9 @@ export default function LojinhaBoxer() {
           onSalvo={(p) => {
             setNovo(false);
             setAviso(p.zen_ordem_separacao_id
-              ? `Pedido ${p.numero_pedido} criado no Zen (pedido ${p.zen_pedido_id}, ordem de separação ${p.zen_ordem_separacao_id}) e enviado para a Liberação — ${p.qtd_cards} card(s).`
+              ? (p.status === 'separacao'
+                ? `Pedido ${p.numero_pedido}: Zen pedido ${p.zen_pedido_id} / ordem ${p.zen_ordem_separacao_id} e ${p.qtd_cards} card(s) no Pipefy — já em Separação.`
+                : `Pedido ${p.numero_pedido} criado no Zen e na Liberação, mas o Pipefy deu erro: ${p.pipefy_erro || 'desconhecido'}. Use "Criar cards no Pipefy" no card.`)
               : `Pedido ${p.numero_pedido} registrado, mas o Zen deu erro: ${p.zen_erro || 'desconhecido'}. Use "Tentar de novo" no card.`);
             carregar();
           }} />
@@ -186,6 +191,47 @@ function InfoLiberacao({ p, itens }) {
   );
 }
 
+function StatusPipefy({ p, carregar }) {
+  const [enviando, setEnviando] = useState(false);
+  const cards = Array.isArray(p.pipefy_cards) ? p.pipefy_cards : [];
+  async function enviar() {
+    setEnviando(true);
+    try {
+      const { data: r } = await lojinhaService.reenviarPipefy(p.id);
+      if (r.pedido.status !== 'separacao') alert(`O Pipefy deu erro: ${r.pedido.pipefy_erro}`);
+      carregar();
+    } catch (e) { alert(e.response?.data?.erro || 'Erro ao enviar ao Pipefy.'); }
+    finally { setEnviando(false); }
+  }
+  const ok = p.status === 'separacao';
+  return (
+    <div className={`text-[11px] px-2 py-1.5 rounded-lg space-y-1 ${ok ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
+      {cards.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+          <span>Pipefy:</span>
+          {cards.filter(c => c.id).map((c, i) => (
+            <a key={c.id} href={c.url || `https://app.pipefy.com/open-cards/${c.id}`} target="_blank" rel="noreferrer" className="hover:underline" title={c.fase || ''}>
+              Card {i + 1}{cards.length > 1 ? `/${cards.length}` : ''} <b>{c.id}</b> · {c.fase || '—'} <ExternalLink size={10} className="inline -mt-0.5" />
+            </a>
+          ))}
+        </div>
+      )}
+      {!ok && (
+        <>
+          {p.pipefy_erro
+            ? <div className="flex items-start gap-1"><AlertTriangle size={12} className="shrink-0 mt-0.5" /><span>Pipefy: {p.pipefy_erro}</span></div>
+            : !cards.length && <div>Pipefy: cards ainda não criados.</div>}
+          <button onClick={enviar} disabled={enviando}
+            className="px-2 py-0.5 rounded-lg border border-amber-400/40 text-amber-300 font-semibold disabled:opacity-50">
+            {enviando ? 'Enviando ao Pipefy…' : (cards.length ? 'Tentar de novo no Pipefy' : 'Criar cards no Pipefy')}
+          </button>
+        </>
+      )}
+      {ok && p.pipefy_avisos && <div className="text-[var(--c-suave)]">{p.pipefy_avisos}</div>}
+    </div>
+  );
+}
+
 function CardPedido({ p, carregar }) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
   const [aberto, setAberto] = useState(false);
@@ -197,7 +243,7 @@ function CardPedido({ p, carregar }) {
         <span className="text-[11px] text-[var(--c-suave)]">{fmtData(p.data)}</span>
       </div>
       <p className="text-[13px] font-semibold text-[var(--c-texto)] leading-snug">{p.cliente_nome}</p>
-      {p.status === 'liberacao' && p.zen_ordem_separacao_id && <InfoLiberacao p={p} itens={itens} />}
+      {['liberacao', 'separacao'].includes(p.status) && p.zen_ordem_separacao_id && <InfoLiberacao p={p} itens={itens} />}
       {p.assistente_autorizado && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400"><BadgeCheck size={11} /> Assistente Autorizado</span>}
       <p className="text-[11px] text-[var(--c-suave)] font-mono">{mascararDocumento(p.documento)}{p.cliente_cidade ? ` · ${p.cliente_cidade}` : ''}</p>
       <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -227,6 +273,7 @@ function CardPedido({ p, carregar }) {
         <b className="text-[12px] text-[var(--c-texto)]">{fmtR$(totalItens(itens) - desconto + Number(p.valor_frete || 0))}</b>
       </div>
       <StatusZen p={p} carregar={carregar} />
+      {['liberacao', 'separacao'].includes(p.status) && <StatusPipefy p={p} carregar={carregar} />}
     </div>
   );
 }
@@ -505,7 +552,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
             <button onClick={onFechar} className="px-4 py-2.5 rounded-xl border border-[var(--c-borda)] text-sm text-[var(--c-texto)]">Cancelar</button>
             <button onClick={salvar} disabled={salvando}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--c-destaque)] text-white text-sm font-semibold disabled:opacity-50">
-              {salvando ? <><Spinner size={14} /> Salvando e criando no Zen…</> : <><Check size={15} /> Salvar na Entrada</>}
+              {salvando ? <><Spinner size={14} /> Criando no Zen e no Pipefy…</> : <><Check size={15} /> Salvar na Entrada</>}
             </button>
           </div>
         </div>
