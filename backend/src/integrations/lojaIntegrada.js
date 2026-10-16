@@ -14,28 +14,49 @@ export function lojaIntegradaConfigurada() {
   return Boolean(process.env.LOJA_INTEGRADA_CHAVE_API && process.env.LOJA_INTEGRADA_CHAVE_APLICACAO);
 }
 
+// Formas de autenticação aceitas pela API (a que funcionar fica memorizada)
+const AUTENTICACOES = [
+  { nome: 'header chave_api/aplicacao', h: (k, a) => ({ Authorization: `chave_api ${k} aplicacao ${a}` }) },
+  { nome: 'query chave_api/chave_aplicacao', q: (k, a) => ({ chave_api: k, chave_aplicacao: a }) },
+  { nome: 'bearer personal token', h: (k, a) => ({ Authorization: `Bearer ${a}` }) },
+  { nome: 'bearer + chave_api', h: (k, a) => ({ Authorization: `Bearer ${a}`, 'chave-api': k }) },
+  { nome: 'token personal', h: (k, a) => ({ Authorization: `Token ${a}` }) },
+];
+let authOk = null;
+export const tentativasLI = [];
+
 async function getLI(caminho) {
-  const chave = process.env.LOJA_INTEGRADA_CHAVE_API;
-  const app = process.env.LOJA_INTEGRADA_CHAVE_APLICACAO;
+  const chave = (process.env.LOJA_INTEGRADA_CHAVE_API || '').trim();
+  const app = (process.env.LOJA_INTEGRADA_CHAVE_APLICACAO || '').trim();
   if (!chave || !app) {
     const e = new Error('Integração com a Loja Integrada não configurada (faltam as chaves da API no servidor).');
     e.status = 503; throw e;
   }
-  const url = caminho.startsWith('http') ? caminho
+  let url = caminho.startsWith('http') ? caminho
     : caminho.startsWith('/api/v1') ? `https://api.awsli.com.br${caminho.replace('/api', '')}` : `${BASE}${caminho}`;
-  const r = await fetch(url, {
-    headers: { Authorization: `chave_api ${chave} aplicacao ${app}`, Accept: 'application/json' },
-    signal: AbortSignal.timeout(20000),
-  });
-  const texto = await r.text();
-  let dados; try { dados = JSON.parse(texto); } catch { dados = null; }
-  if (!r.ok) {
-    const e = new Error(r.status === 404 ? 'Pedido não encontrado na Loja Integrada.'
-      : r.status === 401 || r.status === 403 ? 'A Loja Integrada recusou as chaves da API (confira a chave_api e a chave_aplicacao).'
-      : `Loja Integrada respondeu ${r.status}: ${(dados && (dados.error_message || dados.message)) || texto.slice(0, 200)}`);
-    e.status = r.status === 404 ? 404 : 502; throw e;
+  if (!/[/?]$/.test(url) && !url.includes('?')) url += '/';
+  const ordem = authOk ? [authOk, ...AUTENTICACOES.filter(x => x !== authOk)] : AUTENTICACOES;
+  tentativasLI.length = 0;
+  let ultimo = null;
+  for (const a of ordem) {
+    const u = new URL(url);
+    if (a.q) for (const [k, v] of Object.entries(a.q(chave, app))) u.searchParams.set(k, v);
+    const r = await fetch(u, {
+      headers: { Accept: 'application/json', ...(a.h ? a.h(chave, app) : {}) },
+      signal: AbortSignal.timeout(20000),
+    });
+    const texto = await r.text();
+    let dados; try { dados = JSON.parse(texto); } catch { dados = null; }
+    tentativasLI.push({ forma: a.nome, status: r.status, resposta: texto.slice(0, 200) });
+    if (r.ok) { authOk = a; return dados; }
+    ultimo = { r, dados, texto };
+    if (r.status !== 401 && r.status !== 403) break;
   }
-  return dados;
+  const { r, dados, texto } = ultimo;
+  const e = new Error(r.status === 404 ? 'Pedido não encontrado na Loja Integrada.'
+    : r.status === 401 || r.status === 403 ? 'A Loja Integrada recusou as chaves da API (confira a chave_api e a chave_aplicacao).'
+    : `Loja Integrada respondeu ${r.status}: ${(dados && (dados.error_message || dados.message)) || texto.slice(0, 200)}`);
+  e.status = r.status === 404 ? 404 : 502; throw e;
 }
 
 export const pedidoLIBruto = (numero) => getLI(`/pedido/${encodeURIComponent(numero)}`);
