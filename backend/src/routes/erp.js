@@ -32,7 +32,7 @@ router.get('/debug-pipefy', async (req, res) => {
   const tentar = async (nome, gql, vars) => {
     try { out[nome] = await pipefyQuery(gql, vars); } catch (e) { out[nome + '_erro'] = e.message; }
   };
-  if (!req.query.pipe && !req.query.tabela) {
+  if (!req.query.pipe && !req.query.tabela && !req.query.fase && !req.query.lojinha) {
     await tentar('pipes', `query { organization(id: 327351) { pipes { id name phases { id name } } } }`);
     await tentar('tabelas', `query { organization(id: 327351) { tables(first: 50) { edges { node { id name } } } } }`);
   }
@@ -45,6 +45,11 @@ router.get('/debug-pipefy', async (req, res) => {
       await tentar('pipe_simples', `query($id: ID!) { pipe(id: $id) { id name phases { id name }
         start_form_fields { id label type required options } } }`, { id: String(req.query.pipe) });
     }
+  }
+  if (req.query.fase) {
+    await tentar('fase', `query($id: ID!) { phase(id: $id) { id name
+      fields { id label type required options description
+        connectedRepo { ... on PublicTable { id name } ... on PublicPipe { id name } } } } }`, { id: String(req.query.fase) });
   }
   if (req.query.tabela) {
     await tentar('tabela', `query($id: ID!) { table(id: $id) { id name
