@@ -1,6 +1,7 @@
 import express from 'express';
 import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncErpEstoque.js';
 import { getToken } from '../integrations/erpZen.js';
+import { pipefyQuery } from '../integrations/pipefyService.js';
 
 const router = express.Router();
 
@@ -36,6 +37,15 @@ router.get('/debug-zen', async (req, res) => {
     let dados; try { dados = JSON.parse(texto); } catch { dados = texto.slice(0, 2000); }
     res.status(r.ok ? 200 : 502).json({ status: r.status, dados });
   } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// DIAGNÓSTICO — consulta (somente leitura) na API GraphQL do Pipefy.
+// Ex: GET /api/erp/debug-pipefy?secret=...&gql={ phase(id:1){ name } }
+router.get('/debug-pipefy', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  const gql = String(req.query.gql || '');
+  if (!gql || /\bmutation\b/i.test(gql)) return res.status(400).json({ erro: 'Só consultas (query).' });
+  try { res.json(await pipefyQuery(gql, {})); } catch (e) { res.status(502).json({ erro: e.message }); }
 });
 
 // Força sincronização manual (GET, testável no navegador, mesmo secret do cron)
