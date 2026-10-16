@@ -6,16 +6,17 @@
 // preço), valor do frete e forma de envio.
 // Variáveis de ambiente (Vercel, projeto do backend):
 //   LOJA_INTEGRADA_CHAVE_API        → Painel > Configurações > Chave para API
-//   LOJA_INTEGRADA_CHAVE_APLICACAO  → chave de aplicação fornecida pela Loja Integrada
+//   LOJA_INTEGRADA_CHAVE_APLICACAO  → personal token (Chave para API > Personal token), enviado como Authorization: Basic
 // ============================================================
 const BASE = 'https://api.awsli.com.br/v1';
 
 export function lojaIntegradaConfigurada() {
-  return Boolean(process.env.LOJA_INTEGRADA_CHAVE_API && process.env.LOJA_INTEGRADA_CHAVE_APLICACAO);
+  return Boolean(process.env.LOJA_INTEGRADA_CHAVE_APLICACAO);
 }
 
 // Formas de autenticação aceitas pela API (a que funcionar fica memorizada)
 const AUTENTICACOES = [
+  { nome: 'basic personal token', h: (k, a) => ({ Authorization: `Basic ${a}` }) },
   { nome: 'header chave_api/aplicacao', h: (k, a) => ({ Authorization: `chave_api ${k} aplicacao ${a}` }) },
   { nome: 'header (chaves invertidas)', h: (k, a) => ({ Authorization: `chave_api ${a} aplicacao ${k}` }) },
   { nome: 'query chave_api/chave_aplicacao', q: (k, a) => ({ chave_api: k, chave_aplicacao: a }) },
@@ -29,7 +30,7 @@ export const tentativasLI = [];
 async function getLI(caminho) {
   const chave = (process.env.LOJA_INTEGRADA_CHAVE_API || '').trim();
   const app = (process.env.LOJA_INTEGRADA_CHAVE_APLICACAO || '').trim();
-  if (!chave || !app) {
+  if (!app) {
     const e = new Error('Integração com a Loja Integrada não configurada (faltam as chaves da API no servidor).');
     e.status = 503; throw e;
   }
