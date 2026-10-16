@@ -1,5 +1,6 @@
 import express from 'express';
 import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncErpEstoque.js';
+import { getToken } from '../integrations/erpZen.js';
 
 const router = express.Router();
 
@@ -20,6 +21,21 @@ router.get('/debug/:codigo', async (req, res, next) => {
     const itens = await debugEstoquePorCodigo(req.params.codigo);
     res.json({ codigo: req.params.codigo, total_linhas: itens.length, itens });
   } catch (err) { next(err); }
+});
+
+// DIAGNÓSTICO — leitura (GET) crua da API do Zen, só com o secret.
+// Ex: GET /api/erp/debug-zen?secret=...&path=/sale/sale/123
+router.get('/debug-zen', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  const caminho = String(req.query.path || '');
+  if (!caminho.startsWith('/')) return res.status(400).json({ erro: 'path inválido' });
+  try {
+    const token = await getToken();
+    const r = await fetch(`https://api.zenerp.app.br${caminho}`, { headers: { Authorization: `Bearer ${token}`, tenant: 'boxer' } });
+    const texto = await r.text();
+    let dados; try { dados = JSON.parse(texto); } catch { dados = texto.slice(0, 2000); }
+    res.status(r.ok ? 200 : 502).json({ status: r.status, dados });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
 // Força sincronização manual (GET, testável no navegador, mesmo secret do cron)
