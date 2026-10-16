@@ -6,7 +6,8 @@
 //   • Operação fiscal: "Venda" (contribuinte) ou "Venda não contribuinte" (6.108)
 //   • Frete por conta do emitente (ISSUER) · forma de pagamento 0
 //   • Vendedora = vendedora escolhida na tela (pessoa do Zen)
-//   • Observação: "LB: <nº do pedido da lojinha>"
+//   • Código do pedido = nº do pedido da lojinha; observação "LB: <nº>"
+//   • Transportadora: Sedex/PAC = Correios, Próprio = Proprio, ou a escolhida
 //   • Itens: preço da tela; Assistente Autorizado = 23% de desconto em
 //     cada peça; o frete é rateado entre os itens (proporcional ao valor)
 //   • CFOP pelo cadastro do cliente:
@@ -51,6 +52,20 @@ async function zen(metodo, caminho, corpo) {
   }
   return dados;
 }
+// Transportadora do pedido no Zen (pessoa "shipping"): Sedex/PAC = Correios
+const TRANSPORTADORA_ZEN = {
+  Sedex: 26861, PAC: 26861,                 // Empresa Brasileira De Correios E Telegrafos
+  'Próprio': 26828,                         // Proprio
+  'São Miguel': 26363,                      // Expresso Sao Miguel S/A
+  'Rodo Cargo': 26006,                      // Rodo Cargo Encomendas Urgentes Ltda
+  Rodonaves: 32233,                         // Rodonaves Transp E Encomendas Ltda
+  Favorita: 26084,                          // Favorita Transportes Ltda
+  Transuni: 67173,                          // Transuni - Encomendas E Cargas Ltda
+  Troca: 41072,                             // Troca Transportes - Eireli
+};
+export const transportadoraZen = (pedido) =>
+  TRANSPORTADORA_ZEN[pedido.tipo_envio === 'Transportadora' ? pedido.transportadora : pedido.tipo_envio] || null;
+
 const q = (expr) => encodeURIComponent(expr);
 const r2 = (n) => Math.round(Number(n) * 100) / 100;
 const hojeSP = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
@@ -154,6 +169,8 @@ export async function criarPedidoLojinhaZen(pedido) {
       fiscalProfileOperation: { id: cfop.codigo === '6.108' ? CFG.fiscalOpNaoContrib : CFG.fiscalOpVenda },
       person:                 { id: pessoa.id },
       personSalesperson:      { id: Number(pedido.vendedora_id_zen) },
+      ...(transportadoraZen(pedido) ? { personShipping: { id: transportadoraZen(pedido) } } : {}),
+      code:                   String(pedido.numero_pedido),
       freightType:            'ISSUER',
       currency:               { id: CFG.currency },
       availabilityDate:       hojeSP(),
