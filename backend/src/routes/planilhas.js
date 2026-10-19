@@ -12,6 +12,7 @@
 // ============================================================
 import express from 'express';
 import { query } from '../config/db.js';
+import { sincronizarTemposPipefy, linhasSeparacao, linhasConferencia } from '../integrations/pipefyTempos.js';
 
 const router = express.Router();
 
@@ -134,6 +135,70 @@ router.get('/pecas', async (req, res) => {
     console.error('[Planilhas] pecas:', e.message);
     res.status(500).json({ erro: 'Erro ao gerar os dados da planilha.' });
   }
+});
+
+// ── Separação e Conferência (Pipefy "Peças p/ Envio") ─────────
+// Mesmas colunas dos relatórios "Almoxarifado - ... - Power Bi". Uma linha
+// por card (pedido com mais de 7 itens tem mais de um card).
+const periodo = (req) => ({
+  desde: /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : '2026-10-01',
+  ate: /^\d{4}-\d{2}-\d{2}$/.test(req.query.ate || '') ? req.query.ate : '2999-12-31',
+});
+const numeroOuTexto = (v) => { const t = String(v ?? '').trim(); return /^\d+$/.test(t) ? Number(t) : (t || null); };
+async function atualizarDoPipefy() {
+  try { return await sincronizarTemposPipefy(); }
+  catch (e) { console.error('[Planilhas] sync Pipefy:', e.message); return { erro: e.message }; }
+}
+
+// GET /api/planilhas/separacao?chave=...&desde=AAAA-MM-DD
+router.get('/separacao', async (req, res) => {
+  if (!chaveOk(req)) return res.status(401).json({ erro: 'Chave inválida.' });
+  const { desde, ate } = periodo(req);
+  try {
+    await atualizarDoPipefy();
+    const linhas = await linhasSeparacao(desde, ate);
+    res.set('Cache-Control', 'no-store');
+    res.json(linhas.map(x => ({
+      'Número da Ordem de Separação': numeroOuTexto(x.ordem),
+      'Início da Separação': x.inicio,
+      'Término da Separação': x.fim,
+      'Separador': x.separador,
+      'Foi separado correto?': x.separado_correto,
+      'Quais erros na separação?': x.erros_separacao,
+      'Origem do Card': x.origem,
+    })));
+  } catch (e) {
+    console.error('[Planilhas] separacao:', e.message);
+    res.status(500).json({ erro: 'Erro ao gerar os dados da planilha.' });
+  }
+});
+
+// GET /api/planilhas/conferencia?chave=...&desde=AAAA-MM-DD
+router.get('/conferencia', async (req, res) => {
+  if (!chaveOk(req)) return res.status(401).json({ erro: 'Chave inválida.' });
+  const { desde, ate } = periodo(req);
+  try {
+    await atualizarDoPipefy();
+    const linhas = await linhasConferencia(desde, ate);
+    res.set('Cache-Control', 'no-store');
+    res.json(linhas.map(x => ({
+      'Número da Ordem de Separação': numeroOuTexto(x.ordem),
+      'Início da Conferência': x.inicio,
+      'Término da Conferência': x.fim,
+      'Conferente': x.conferente,
+      'Origem do Card': x.origem,
+    })));
+  } catch (e) {
+    console.error('[Planilhas] conferencia:', e.message);
+    res.status(500).json({ erro: 'Erro ao gerar os dados da planilha.' });
+  }
+});
+
+// Força a cópia do Pipefy (para a primeira carga). GET /api/planilhas/pipefy-sync?chave=...
+router.get('/pipefy-sync', async (req, res) => {
+  if (!chaveOk(req)) return res.status(401).json({ erro: 'Chave inválida.' });
+  try { res.json(await sincronizarTemposPipefy({ intervaloMs: 0, limiteMs: 40000 })); }
+  catch (e) { res.status(502).json({ erro: e.message }); }
 });
 
 // GET /api/planilhas/insumos/excluidos?chave=... — códigos das categorias
