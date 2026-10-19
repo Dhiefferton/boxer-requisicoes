@@ -7,6 +7,7 @@ import { errorHandler, notFound } from './middlewares/errorHandler.js';
 import db from './config/db.js';
 import { iniciarSyncErp } from './jobs/syncErpEstoque.js';
 import erpRoutes from './routes/erp.js';
+import planilhasRoutes from './routes/planilhas.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -32,6 +33,7 @@ app.get('/health', (req, res) => {
 
 app.use('/api', routes);
 app.use('/api/erp', erpRoutes);
+app.use('/api/planilhas', planilhasRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
