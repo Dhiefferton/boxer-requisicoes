@@ -96,6 +96,46 @@ router.get('/insumos', async (req, res) => {
   }
 });
 
+// GET /api/planilhas/pecas?chave=...&desde=AAAA-MM-DD&ate=AAAA-MM-DD
+// Planilha "Partes e Peças" (Tabela3 / aba Movimentações): só as saídas da
+// tela do Operador (requisições entregues) de itens da categoria Partes e Peças.
+router.get('/pecas', async (req, res) => {
+  if (!chaveOk(req)) return res.status(401).json({ erro: 'Chave inválida.' });
+  const desde = /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : '2026-10-01';
+  const ate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.ate || '') ? req.query.ate : '2999-12-31';
+  try {
+    const r = await query(
+      `SELECT to_char(h.quando AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS dia,
+              u.nome AS funcionario, d.nome AS departamento,
+              COALESCE(m.codigo, i.codigo_snapshot) AS codigo,
+              COALESCE(m.descricao, i.descricao_snapshot) AS descricao, i.quantidade
+         FROM requisicoes r
+         JOIN LATERAL (SELECT MAX(created_at) AS quando FROM historico_status
+                        WHERE requisicao_id = r.id AND status_novo = 'entregue') h ON h.quando IS NOT NULL
+         JOIN itens_requisicao i ON i.requisicao_id = r.id
+         JOIN materiais m ON m.id = i.material_id
+         JOIN categorias c ON c.id = m.categoria_id
+         LEFT JOIN departamentos d ON d.id = r.departamento_id
+         LEFT JOIN usuarios u ON u.id = r.usuario_id
+        WHERE r.status = 'entregue' AND c.nome = 'Partes e Peças'
+          AND (h.quando AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN $1::date AND $2::date
+        ORDER BY h.quando, i.id`, [desde, ate]);
+    res.set('Cache-Control', 'no-store');
+    res.json(r.rows.map(x => ({
+      'Data': String(x.dia),
+      'Funcionário': (x.funcionario || '').trim(),
+      'Departamento': x.departamento || '',
+      'IDCódigo': /^\d+$/.test(String(x.codigo || '')) ? Number(x.codigo) : x.codigo,
+      'NomeProduto': x.descricao,
+      'Quantidade': Number(x.quantidade) || 0,
+      'Grupo': 'Partes e Peças',
+    })));
+  } catch (e) {
+    console.error('[Planilhas] pecas:', e.message);
+    res.status(500).json({ erro: 'Erro ao gerar os dados da planilha.' });
+  }
+});
+
 // GET /api/planilhas/insumos/excluidos?chave=... — códigos das categorias
 // que não entram na planilha (Partes e Peças, Máquinas). A planilha usa
 // para tirar esses códigos também do histórico digitado à mão.
