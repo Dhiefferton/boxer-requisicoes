@@ -96,4 +96,21 @@ router.get('/insumos', async (req, res) => {
   }
 });
 
+// GET /api/planilhas/insumos/excluidos?chave=... — códigos das categorias
+// que não entram na planilha (Partes e Peças, Máquinas). A planilha usa
+// para tirar esses códigos também do histórico digitado à mão.
+router.get('/insumos/excluidos', async (req, res) => {
+  if (!chaveOk(req)) return res.status(401).json({ erro: 'Chave inválida.' });
+  try {
+    const r = await query(
+      `SELECT m.codigo FROM materiais m JOIN categorias c ON c.id = m.categoria_id
+        WHERE c.nome = ANY($1::text[]) ORDER BY m.codigo`, [CATEGORIAS_FORA]);
+    res.set('Cache-Control', 'no-store');
+    res.json(r.rows.map(x => String(x.codigo).trim()));
+  } catch (e) {
+    console.error('[Planilhas] excluidos:', e.message);
+    res.status(500).json({ erro: 'Erro ao gerar a lista.' });
+  }
+});
+
 export default router;
