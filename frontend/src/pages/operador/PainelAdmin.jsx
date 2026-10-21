@@ -2,7 +2,7 @@
 // pages/operador/PainelAdmin.jsx
 // ============================================================
 import { useState, useEffect, useRef } from 'react';
-import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Trash2, Search, Building2 } from 'lucide-react';
+import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Trash2, Search, Building2, Activity } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api, { adminService, materiaisService, fornecedoresService, materialFornecedoresService } from '../../services/api';
 import { Button, Spinner } from '../../components/ui';
@@ -894,6 +894,87 @@ function AbaFornecedores() {
   );
 }
 
+// ── Aba Uso do Pipefy ────────────────────────────────────────
+// Quantas chamadas o Boxer Requisições faz à API do Pipefy (por dia, mês e ano).
+function AbaPipefy() {
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState('');
+  const [visao, setVisao] = useState('dias');
+  async function carregar() {
+    setErro('');
+    try { const { data } = await adminService.pipefyUso(); setDados(data); }
+    catch (e) { setErro(e.response?.data?.erro || 'Erro ao carregar o uso do Pipefy.'); }
+  }
+  useEffect(() => { carregar(); }, []);
+  const fmt = (n) => Number(n || 0).toLocaleString('pt-BR');
+  const fmtPeriodo = (p) => (visao === 'dias' ? p.split('-').reverse().join('/') : visao === 'meses' ? p.split('-').reverse().join('/') : p);
+  if (erro) return <p className="text-sm text-red-400">{erro}</p>;
+  if (!dados) return <div className="flex justify-center py-12"><Spinner /></div>;
+  const hoje = dados.dias[0]?.periodo === new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) ? dados.dias[0] : null;
+  const linhas = dados[visao] || [];
+  const card = (rotulo, valor) => (
+    <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-4 py-3">
+      <p className="text-[11px] text-[var(--c-suave)]">{rotulo}</p>
+      <p className="text-xl font-bold text-[var(--c-texto)]">{fmt(valor)}</p>
+    </div>
+  );
+  const botao = (id, label) => (
+    <button key={id} onClick={() => setVisao(id)} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${visao === id ? 'bg-[var(--c-destaque)] text-white' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>{label}</button>
+  );
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-xs text-[var(--c-suave)]">
+          Chamadas do Boxer Requisições à API do Pipefy{dados.desde ? ` — contando desde ${dados.desde.split('-').reverse().join('/')}` : ''}. Consulta = leitura; alteração = criar/mover/editar card.
+        </p>
+        <button onClick={carregar} className="p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)]" title="Atualizar"><RefreshCw size={15} /></button>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {card('Hoje', hoje?.chamadas)}
+        {card('Este mês', dados.meses[0]?.chamadas)}
+        {card('Este ano', dados.anos[0]?.chamadas)}
+        {card('Erros no mês', dados.meses[0]?.erros)}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+        <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-3">
+          <div className="flex gap-1 mb-2">{botao('dias', 'Por dia')}{botao('meses', 'Por mês')}{botao('anos', 'Por ano')}</div>
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-[11px] text-[var(--c-suave)]">
+              <th className="py-1.5 px-2">Período</th><th className="px-2 text-right">Total</th><th className="px-2 text-right">Consultas</th><th className="px-2 text-right">Alterações</th><th className="px-2 text-right">Erros</th>
+            </tr></thead>
+            <tbody>
+              {linhas.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-xs text-[var(--c-suave)]">Ainda sem registros.</td></tr>}
+              {linhas.map(l => (
+                <tr key={l.periodo} className="border-t border-[var(--c-borda)] text-[var(--c-texto)]">
+                  <td className="py-1.5 px-2">{fmtPeriodo(l.periodo)}</td>
+                  <td className="px-2 text-right font-semibold">{fmt(l.chamadas)}</td>
+                  <td className="px-2 text-right">{fmt(l.consultas)}</td>
+                  <td className="px-2 text-right">{fmt(l.alteracoes)}</td>
+                  <td className={`px-2 text-right ${l.erros ? 'text-red-400' : 'text-[var(--c-suave)]'}`}>{fmt(l.erros)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-3">
+          <p className="text-xs font-semibold text-[var(--c-texto)] mb-2">De onde vêm as chamadas (este mês)</p>
+          <table className="w-full text-sm">
+            <tbody>
+              {dados.origens_mes.length === 0 && <tr><td className="py-6 text-center text-xs text-[var(--c-suave)]">Ainda sem registros.</td></tr>}
+              {dados.origens_mes.map(o => (
+                <tr key={o.origem} className="border-t border-[var(--c-borda)] text-[var(--c-texto)]">
+                  <td className="py-1.5 px-2">{o.origem}</td>
+                  <td className="px-2 text-right font-semibold">{fmt(o.chamadas)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PainelAdmin() {
   const [aba, setAba] = useState('usuarios');
   return (
@@ -915,11 +996,15 @@ export default function PainelAdmin() {
         <button onClick={() => setAba('fornecedores')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'fornecedores' ? 'bg-[var(--c-destaque)] text-white' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
           <Users size={15} /> Fornecedores
         </button>
+        <button onClick={() => setAba('pipefy')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'pipefy' ? 'bg-[var(--c-destaque)] text-white' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
+          <Activity size={15} /> Uso do Pipefy
+        </button>
       </div>
       {aba === 'usuarios'      && <AbaUsuarios />}
       {aba === 'departamentos' && <AbaDepartamentos />}
       {aba === 'estoque' && <AbaEstoque />}
       {aba === 'fornecedores' && <AbaFornecedores />}
+      {aba === 'pipefy' && <AbaPipefy />}
     </div>
   );
 }
