@@ -160,10 +160,10 @@ async function candidatosMarketplace(curvas) {
 }
 
 // ── Zen ────────────────────────────────────────────────────────
-// Só valem endereços de estoque físico: os que começam com PE (PE.A…, PEC…).
+// Só valem endereços de estoque físico: os que começam com PE (PE.A…, PEC…) ou RACK (RACK01/RACK02).
 // AVA, TERCEIRO, DEVOLUCAO, MERCADO_LIVRE etc. ficam de fora. Máquinas usam o MAQ.
 const enderecoValido = (e, categoria) =>
-  /^PE/i.test(String(e || '').trim()) || (categoria === 'Máquinas' && String(e || '').trim().toUpperCase() === 'MAQ');
+  /^(PE|RACK)/i.test(String(e || '').trim()) || (categoria === 'Máquinas' && String(e || '').trim().toUpperCase() === 'MAQ');
 
 // Endereços (com saldo) de todos os produtos, numa chamada só
 async function enderecosZenEmLote() {
@@ -172,7 +172,7 @@ async function enderecosZenEmLote() {
   for (const l of (Array.isArray(linhas) ? linhas : [])) {
     if (!l.product_code || !l.address_code || !(Number(l.sum_quantity) > 0)) continue;
     if (l.reservation_id != null && Number(l.reservation_id) !== 0) continue; // só reserva SISTEMA (AVAILABLE)
-    if (!/^PE/i.test(String(l.address_code).trim()) && String(l.address_code).trim().toUpperCase() !== 'MAQ') continue;
+    if (!/^(PE|RACK)/i.test(String(l.address_code).trim()) && String(l.address_code).trim().toUpperCase() !== 'MAQ') continue;
     (mapa[l.product_code] ||= []).push({ e: l.address_code, q: Number(l.sum_quantity) });
   }
   const fmt = {};
