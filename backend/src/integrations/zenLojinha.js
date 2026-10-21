@@ -2,7 +2,8 @@
 // integrations/zenLojinha.js — Pedido de venda da Lojinha Boxer no ZenERP
 // ============================================================
 // Mesmo padrão dos pedidos da Lojinha feitos à mão no Zen:
-//   • Empresa TEKSP · perfil de venda "VendaConsumidor" (Venda consumidor final)
+//   • Empresa TEKSP · perfil de venda "VendaConsumidor" (Venda consumidor final);
+//     cliente "Regime Normal" no Zen → perfil "Venda padrão" (DEFAULT)
 //   • Operação fiscal: "Venda" (contribuinte) ou "Venda não contribuinte" (6.108)
 //   • Frete por conta do emitente (ISSUER) · forma de pagamento 0
 //   • Vendedora = vendedora escolhida na tela (pessoa do Zen)
@@ -26,6 +27,7 @@ const CFG = {
   company:                Number(process.env.ZEN_LB_COMPANY_ID         || 1009),  // TEKSP
   ufEmpresa:              process.env.ZEN_LB_UF_EMPRESA || 'SP',
   saleProfile:            Number(process.env.ZEN_LB_SALE_PROFILE_ID    || 1007),  // VendaConsumidor — Venda consumidor final
+  saleProfileRegimeNormal: Number(process.env.ZEN_LB_SALE_PROFILE_RN_ID || 1001), // DEFAULT — Venda padrão
   fiscalOpVenda:          Number(process.env.ZEN_LB_FISCAL_OP_ID       || 1061),  // Venda
   fiscalOpNaoContrib:     Number(process.env.ZEN_LB_FISCAL_OP_NC_ID    || 1070),  // VendaNaoContribuinte
   currency:               Number(process.env.ZEN_LB_CURRENCY_ID        || 1001),  // BRL
@@ -94,6 +96,13 @@ export function cfopLojinha(pessoa) {
   return /\d/.test(String(pessoa?.document2Number || '')) ? { id: CFG.cfop6102, codigo: '6.102' } : { id: CFG.cfop6108, codigo: '6.108' };
 }
 
+// ---------- Perfil de venda pelo regime do cliente ----------
+export const clienteRegimeNormal = (pessoa) =>
+  /regime\s+normal/i.test(String(pessoa?.fiscalProfilePerson?.description || ''));
+export const perfilVendaLojinha = (pessoa) => (clienteRegimeNormal(pessoa)
+  ? { id: CFG.saleProfileRegimeNormal, nome: 'Venda padrão' }
+  : { id: CFG.saleProfile, nome: 'Venda consumidor final' });
+
 // ---------- Valores por item: desconto e rateio do frete ----------
 export function calcularItens(pedido) {
   const desc = pedido.assistente_autorizado ? CFG.descontoAutorizado : 0;
@@ -157,7 +166,8 @@ export async function criarPedidoLojinhaZen(pedido) {
 
   const pessoa = await buscarPessoa(pedido);
   const cfop = cfopLojinha(pessoa);
-  const resultado = { zenPedidoId: null, ordemSeparacaoId: null, cfop: cfop.codigo };
+  const perfil = perfilVendaLojinha(pessoa);
+  const resultado = { zenPedidoId: null, ordemSeparacaoId: null, cfop: cfop.codigo, perfilVenda: perfil.nome };
 
   // 1. Cabeçalho
   if (!zenPedidoId) {
@@ -165,8 +175,8 @@ export async function criarPedidoLojinhaZen(pedido) {
       `Envio: ${pedido.tipo_envio}${pedido.transportadora ? ` - ${pedido.transportadora}` : ''}`].join('\n');
     const venda = await zen('POST', '/sale/sale', {
       company:                { id: CFG.company },
-      saleProfile:            { id: CFG.saleProfile },
-      fiscalProfileOperation: { id: cfop.codigo === '6.108' ? CFG.fiscalOpNaoContrib : CFG.fiscalOpVenda },
+      saleProfile:            { id: perfil.id },
+      fiscalProfileOperation: { id: cfop.codigo === '6.108' && !clienteRegimeNormal(pessoa) ? CFG.fiscalOpNaoContrib : CFG.fiscalOpVenda },
       person:                 { id: pessoa.id },
       personSalesperson:      { id: Number(pedido.vendedora_id_zen) },
       ...(transportadoraZen(pedido) ? { personShipping: { id: transportadoraZen(pedido) } } : {}),
