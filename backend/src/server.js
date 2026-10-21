@@ -8,6 +8,7 @@ import db from './config/db.js';
 import { iniciarSyncErp } from './jobs/syncErpEstoque.js';
 import erpRoutes from './routes/erp.js';
 import planilhasRoutes from './routes/planilhas.js';
+import { marcarOrigem } from './integrations/usoPipefy.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -19,6 +20,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '1mb' }));
+app.use(marcarOrigem); // origem das chamadas ao Pipefy (relatório de uso)
 
 app.locals.db = db;
 
