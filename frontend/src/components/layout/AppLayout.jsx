@@ -3,7 +3,7 @@
 // ============================================================
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
@@ -34,6 +34,7 @@ export default function AppLayout({ children }) {
     { to: '/mrp',       icon: BarChart2,       label: 'MRP',        perfis: ['admin'] },
     { to: '/compras',   icon: FileText,        label: 'Compras',    perfis: ['admin'] },
     { to: '/necessidade-pecas', icon: Package, label: 'Nec. Peças', perfis: ['admin'], setores: ['Sac / Suporte'] },
+    { to: '/recebimento-importacao', icon: Camera, label: 'Recebimento/Importação', perfis: ['operador', 'admin'] },
     { to: '/lojinha', icon: Store, label: 'Lojinha Boxer', perfis: ['operador', 'admin'], setores: ['Sac / Suporte'] },
     { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', perfis: ['operador', 'admin'], permitir: podeVerOrcamentos },
   ].filter(item => {
