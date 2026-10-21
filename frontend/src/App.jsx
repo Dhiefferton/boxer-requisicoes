@@ -19,6 +19,7 @@ import MRP             from './pages/operador/MRP';
 import Compras         from './pages/operador/Compras';
 import NecessidadePecas from './pages/operador/NecessidadePecas';
 import LojinhaBoxer from './pages/operador/LojinhaBoxer';
+import RecebimentoImportacao from './pages/operador/RecebimentoImportacao';
 import PedidosOrcamento from './pages/operador/PedidosOrcamento';
 import Inventario       from './pages/operador/Inventario';
 import InventarioDetalhe from './pages/operador/InventarioDetalhe';
@@ -118,6 +119,9 @@ export default function App() {
             } />
             <Route path="/compras" element={
               <RotaPerfil perfis={['admin']}><Compras /></RotaPerfil>
+            } />
+            <Route path="/recebimento-importacao" element={
+              <RotaPerfil perfis={['operador', 'admin']}><RecebimentoImportacao /></RotaPerfil>
             } />
             <Route path="/lojinha" element={
               <RotaAdminOuSetor perfis={['admin', 'operador']} setores={['Sac / Suporte']}><LojinhaBoxer /></RotaAdminOuSetor>
