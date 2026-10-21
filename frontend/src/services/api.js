@@ -92,6 +92,15 @@ export const inventarioService = {
   ajusteZen:    (id, itemId, ajustado) => api.post(`/inventarios/${id}/itens/${itemId}/ajuste-zen`, { ajustado }),
 };
 
+export const recebimentoImportacaoService = {
+  notas:      ()               => api.get('/recebimento-importacao/notas', { timeout: 60000 }),
+  nota:       (id)             => api.get(`/recebimento-importacao/notas/${id}`, { timeout: 60000 }),
+  imagem:     (url)            => api.get(url, { responseType: 'blob', timeout: 30000 }),
+  enviarFoto: (itemId, dados)  => api.post(`/recebimento-importacao/itens/${itemId}/fotos`, dados, { timeout: 60000 }),
+  excluirFoto: (id)            => api.delete(`/recebimento-importacao/fotos/${id}`),
+  marcarItem: (itemId, dados)  => api.patch(`/recebimento-importacao/itens/${itemId}`, dados),
+};
+
 export const lojinhaService = {
   config:  ()          => api.get('/lojinha/config'),
   cliente: (documento) => api.get('/lojinha/cliente', { params: { documento }, timeout: 30000 }),
