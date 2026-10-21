@@ -118,6 +118,7 @@ export const adminService = {
   atualizarUsuario: (id, d)  => api.patch(`/admin/usuarios/${id}`, d),
   excluirUsuario:   (id)     => api.delete(`/admin/usuarios/${id}`),
   departamentos:    ()       => api.get('/admin/departamentos'),
+  pipefyUso:        ()       => api.get('/admin/pipefy-uso'),
 };
 
 export const materialFornecedoresService = {
