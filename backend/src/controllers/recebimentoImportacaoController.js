@@ -9,10 +9,11 @@
 //   • Divergente → peça diferente do catálogo (com observação)
 // Foto do catálogo: tabela catalogo_fotos (trazida do PMD pelo SKU ou
 // gravada a partir de uma foto do recebimento).
-// PMD: variável PMD_FOTO_URL com {sku} no lugar do código
-//   (ex.: https://pmd.exemplo.com/api/produtos/{sku}/imagem)
-//   e, se precisar, PMD_API_CHAVE (vai no header PMD_API_HEADER,
-//   padrão "Authorization").
+// PDM (pdm-boxer): o catálogo de peças (bom_itens.part_number) e de
+//   produtos (produtos.codigo) tem leitura pública no Supabase do PDM;
+//   a foto (imagem_url) é um link público. Só leitura, pelo SKU.
+//   Variáveis: PDM_SUPABASE_URL e PDM_SUPABASE_KEY (chave pública).
+// Alternativa genérica: PMD_FOTO_URL com {sku} no lugar do código.
 // ============================================================
 import { query } from '../config/db.js';
 import { getToken } from '../integrations/erpZen.js';
@@ -232,7 +233,7 @@ export async function detalharNota(req, res, next) {
     }
     const noCatalogo = new Set(cat.rows.map(r => r.codigo));
     const fotoCatPor = new Map(fotoCat.rows.map(r => [r.codigo, r]));
-    const pmd = Boolean(process.env.PMD_FOTO_URL);
+    const pmd = fotosConfiguradas();
 
     const itens = pecas.map(i => {
       const s = sitPor.get(String(i.item_erp_id)) || {};
@@ -287,8 +288,41 @@ export async function verFoto(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// Busca a foto no PMD (se configurado) e guarda em catalogo_fotos
+const PDM_URL = (process.env.PDM_SUPABASE_URL || 'https://tufbuyfwysowgkxsvjmh.supabase.co').replace(/\/$/, '');
+const fotosConfiguradas = () => Boolean(process.env.PDM_SUPABASE_KEY || process.env.PMD_FOTO_URL);
+
+async function baixarImagem(url) {
+  const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  if (!r.ok) return null;
+  const tipo = String(r.headers.get('content-type') || '');
+  if (!tipo.startsWith('image/')) return null;
+  const buf = Buffer.from(await r.arrayBuffer());
+  return buf.length ? { mime: tipo.split(';')[0], buf } : null;
+}
+
+// Link da foto no PDM: primeiro nas peças (BOM), depois nos produtos
+async function linkFotoPDM(sku) {
+  const chave = process.env.PDM_SUPABASE_KEY;
+  if (!chave) return null;
+  const headers = { apikey: chave, Authorization: `Bearer ${chave}`, Accept: 'application/json' };
+  const consultas = [
+    `/rest/v1/bom_itens?select=imagem_url&part_number=eq.${encodeURIComponent(sku)}&imagem_url=not.is.null&limit=1`,
+    `/rest/v1/produtos?select=imagem_url&codigo=eq.${encodeURIComponent(sku)}&imagem_url=not.is.null&limit=1`,
+  ];
+  for (const c of consultas) {
+    const r = await fetch(`${PDM_URL}${c}`, { headers, signal: AbortSignal.timeout(15000) });
+    if (!r.ok) continue;
+    const l = await r.json().catch(() => []);
+    const url = Array.isArray(l) && l[0]?.imagem_url;
+    if (url && /^https?:\/\//.test(url)) return url;
+  }
+  return null;
+}
+
+// Busca a foto no PDM (se configurado) e guarda em catalogo_fotos
 async function buscarFotoPMD(sku) {
+  const linkPdm = await linkFotoPDM(sku);
+  if (linkPdm) return baixarImagem(linkPdm);
   const modelo = process.env.PMD_FOTO_URL;
   if (!modelo) return null;
   const headers = {};
@@ -331,7 +365,7 @@ export async function fotoCatalogo(req, res, next) {
     if (f?.imagem) return enviarImagem(res, f.mime, req.query.tam === 'mini' && f.miniatura ? f.miniatura : f.imagem);
     // Sem foto: tenta o PMD (no máximo 1x por dia por SKU)
     const tentouHoje = f?.tentado_em && Date.now() - new Date(f.tentado_em).getTime() < 24 * 3600 * 1000;
-    if (process.env.PMD_FOTO_URL && !tentouHoje) {
+    if (fotosConfiguradas() && !tentouHoje) {
       let img = null;
       try { img = await buscarFotoPMD(sku); } catch (e) { console.error('[RecImp] PMD', sku, e.message); }
       await query(
