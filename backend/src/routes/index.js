@@ -42,6 +42,11 @@ import {
 import {
   acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
 } from '../controllers/lojinhaController.js';
+import {
+  listarNotas as listarNotasRecImp, detalharNota as detalharNotaRecImp, verFoto as verFotoRecImp,
+  fotoCatalogo as fotoCatalogoRecImp, enviarFoto as enviarFotoRecImp, excluirFoto as excluirFotoRecImp,
+  marcarItem as marcarItemRecImp,
+} from '../controllers/recebimentoImportacaoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { relatorioUsoPipefy } from '../integrations/usoPipefy.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
@@ -191,5 +196,15 @@ router.post('/lojinha/pedidos', ...loja, criarPedidoLojinha);
 router.post('/lojinha/pedidos/:id/zen', ...loja, reenviarZenLojinha);
 router.post('/lojinha/pedidos/:id/pipefy', ...loja, reenviarPipefyLojinha);
 router.delete('/lojinha/pedidos/:id', ...loja, excluirPedidoLojinha);
+
+// ── Recebimento/Importação (fotos das peças das NFs de importação)
+const recImp = [autenticar, exigirPerfil('operador', 'admin')];
+router.get('/recebimento-importacao/notas',                 ...recImp, listarNotasRecImp);
+router.get('/recebimento-importacao/notas/:id',             ...recImp, detalharNotaRecImp);
+router.get('/recebimento-importacao/fotos/:id',             ...recImp, verFotoRecImp);
+router.delete('/recebimento-importacao/fotos/:id',          ...recImp, excluirFotoRecImp);
+router.get('/recebimento-importacao/catalogo/:sku/foto',    ...recImp, fotoCatalogoRecImp);
+router.post('/recebimento-importacao/itens/:itemId/fotos',  ...recImp, enviarFotoRecImp);
+router.patch('/recebimento-importacao/itens/:itemId',       ...recImp, marcarItemRecImp);
 
 export default router;
