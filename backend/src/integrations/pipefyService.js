@@ -2,7 +2,12 @@
 // integrations/pipefyService.js — Integração com Pipefy
 // ============================================================
 
+import { registrarChamadaPipefy } from './usoPipefy.js';
+
 const PIPEFY_API = 'https://api.pipefy.com/graphql';
+// Integração das requisições (criar/mover/excluir card no pipe "Boxer
+// Requisicoes") desligada. Para religar: PIPEFY_REQUISICOES_ATIVO=true.
+const REQUISICOES_NO_PIPEFY = process.env.PIPEFY_REQUISICOES_ATIVO === 'true';
 const TOKEN      = process.env.PIPEFY_TOKEN;
 const PIPE_ID    = process.env.PIPEFY_PIPE_ID;
 
@@ -27,20 +32,26 @@ async function pipefyMutation(mutation, variables) {
   console.log('🔄 Pipefy request iniciado...');
   console.log('TOKEN presente:', !!TOKEN);
 
-  const response = await fetch(PIPEFY_API, {
-    method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${TOKEN}`,
-    },
-    body: JSON.stringify({ query: mutation, variables }),
-  });
+  let response, text, data;
+  try {
+    response = await fetch(PIPEFY_API, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify({ query: mutation, variables }),
+    });
+    text = await response.text();
+    data = JSON.parse(text);
+  } catch (e) {
+    await registrarChamadaPipefy(mutation, false);
+    throw e;
+  }
+  await registrarChamadaPipefy(mutation, response.ok && !data?.errors);
 
   console.log('🔄 Pipefy HTTP status:', response.status);
-  const text = await response.text();
   console.log('🔄 Pipefy response raw:', text.substring(0, 300));
-
-  const data = JSON.parse(text);
 
   if (data.errors) {
     console.error('❌ Pipefy errors:', JSON.stringify(data.errors));
@@ -285,6 +296,7 @@ export async function buscarSituacaoCards(cardIds) {
 }
 
 export async function criarCardPipefy({ requisicaoId, solicitante, departamento, itens, dataNecessidade }) {
+  if (!REQUISICOES_NO_PIPEFY) return null;
   try {
     const itensTexto = itens.map(i =>
       `- ${i.codigo_snapshot} - ${i.descricao_snapshot} (${i.quantidade} ${i.unidade_snapshot})`
@@ -327,6 +339,7 @@ export async function criarCardPipefy({ requisicaoId, solicitante, departamento,
 }
 
 export async function moverCardPipefy(cardId, novoStatus) {
+  if (!REQUISICOES_NO_PIPEFY) return;
   const phaseId = PHASES[novoStatus];
   if (!phaseId || !cardId) return;
 
@@ -350,7 +363,7 @@ export async function moverCardPipefy(cardId, novoStatus) {
 }
 
 export async function excluirCardPipefy(cardId) {
-  if (!cardId) return;
+  if (!REQUISICOES_NO_PIPEFY || !cardId) return;
 
   try {
     const mutation = `
