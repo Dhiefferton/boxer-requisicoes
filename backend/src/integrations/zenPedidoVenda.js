@@ -14,6 +14,8 @@
 //   5. Aprova incondicionalmente (POST /sale/saleOpApproveUnconditionally/{id})
 //   6. Inclui a ordem de separação, perfil ORCAMENTO
 //      (POST /sale/saleOpPickingOrderCreate/{id}) -> ID vai pro card
+// Cliente Eletro Soldas: o pedido sai em nome da TEKWELD, perfil fiscal de
+// operação "Baixa estoque" e CFOP 5.927 (mesmo padrão das baixas feitas à mão).
 // Idempotente: segue do status atual do pedido no Zen — dá pra reenviar
 // depois de um erro sem duplicar pedido, item ou ordem de separação.
 // ============================================================
@@ -37,7 +39,19 @@ const CFG = {
   pickingProfile:         Number(process.env.ZEN_PV_PICKING_PROFILE_ID || 1003),  // ORCAMENTO
   paymentMethods:         process.env.ZEN_PV_PAYMENT_METHODS || '0',              // prazo: 0 = à vista
   invoiceSeries:          Number(process.env.ZEN_PV_INVOICE_SERIES_ID  || 1001),  // NF-e
+  // Eletro Soldas → baixa de estoque em nome da Tekweld
+  pessoaTekweld:          Number(process.env.ZEN_PV_TEKWELD_PERSON_ID  || 1001),  // Tekweld Importação E Comercio
+  fiscalOpBaixa:          Number(process.env.ZEN_PV_FISCAL_OP_BAIXA_ID || 1003),  // BaixaEstoque
+  cfopBaixa:              Number(process.env.ZEN_PV_CFOP_BAIXA_ID      || 1392),  // 5.927
 };
+
+// Card do cliente Eletro Soldas? (pelo nome do cliente ou CNPJs configurados)
+const CNPJS_ELETRO = (process.env.ZEN_PV_ELETRO_CNPJS || '').split(',').map(s => s.replace(/\D/g, '')).filter(Boolean);
+export function ehEletroSoldas(pedido) {
+  if (/eletro\s*-?\s*solda/i.test(String(pedido?.cliente_nome || ''))) return true;
+  const doc = String(pedido?.cliente_cnpj || '').replace(/\D/g, '');
+  return Boolean(doc) && CNPJS_ELETRO.includes(doc);
+}
 
 async function zen(metodo, caminho, corpo) {
   const token = await getToken();
@@ -147,20 +161,23 @@ export async function criarPedidoVendaZen(pedido) {
 
   // 1. Cliente do card (no reenvio, usa o cliente que já está no pedido)
   let cliente = null;
+  const baixa = ehEletroSoldas(pedido);
 
   // 1–2. Cabeçalho
   if (!zenPedidoId) {
-    cliente = await buscarClienteZen(pedido.cliente_cnpj);
+    cliente = baixa ? await zen('GET', `/catalog/person/person/${CFG.pessoaTekweld}`) : await buscarClienteZen(pedido.cliente_cnpj);
+    const obs = montarObservacoes(pedido);
     const venda = await zen('POST', '/sale/sale', {
       company:                { id: CFG.company },
       saleProfile:            { id: CFG.saleProfile },
-      fiscalProfileOperation: { id: CFG.fiscalProfileOperation },
+      fiscalProfileOperation: { id: baixa ? CFG.fiscalOpBaixa : CFG.fiscalProfileOperation },
       person:                 { id: cliente.id },
       personSalesperson:      { id: CFG.salesperson },
       freightType:            'NONE',
       currency:               { id: CFG.currency },
       availabilityDate:       hojeSP(),
-      properties:             { comments: montarObservacoes(pedido), paymentMethods: CFG.paymentMethods },
+      properties:             { comments: baixa ? ['BAIXA DE ESTOQUE - ELETRO SOLDA', obs].filter(Boolean).join('\n') : obs,
+                                paymentMethods: CFG.paymentMethods },
     });
     zenPedidoId = venda?.id;
     if (!zenPedidoId) throw new Error('ZenERP não retornou o ID do pedido criado.');
@@ -174,7 +191,7 @@ export async function criarPedidoVendaZen(pedido) {
     // 3. Itens — só enquanto o pedido está em preparação
     if (venda.status === 'PREPARING') {
       if (!cliente) cliente = await zen('GET', `/catalog/person/person/${venda.person.id}`);
-      const cfop = cfopDoCliente(cliente);
+      const cfop = Number(venda.fiscalProfileOperation?.id) === CFG.fiscalOpBaixa ? CFG.cfopBaixa : cfopDoCliente(cliente);
       const existentes = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${zenPedidoId}`)}&max=200`);
       const jaIncluidos = new Set((existentes || []).map(i => String(i.productPacking?.code || '')));
 
@@ -276,8 +293,13 @@ export async function finalizarRomaneioZen(pedido) {
 
   let notaId = null;
   if (romaneio.status === 'PACKED') {
+    let fop = CFG.fiscalProfileOperation;
+    if (pedido.zen_pedido_id) {
+      const venda = await zen('GET', `/sale/sale/${pedido.zen_pedido_id}`).catch(() => null);
+      if (venda?.fiscalProfileOperation?.id) fop = Number(venda.fiscalProfileOperation.id);
+    }
     const nota = await zen('POST', `/material/outgoingListOpOutgoingInvoiceCreate/${romaneioId}`, {
-      fiscalProfileOperationId: CFG.fiscalProfileOperation,
+      fiscalProfileOperationId: fop,
       invoiceSeriesId:          CFG.invoiceSeries,
     });
     notaId = nota?.id || null;
