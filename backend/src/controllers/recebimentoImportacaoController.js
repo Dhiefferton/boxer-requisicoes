@@ -3,7 +3,7 @@
 // ============================================================
 // Notas fiscais de entrada de IMPORTAÇÃO (perfil fiscal da pessoa
 // "Exterior", id 1164 no Zen — mesmo critério do WMS) a partir de
-// 01/09/2026, só com os itens que são peça (perfil PEC / PEC/S).
+// 12/10/2026, só com os itens que são peça (perfil PEC / PEC/S).
 // Na chegada, cada peça é fotografada e comparada com a foto do catálogo:
 //   • Conferido  → a peça bate com o catálogo
 //   • Divergente → peça diferente do catálogo (com observação)
@@ -20,7 +20,7 @@ import { getToken } from '../integrations/erpZen.js';
 const ZEN_BASE_URL = 'https://api.zenerp.app.br';
 const ZEN_TENANT = 'boxer';
 const PERFIL_PESSOA_EXTERIOR = 1164;
-const DATA_CORTE = '2026-09-01';
+const DATA_CORTE = '2026-10-12';
 const PERFIS_PECA = ['PEC', 'PEC/S'];
 const SITUACOES = ['conferido', 'divergente'];
 const STATUS_FISCAL = {
