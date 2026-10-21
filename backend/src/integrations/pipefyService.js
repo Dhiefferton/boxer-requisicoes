@@ -229,11 +229,13 @@ export function extrairDadosOrcamento(card) {
   const itens = [];
   for (const num of Object.keys(pecas).sort((a, b) => a - b)) {
     for (const texto of valorLista(pecas[num])) {
-      const idx = texto.indexOf(' - ');
+      // "701738 - Descrição", "701735- Descrição", "701735 -Descrição"
+      const m = String(texto).match(/^\s*([A-Za-z0-9./]*\d[A-Za-z0-9./]*)\s*-\s*(.*)$/s);
+      const idx = m ? -1 : texto.indexOf(' - ');
       itens.push({
         n:              Number(num),
-        codigo:         idx > 0 ? texto.slice(0, idx).trim() : null,
-        descricao:      idx > 0 ? texto.slice(idx + 3).trim() : texto.trim(),
+        codigo:         m ? m[1].trim() : idx > 0 ? texto.slice(0, idx).trim() : null,
+        descricao:      m ? m[2].trim() : idx > 0 ? texto.slice(idx + 3).trim() : texto.trim(),
         quantidade:     numeroBR(qtds[num]),
         valor_unitario: numeroBR(valores[num]),
       });
