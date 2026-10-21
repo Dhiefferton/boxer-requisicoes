@@ -6,7 +6,7 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity, History } from 'lucide-react';
+import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity, History, Search, X } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -22,6 +22,23 @@ const COLUNAS = [
 ];
 
 const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
+
+// ── Busca: junta os textos do pedido (cliente, CNPJ, nº, peças…) sem acento ──
+const semAcento = (t) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const IGNORAR_BUSCA = new Set(['pipefy_campos', 'id', 'criado_por', 'created_at', 'updated_at']);
+function textoBusca(o, prof = 0) {
+  if (o == null || prof > 3) return '';
+  if (typeof o !== 'object') return String(o);
+  if (Array.isArray(o)) return o.map(x => textoBusca(x, prof + 1)).join(' ');
+  return Object.entries(o).filter(([k]) => !IGNORAR_BUSCA.has(k)).map(([, v]) => textoBusca(v, prof + 1)).join(' ');
+}
+function combinaBusca(pedido, busca) {
+  const termos = semAcento(busca).split(/\s+/).filter(Boolean);
+  if (!termos.length) return true;
+  const texto = semAcento(textoBusca(pedido));
+  const digitos = texto.replace(/\D/g, '');
+  return termos.every(t => texto.includes(t) || (/^[\d./-]+$/.test(t) && t.replace(/\D/g, '') && digitos.includes(t.replace(/\D/g, ''))));
+}
 
 const brl = (v) => (v === null || v === undefined) ? '—'
   : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -46,6 +63,7 @@ export default function PedidosOrcamento() {
   const [sincronizando, setSincronizando] = useState(false);
   const [msgSync, setMsgSync] = useState('');
   const [verMovimentacao, setVerMovimentacao] = useState(false);
+  const [busca, setBusca] = useState('');
 
   async function carregar() {
     try {
@@ -85,6 +103,12 @@ export default function PedidosOrcamento() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente, CNPJ, nº, peça…"
+              className="w-56 sm:w-64 pl-8 pr-7 py-2 rounded-xl text-xs bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
+            {busca && <button onClick={() => setBusca('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
+          </div>
           {usuario?.perfil === 'admin' && (
             <button onClick={() => setVerMovimentacao(true)} title="Relatório de movimentação"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
@@ -117,12 +141,12 @@ export default function PedidosOrcamento() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 xl:grid-rows-1 xl:flex-1 xl:min-h-0 gap-4">
           {COLUNAS.map(({ status, titulo, cor, badge }) => {
-            const itens = pedidos.filter(p => p.status === status);
+            const itens = pedidos.filter(p => p.status === status && combinaBusca(p, busca));
             return (
-              <Coluna key={status} titulo={titulo} cor={cor} badge={badge} total={itens.length} arquivada={status === 'finalizado'}>
+              <Coluna key={`${status}${busca ? '-busca' : ''}`} titulo={titulo} cor={cor} badge={badge} total={itens.length} arquivada={status === 'finalizado' && !busca}>
                 {itens.length === 0 ? (
                   <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
-                    <p className="text-xs text-[var(--c-suave)]">Sem pedidos</p>
+                    <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem pedidos'}</p>
                   </div>
                 ) : (
                   itens.map(pedido => (

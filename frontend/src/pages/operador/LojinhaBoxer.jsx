@@ -53,6 +53,23 @@ const totalItens = (itens) => itens.reduce((s, i) => s + Number(i.quantidade || 
 const valorDesconto = (itens, autorizado) => (autorizado ? Math.round(totalItens(itens) * DESC_AUTORIZADO) / 100 : 0);
 const ICONE_ENVIO = { Sedex: Mail, PAC: Package, 'Próprio': Truck, Transportadora: Building2 };
 
+// ── Busca: junta os textos do pedido (cliente, CNPJ, nº, peças…) sem acento ──
+const semAcento = (t) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const IGNORAR_BUSCA = new Set(['pipefy_campos', 'id', 'criado_por', 'created_at', 'updated_at']);
+function textoBusca(o, prof = 0) {
+  if (o == null || prof > 3) return '';
+  if (typeof o !== 'object') return String(o);
+  if (Array.isArray(o)) return o.map(x => textoBusca(x, prof + 1)).join(' ');
+  return Object.entries(o).filter(([k]) => !IGNORAR_BUSCA.has(k)).map(([, v]) => textoBusca(v, prof + 1)).join(' ');
+}
+function combinaBusca(pedido, busca) {
+  const termos = semAcento(busca).split(/\s+/).filter(Boolean);
+  if (!termos.length) return true;
+  const texto = semAcento(textoBusca(pedido));
+  const digitos = texto.replace(/\D/g, '');
+  return termos.every(t => texto.includes(t) || (/^[\d./-]+$/.test(t) && t.replace(/\D/g, '') && digitos.includes(t.replace(/\D/g, ''))));
+}
+
 const campo = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[var(--c-destaque)]';
 const rotulo = 'block text-xs text-[var(--c-suave)] mb-1.5';
 
@@ -61,6 +78,7 @@ export default function LojinhaBoxer() {
   const [pedidos, setPedidos] = useState(null);
   const [novo, setNovo] = useState(false);
   const [aviso, setAviso] = useState('');
+  const [busca, setBusca] = useState('');
 
   async function carregar() {
     try { const { data } = await lojinhaService.pedidos(); setPedidos(data.pedidos); }
@@ -89,6 +107,12 @@ export default function LojinhaBoxer() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente, CNPJ, nº, peça…"
+              className="w-56 sm:w-64 pl-8 pr-7 py-2 rounded-xl text-xs bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
+            {busca && <button onClick={() => setBusca('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
+          </div>
           <button onClick={() => { setNovo(true); setAviso(''); }}
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
               bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 transition-colors">
@@ -108,13 +132,13 @@ export default function LojinhaBoxer() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-rows-1 xl:grid-cols-none xl:grid-flow-col xl:auto-cols-[minmax(280px,1fr)] xl:overflow-x-auto xl:flex-1 xl:min-h-0 gap-4">
           {COLUNAS.map(({ status, inclui, titulo, cor, badge }) => {
-            const doStatus = lista.filter(p => inclui.includes(p.status));
+            const doStatus = lista.filter(p => inclui.includes(p.status) && combinaBusca(p, busca));
             return (
               <Coluna key={status} titulo={titulo} cor={cor} badge={badge} total={doStatus.length}>
                 {doStatus.length === 0 ? (
                   <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
-                    <p className="text-xs text-[var(--c-suave)]">Sem pedidos</p>
-                    {status === 'entrada' && <button onClick={() => setNovo(true)} className="mt-1 text-xs text-[var(--c-destaque)] font-semibold">+ Novo pedido</button>}
+                    <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem pedidos'}</p>
+                    {status === 'entrada' && !busca && <button onClick={() => setNovo(true)} className="mt-1 text-xs text-[var(--c-destaque)] font-semibold">+ Novo pedido</button>}
                   </div>
                 ) : doStatus.map(p => <CardPedido key={p.id} p={p} carregar={carregar} />)}
               </Coluna>
