@@ -25,7 +25,7 @@ async function executarSync(db) {
     );
     const codigosSet = new Set(result.rows.map(r => r.codigo));
     console.log(`[SyncERP] Monitorando ${codigosSet.size} pecas...`);
-    // Saldo das peças: só o que está em endereço PE/PEC (estoque físico do almoxarifado)
+    // Saldo das peças: só o que está em endereço PE/PEC ou RACK01/RACK02 (estoque físico do almoxarifado)
     // e na reserva SISTEMA (AVAILABLE, id 0). MERCADO_LIVRE, AVA, DEVOLUCAO, TERCEIRO etc.
     // e unidades presas em reserva (ex.: FINALIZADA) não entram no saldo do catálogo.
     const dados = await buscaEstoque([1002, 1003], { SHOW_ADDRESS: true, SHOW_RESERVATION: true });
@@ -34,7 +34,7 @@ async function executarSync(db) {
     for (const item of linhas) {
       const codigo = item.product_code;
       if (!codigo || !codigosSet.has(codigo)) continue;
-      if (!/^PE/i.test(String(item.address_code || '').trim())) continue;
+      if (!/^(PE|RACK)/i.test(String(item.address_code || '').trim())) continue;
       if (item.reservation_id != null && Number(item.reservation_id) !== 0) continue;
       saldos[codigo] = (saldos[codigo] || 0) + (item.sum_quantity || 0);
     }
@@ -124,6 +124,7 @@ export async function forcerSync(db) {
 // só pra investigar divergências entre o app e o ERP. Não afeta a
 // sincronização normal.
 export async function debugEstoquePorCodigo(codigo) {
+  if (codigo === 'enderecos-fora') return relatorioEnderecosFora();
   const token = await getToken();
   const filtro = `(productPacking.product.productProfile.code=="PEC" or productPacking.product.productProfile.code=="PEC/S") and productPacking.product.code=="${codigo}"`;
   const url = `${ZEN_BASE_URL}/material/stock?q=${encodeURIComponent(filtro)}&first=0&max=500`;
@@ -141,6 +142,21 @@ export async function debugEstoquePorCodigo(codigo) {
   const pagina = await response.json();
   const itens = Array.isArray(pagina) ? pagina : [];
   return itens; // retorna o objeto CRU completo, sem filtrar campos
+}
+
+// RELATÓRIO — peças (PEC, PEC/S) com saldo livre em endereços que NÃO entram
+// no saldo do catálogo (fora de PE* e RACK*). GET /api/erp/debug/enderecos-fora?secret=...
+async function relatorioEnderecosFora() {
+  const dados = await buscaEstoque([1002, 1003], { SHOW_ADDRESS: true, SHOW_RESERVATION: true });
+  const linhas = (Array.isArray(dados) ? dados : []).filter(l =>
+    l.product_code && l.address_code && Number(l.sum_quantity) > 0
+    && (l.reservation_id == null || Number(l.reservation_id) === 0)
+    && !/^(PE|RACK)/i.test(String(l.address_code).trim()));
+  return linhas.map(l => {
+    const o = {};
+    for (const [k, v] of Object.entries(l)) if (v != null && !/_id$/.test(k)) o[k] = v;
+    return o;
+  }).sort((a, b) => String(a.address_code).localeCompare(String(b.address_code)) || String(a.product_code).localeCompare(String(b.product_code)));
 }
 
 async function buscaEstoque(perfis = [1002, 1003], extras = {}) {
