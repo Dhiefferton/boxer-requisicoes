@@ -23,7 +23,7 @@ const SITUACAO_NOTA = {
 
 // ── Imagem autenticada (busca com o token e guarda em cache) ──
 const cacheImg = new Map(); // url -> objectURL | null (sem foto)
-function ImagemAuth({ url, alt = '', className = '', vazio = null, onFalha }) {
+function ImagemAuth({ url, alt = '', className = '', vazio = null, onFalha, onClick }) {
   const [src, setSrc] = useState(() => cacheImg.get(url) ?? undefined);
   useEffect(() => {
     let vivo = true;
@@ -37,7 +37,7 @@ function ImagemAuth({ url, alt = '', className = '', vazio = null, onFalha }) {
   }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
   if (src === undefined) return <div className={`${className} flex items-center justify-center`}><Spinner size={14} className="text-[var(--c-suave)]" /></div>;
   if (src === null) return vazio;
-  return <img src={src} alt={alt} className={`${className} object-cover`} />;
+  return <img src={src} alt={alt} onClick={onClick} className={`${className} object-contain${onClick ? ' cursor-zoom-in' : ''}`} />;
 }
 
 const urlCatalogo = (sku, tam) => `/recebimento-importacao/catalogo/${encodeURIComponent(sku)}/foto${tam ? `?tam=${tam}` : ''}`;
@@ -97,6 +97,7 @@ function ModalItem({ nota, item, posicao, total, sequencia, onFechar, onSalvo, o
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState('');
   const [erro, setErro] = useState('');
+  const [ampliada, setAmpliada] = useState(null); // url da foto aberta em tela cheia
 
   useEffect(() => {
     setFotos(item.fotos); setObs(item.observacao || ''); setUsarNoCatalogo(false);
@@ -181,13 +182,13 @@ function ModalItem({ nota, item, posicao, total, sequencia, onFechar, onSalvo, o
               <div className="text-[10px] font-semibold text-[var(--c-suave)] mb-1">CATÁLOGO (PMD)</div>
               {semCatalogo
                 ? <SemFotoCatalogo className="w-full aspect-square" />
-                : <ImagemAuth url={urlCatalogo(item.sku)} alt="Catálogo" className="w-full aspect-square rounded-xl border border-[var(--c-borda)] bg-white"
+                : <ImagemAuth url={urlCatalogo(item.sku)} alt="Catálogo" onClick={() => setAmpliada(urlCatalogo(item.sku))} className="w-full aspect-square rounded-xl border border-[var(--c-borda)] bg-white"
                               vazio={<SemFotoCatalogo className="w-full aspect-square" />} onFalha={() => setSemCatalogo(true)} />}
             </div>
             <div>
               <div className="text-[10px] font-semibold text-[var(--c-suave)] mb-1">FOTO DO RECEBIMENTO</div>
               {fotos.length
-                ? <ImagemAuth url={urlFoto(fotos[fotos.length - 1])} alt="Recebimento" className="w-full aspect-square rounded-xl border border-[var(--c-borda)]" />
+                ? <ImagemAuth url={urlFoto(fotos[fotos.length - 1])} alt="Recebimento" onClick={() => setAmpliada(urlFoto(fotos[fotos.length - 1]))} className="w-full aspect-square rounded-xl border border-[var(--c-borda)] bg-black" />
                 : (
                   <button onClick={() => inputRef.current?.click()} disabled={enviando}
                           className="w-full aspect-square rounded-xl border-2 border-dashed border-[var(--c-destaque)] bg-[var(--c-destaque)]/5 text-[var(--c-destaque-claro)] flex flex-col items-center justify-center gap-2 font-semibold text-sm">
@@ -203,7 +204,7 @@ function ModalItem({ nota, item, posicao, total, sequencia, onFechar, onSalvo, o
             <div className="flex gap-2 flex-wrap">
               {fotos.map(id => (
                 <div key={id} className="relative">
-                  <ImagemAuth url={urlFoto(id, 'mini')} className="w-16 h-16 rounded-lg border border-[var(--c-borda)]" />
+                  <ImagemAuth url={urlFoto(id, 'mini')} onClick={() => setAmpliada(urlFoto(id))} className="w-16 h-16 rounded-lg border border-[var(--c-borda)] bg-black" />
                   <button onClick={() => excluir(id)} title="Excluir foto"
                           className="absolute -top-1.5 -right-1.5 bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-full p-1 text-red-400 hover:bg-red-500/20">
                     <Trash2 size={10} />
@@ -255,6 +256,12 @@ function ModalItem({ nota, item, posicao, total, sequencia, onFechar, onSalvo, o
         </div>
 
         <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={aoEscolherFoto} />
+        {ampliada && (
+          <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-3" onClick={() => setAmpliada(null)}>
+            <button onClick={() => setAmpliada(null)} className="absolute top-3 right-3 p-2 rounded-full bg-white/10 text-white hover:bg-white/20"><X size={18} /></button>
+            <ImagemAuth url={ampliada} alt="Foto ampliada" className="max-w-full max-h-[92dvh] rounded-lg" />
+          </div>
+        )}
       </div>
     </div>
   );
