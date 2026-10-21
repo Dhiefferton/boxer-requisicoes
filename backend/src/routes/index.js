@@ -43,6 +43,7 @@ import {
   acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
 } from '../controllers/lojinhaController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
+import { relatorioUsoPipefy } from '../integrations/usoPipefy.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
 
 const router = Router();
@@ -84,6 +85,9 @@ router.post('/entradas',       autenticar, exigirPerfil('admin'), registrarEntra
 router.delete('/entradas/:id', autenticar, exigirPerfil('admin'), excluirEntrada);
 
 // ── Admin — Usuários
+router.get('/admin/pipefy-uso', autenticar, exigirPerfil('admin'), async (req, res, next) => {
+  try { res.json(await relatorioUsoPipefy()); } catch (err) { next(err); }
+});
 router.get('/admin/usuarios',        autenticar, exigirPerfil('admin'), listarUsuarios);
 router.post('/admin/usuarios',       autenticar, exigirPerfil('admin'), criarUsuario);
 router.patch('/admin/usuarios/:id',  autenticar, exigirPerfil('admin'), atualizarUsuario);
