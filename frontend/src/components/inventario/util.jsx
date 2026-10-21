@@ -68,7 +68,12 @@ export function Progresso({ feito, total }) {
       <div className="flex-1 h-2 rounded-full bg-[var(--c-borda)] overflow-hidden">
         <div className="h-full rounded-full bg-[var(--c-destaque)]" style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-[var(--c-suave)] whitespace-nowrap">{fmtNum(feito)} / {fmtNum(total)}</span>
+      <span className="text-xs text-[var(--c-suave)] whitespace-nowrap">
+        {fmtNum(feito)} / {fmtNum(total)}
+        <span className="ml-1.5 font-semibold text-[var(--c-texto)]">
+          {(total ? (feito / total) * 100 : 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%
+        </span>
+      </span>
     </div>
   );
 }
