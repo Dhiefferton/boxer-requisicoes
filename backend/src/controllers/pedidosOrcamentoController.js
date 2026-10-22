@@ -197,6 +197,9 @@ export async function criarPedido(req, res, next) {
 }
 
 // PATCH /pedidos-orcamento/:id/mover — avança/retrocede de coluna
+// Fase "Concluído - Não Liberado" do pipe Orçamento
+const FASE_NAO_LIBERADO = String(process.env.PIPEFY_ORCAMENTO_PHASE_NAO_LIBERADO_ID || '309113144');
+
 const STATUS_VALIDOS = ['solicitacao', 'separando', 'separado', 'aprovado_recusado', 'finalizado'];
 export async function moverPedido(req, res, next) {
   try {
@@ -505,7 +508,7 @@ export async function sincronizarPipefy(req, res, next) {
     // com a tag do campo "Aprovação" (Aprovado / Aprovado Parcial / Recusado)
     // e o campo "Peças Recusadas". Pedido que já teve as peças recusadas
     // retiradas volta pra "Em Separação" e só segue depois de separado de novo.
-    let aprovadosRecusados = 0;
+    let aprovadosRecusados = 0, naoLiberados = 0;
     const acompanhados = await query(
       `SELECT id, pipefy_card_id, status, aprovacao FROM pedidos_orcamento
         WHERE pipefy_card_id IS NOT NULL
@@ -542,6 +545,17 @@ export async function sincronizarPipefy(req, res, next) {
               });
             }
             aprovadosRecusados++;
+          } else if (s?.faseId === FASE_NAO_LIBERADO && !(p.status === 'aprovado_recusado' && p.aprovacao === 'Não liberado')) {
+            // "Concluído - Não Liberado": orçamento não aprovado — vai para
+            // Aprovado/Recusado aqui, marcado como "Não liberado"
+            await query(
+              `UPDATE pedidos_orcamento SET status = 'aprovado_recusado', aprovacao = 'Não liberado', atualizado_em = NOW() WHERE id = $1`,
+              [p.id]);
+            await registrarMovimento(p.id, 'nao_liberado_pipefy', {
+              de: p.status, para: 'aprovado_recusado', origem: 'sincronizacao', usuario: req.usuario,
+              descricao: 'Card em "Concluído - Não Liberado" no Pipefy',
+            });
+            naoLiberados++;
           }
         }
       } catch (err) {
@@ -551,10 +565,10 @@ export async function sincronizarPipefy(req, res, next) {
 
     await registrarMovimento(null, 'sincronizacao', {
       usuario: req.usuario, origem: 'sincronizacao',
-      descricao: `Atualizar (Pipefy/Zen): ${cards.length} card(s) em "Requisitar Peças" — ${novos} novo(s), ${reativados} reaberto(s), ${alterados} com peças alteradas, ${separados} separado(s), ${aprovadosRecusados} em Aprovado/Recusado`,
-      detalhes: { total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados },
+      descricao: `Atualizar (Pipefy/Zen): ${cards.length} card(s) em "Requisitar Peças" — ${novos} novo(s), ${reativados} reaberto(s), ${alterados} com peças alteradas, ${separados} separado(s), ${aprovadosRecusados} em Aprovado/Recusado, ${naoLiberados} não liberado(s)`,
+      detalhes: { total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados, naoLiberados },
     });
-    res.json({ total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados });
+    res.json({ total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados, naoLiberados });
   } catch (err) { next(err); }
 }
 
