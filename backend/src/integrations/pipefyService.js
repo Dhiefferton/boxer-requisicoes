@@ -271,7 +271,19 @@ export async function buscarSituacaoCards(cardIds) {
     const corpo = lote.map((id, n) =>
       `c${n}: card(id: "${id}") { id current_phase { id name } fields { name value field { id } } }`
     ).join('\n');
-    const data = await pipefyQuery(`query {\n${corpo}\n}`);
+    let data;
+    try { data = await pipefyQuery(`query {\n${corpo}\n}`); }
+    catch (e) {
+      // Um card excluído/sem acesso derruba o lote inteiro: consulta um por um
+      console.error('[Pipefy] situação em lote:', e.message);
+      data = {};
+      for (let n = 0; n < lote.length; n++) {
+        try {
+          const u = await pipefyQuery(`query { c: card(id: "${lote[n]}") { id current_phase { id name } fields { name value field { id } } } }`);
+          if (u?.c) data[`c${n}`] = u.c;
+        } catch { /* card excluído ou sem acesso */ }
+      }
+    }
     lote.forEach((id, n) => {
       const card = data?.[`c${n}`];
       if (!card) return;
