@@ -13,6 +13,7 @@
 import express from 'express';
 import { query } from '../config/db.js';
 import { sincronizarTemposPipefy, linhasSeparacao, linhasConferencia } from '../integrations/pipefyTempos.js';
+import { sincronizarFaturamento, linhasFaturamento } from '../integrations/faturamentoZen.js';
 
 const router = express.Router();
 
@@ -198,6 +199,35 @@ router.get('/conferencia', async (req, res) => {
 router.get('/pipefy-sync', async (req, res) => {
   if (!chaveOk(req)) return res.status(401).json({ erro: 'Chave inválida.' });
   try { res.json(await sincronizarTemposPipefy({ intervaloMs: 0, limiteMs: 40000 })); }
+  catch (e) { res.status(502).json({ erro: e.message }); }
+});
+
+// ── Faturamento (notas de Entrada/Saída do Zen) ───────────────
+// GET /api/planilhas/faturamento?chave=...&desde=AAAA-MM-DD
+// Mesmas colunas da aba "Entrada Saída" da planilha Faturamento.xlsx.
+router.get('/faturamento', async (req, res) => {
+  if (!chaveOk(req)) return res.status(401).json({ erro: 'Chave inválida.' });
+  const { desde, ate } = periodo(req);
+  try {
+    try { await sincronizarFaturamento(); } catch (e) { console.error('[Planilhas] sync faturamento:', e.message); }
+    const linhas = await linhasFaturamento(desde, ate);
+    res.set('Cache-Control', 'no-store');
+    res.json(linhas.map(x => ({
+      'Data': x.data,
+      'Número da nota': numeroOuTexto(x.numero),
+      'Perfil fiscal': x.perfil,
+      'Entrada/Saída': x.tipo,
+    })));
+  } catch (e) {
+    console.error('[Planilhas] faturamento:', e.message);
+    res.status(500).json({ erro: 'Erro ao gerar os dados da planilha.' });
+  }
+});
+
+// Força a cópia do Zen (primeira carga). GET /api/planilhas/faturamento-sync?chave=...
+router.get('/faturamento-sync', async (req, res) => {
+  if (!chaveOk(req)) return res.status(401).json({ erro: 'Chave inválida.' });
+  try { res.json(await sincronizarFaturamento({ intervaloMs: 0, limiteMs: 45000 })); }
   catch (e) { res.status(502).json({ erro: e.message }); }
 });
 
