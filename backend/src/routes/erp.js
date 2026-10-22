@@ -3,6 +3,8 @@ import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncEr
 import { getToken } from '../integrations/erpZen.js';
 import { pipefyQuery } from '../integrations/pipefyService.js';
 import { pedidoLIBruto, buscarPedidoLI, tentativasLI } from '../integrations/lojaIntegrada.js';
+import { fasesDosCards } from '../integrations/pipefyLojinha.js';
+import { query } from '../config/db.js';
 
 const router = express.Router();
 
@@ -47,6 +49,25 @@ router.get('/debug-pipefy', async (req, res) => {
   const gql = String(req.query.gql || '');
   if (!gql || /\bmutation\b/i.test(gql)) return res.status(400).json({ erro: 'Só consultas (query).' });
   try { res.json(await pipefyQuery(gql, {})); } catch (e) { res.status(502).json({ erro: e.message }); }
+});
+
+// DIAGNÓSTICO — status dos pedidos (Lojinha e Orçamentos) x fase atual dos
+// cards no Pipefy. Só leitura. Ex: GET /api/erp/debug-fases?secret=...
+router.get('/debug-fases', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const lj = (await query(`SELECT id, numero_pedido, status, pipefy_cards FROM lojinha_boxer_pedidos
+                               WHERE status <> 'finalizado' ORDER BY id`)).rows;
+    const oc = (await query(`SELECT id, referencia, status, pipefy_card_id FROM pedidos_orcamento
+                               WHERE status NOT IN ('finalizado', 'cancelado') AND pipefy_card_id IS NOT NULL ORDER BY id`)).rows;
+    const ids = [...lj.flatMap(p => (p.pipefy_cards || []).map(c => c?.id).filter(Boolean)), ...oc.map(p => p.pipefy_card_id)];
+    const fases = await fasesDosCards(ids);
+    const f = (id) => (fases[String(id)] ? `${fases[String(id)].fase} (${fases[String(id)].faseId})` : 'sem resposta');
+    res.json({
+      lojinha: lj.map(p => ({ id: p.id, pedido: p.numero_pedido, status: p.status, cards: (p.pipefy_cards || []).map(c => ({ id: c?.id, fase: c?.id ? f(c.id) : 'sem card' })) })),
+      orcamentos: oc.map(p => ({ id: p.id, ref: p.referencia, status: p.status, card: p.pipefy_card_id, fase: f(p.pipefy_card_id) })),
+    });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
 // DIAGNÓSTICO — pedido da Loja Integrada (cru e mapeado), só leitura.
