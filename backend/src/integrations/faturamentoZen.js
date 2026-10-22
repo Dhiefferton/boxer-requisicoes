@@ -62,16 +62,23 @@ const hojeSP = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_P
 const somarDias = (iso, n) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return diaISO(d); };
 
 async function gravar(tipo, notas) {
-  for (const n of notas) {
-    await query(
-      `INSERT INTO faturamento_zen (tipo, zen_id, numero, data, perfil, status, serie, tags, empresa, atualizado_em)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
-       ON CONFLICT (tipo, zen_id) DO UPDATE SET numero = EXCLUDED.numero, data = EXCLUDED.data, perfil = EXCLUDED.perfil,
-         status = EXCLUDED.status, serie = EXCLUDED.serie, tags = EXCLUDED.tags, empresa = EXCLUDED.empresa, atualizado_em = NOW()`,
-      [tipo, n.id, n.number != null ? String(n.number) : null, n.date ? String(n.date).slice(0, 10) : null,
-       n.fiscalProfileOperation?.code || null, n.status || null, n.invoiceSeries?.code || null,
-       n.tags || null, n.company?.id || null]);
-  }
+  notas = [...new Map(notas.filter(n => n?.id).map(n => [n.id, n])).values()]; // sem repetidas
+  if (!notas.length) return;
+  const col = (f) => notas.map(f);
+  await query(
+    `INSERT INTO faturamento_zen (tipo, zen_id, numero, data, perfil, status, serie, tags, empresa, atualizado_em)
+     SELECT $1, * , NOW() FROM UNNEST($2::bigint[], $3::text[], $4::date[], $5::text[], $6::text[], $7::text[], $8::text[], $9::int[])
+     ON CONFLICT (tipo, zen_id) DO UPDATE SET numero = EXCLUDED.numero, data = EXCLUDED.data, perfil = EXCLUDED.perfil,
+       status = EXCLUDED.status, serie = EXCLUDED.serie, tags = EXCLUDED.tags, empresa = EXCLUDED.empresa, atualizado_em = NOW()`,
+    [tipo,
+     col(n => n.id),
+     col(n => (n.number != null ? String(n.number) : null)),
+     col(n => (n.date ? String(n.date).slice(0, 10) : null)),
+     col(n => n.fiscalProfileOperation?.code || null),
+     col(n => n.status || null),
+     col(n => n.invoiceSeries?.code || null),
+     col(n => n.tags || null),
+     col(n => n.company?.id || null)]);
 }
 
 // Todas as notas de um dia (paginado)
@@ -99,7 +106,13 @@ export async function sincronizarFaturamento({ limiteMs = 40000, intervaloMs = 1
     const inicio = Date.now();
     const st = (await query(`SELECT dia_concluido FROM faturamento_zen_sync WHERE id = 1`)).rows[0] || {};
     const hoje = hojeSP();
-    let dia = st.dia_concluido ? somarDias(diaISO(new Date(st.dia_concluido)), -3) : INICIO;
+    // Continua do dia seguinte ao último copiado; os 3 últimos dias são sempre refeitos
+    let dia = INICIO;
+    if (st.dia_concluido) {
+      const proximo = somarDias(diaISO(new Date(st.dia_concluido)), 1);
+      const refazer = somarDias(hoje, -3);
+      dia = proximo < refazer ? proximo : refazer;
+    }
     if (dia < INICIO) dia = INICIO;
     const feitos = [];
     while (dia <= hoje && Date.now() - inicio < limiteMs) {
