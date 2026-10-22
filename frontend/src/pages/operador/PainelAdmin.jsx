@@ -389,7 +389,8 @@ function AbaDepartamentos() {
 }
 
 
-function AbaEstoque() {
+// Também usada sozinha na tela Estoque (pages/operador/Estoque.jsx)
+export function AbaEstoque() {
   const [materiais,    setMateriais]    = useState([]);
   const [categorias,   setCategorias]   = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -981,7 +982,7 @@ export default function PainelAdmin() {
     <div className="space-y-5">
       <div>
         <h1 className="text-lg font-bold text-[var(--c-texto)]">Painel Administrativo</h1>
-        <p className="text-sm text-[var(--c-suave)] mt-0.5">Gestão de usuários, departamentos e estoque</p>
+        <p className="text-sm text-[var(--c-suave)] mt-0.5">Gestão de usuários, departamentos e fornecedores</p>
       </div>
       <div className="flex bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-1 w-fit gap-1 flex-wrap">
         <button onClick={() => setAba('usuarios')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'usuarios' ? 'bg-[var(--c-destaque)] text-white' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
@@ -989,9 +990,6 @@ export default function PainelAdmin() {
         </button>
         <button onClick={() => setAba('departamentos')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'departamentos' ? 'bg-[var(--c-destaque)] text-white' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
           <Building2 size={15} /> Departamentos
-        </button>
-        <button onClick={() => setAba('estoque')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'estoque' ? 'bg-[var(--c-destaque)] text-white' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
-          <Package size={15} /> Estoque
         </button>
         <button onClick={() => setAba('fornecedores')} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${aba === 'fornecedores' ? 'bg-[var(--c-destaque)] text-white' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
           <Users size={15} /> Fornecedores
@@ -1002,7 +1000,6 @@ export default function PainelAdmin() {
       </div>
       {aba === 'usuarios'      && <AbaUsuarios />}
       {aba === 'departamentos' && <AbaDepartamentos />}
-      {aba === 'estoque' && <AbaEstoque />}
       {aba === 'fornecedores' && <AbaFornecedores />}
       {aba === 'pipefy' && <AbaPipefy />}
     </div>
