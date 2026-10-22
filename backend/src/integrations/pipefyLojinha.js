@@ -141,7 +141,19 @@ export async function fasesDosCards(ids) {
     const parte = lista.slice(i, i + 30);
     const gql = `{ ${parte.map((id, k) => `c${k}: card(id: ${id}) { id current_phase { id name } }`).join(' ')} }`;
     let r = null;
-    try { r = await pipefyQuery(gql, {}); } catch { continue; }
+    try { r = await pipefyQuery(gql, {}); }
+    catch (e) {
+      // Um card excluído/sem acesso derruba a consulta do lote inteiro:
+      // consulta um por um para os outros não ficarem parados.
+      console.error('[Lojinha] fases em lote:', e.message);
+      for (const id of parte) {
+        try {
+          const u = await pipefyQuery(`{ card(id: ${id}) { id current_phase { id name } } }`, {});
+          if (u?.card?.current_phase) mapa[id] = { faseId: String(u.card.current_phase.id), fase: u.card.current_phase.name };
+        } catch { /* card excluído ou sem acesso */ }
+      }
+      continue;
+    }
     parte.forEach((id, k) => { const c = r?.[`c${k}`]; if (c?.current_phase) mapa[id] = { faseId: String(c.current_phase.id), fase: c.current_phase.name }; });
   }
   return mapa;
