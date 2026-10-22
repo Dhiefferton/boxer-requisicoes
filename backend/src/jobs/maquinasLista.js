@@ -69,7 +69,6 @@ export const MAQUINAS_LISTA = [
   ["3005049", "Cabeçote externo para fonte ALUMIG400DP", 2],
   ["3005050", "TIGON225P Tig 220A pulsado 220V Boxer", 50],
   ["3005051", "Cabeçote externo universal para fonte Mig-Mag", 2],
-  ["330053", "Luva MMA MAX", 50],
   ["4005001", "HARDCUT52 - Corte plasma 50A 220V Mono Boxer", 50],
   ["4005006", "HARDCUT82 - Corte plasma 80A 220V Tri Boxer", 2],
   ["4005007", "HARDCUT82 - Corte plasma 80A 380V Tri Boxer", 2],
@@ -119,7 +118,6 @@ export const MAQUINAS_LISTA = [
   ["99062", "SPECTRA 360B - Máscara de Solda automática", 10],
   ["99063", "BS EXT - Máscara de solda automática", 8],
   ["99065", "HARDMIG555MV", 50],
-  ["99079", "Luva MIG-MAG PREMIUM", 50],
   ["99082", "TOUCH150BV LEROY", 50],
   ["99085", "MIG 0", 2],
   ["99086", "COMBO MIG 0 + OPTIARC70", 50],
@@ -141,4 +139,11 @@ export const MAQUINAS_LISTA = [
   ["99940", "MIGFLEX180BV", 0],
   ["99968", "LQ2050 - Refrigerado a água", 50],
   ["99969", "LQ3050 - Refrigerado a água", 50],
+];
+
+// Itens que saíram da lista de Máquinas e voltam para "Partes e Peças"
+// (saldo pelos endereços PE/RACK, como as demais peças).
+export const VOLTAR_PARA_PECAS = [
+  '330053', // Luva MMA MAX
+  '99079',  // Luva MIG-MAG PREMIUM
 ];

@@ -1,5 +1,5 @@
 ﻿import { getToken } from '../integrations/erpZen.js';
-import { MAQUINAS_LISTA } from './maquinasLista.js';
+import { MAQUINAS_LISTA, VOLTAR_PARA_PECAS } from './maquinasLista.js';
 
 const ZEN_BASE_URL = 'https://api.zenerp.app.br';
 const ZEN_TENANT   = 'boxer';
@@ -349,6 +349,15 @@ export async function sincronizarMaquinas(db) {
 
   // 2. Desfaz o que a versão automática anterior colocou fora da lista
   const desfeitas = await desfazerAutomaticas(db, categoriaId, codigosLista);
+  // 2b. Itens retirados da lista (ex.: luvas) voltam para Partes e Peças
+  if (VOLTAR_PARA_PECAS.length) {
+    const r = await db.query(
+      `UPDATE materiais SET categoria_id = (SELECT id FROM categorias WHERE nome = 'Partes e Peças' LIMIT 1), updated_at = NOW()
+        WHERE categoria_id = $1 AND codigo = ANY($2::text[])
+          AND EXISTS (SELECT 1 FROM categorias WHERE nome = 'Partes e Peças')`,
+      [categoriaId, VOLTAR_PARA_PECAS]);
+    desfeitas.voltaramPecas += r.rowCount;
+  }
 
   // 3. Saldo do Zen com os mesmos filtros da tela "Pesquisar estoques":
   //    Tipo REGULAR, Endereço TEK_SP/MAQ (id 3155), Reserva AVAILABLE (id 0),
