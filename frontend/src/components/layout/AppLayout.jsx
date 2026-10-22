@@ -3,7 +3,7 @@
 // ============================================================
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
@@ -30,6 +30,7 @@ export default function AppLayout({ children }) {
     { to: '/operador',  icon: LayoutDashboard, label: 'Operador',   perfis: ['operador', 'admin'] },
     { to: '/inventario', icon: ClipboardCheck, label: 'Inventário', perfis: ['operador', 'admin'] },
     { to: '/entradas',  icon: PackagePlus,     label: 'Entradas',   perfis: ['admin'] },
+    { to: '/estoque',   icon: Boxes,           label: 'Estoque',    perfis: ['admin'] },
     { to: '/admin',     icon: ShieldCheck,     label: 'Admin',      perfis: ['admin'] },
     { to: '/mrp',       icon: BarChart2,       label: 'MRP',        perfis: ['admin'] },
     { to: '/compras',   icon: FileText,        label: 'Compras',    perfis: ['admin'] },
