@@ -14,6 +14,7 @@ import Revisao          from './pages/Revisao';
 import Historico        from './pages/Historico';
 import PainelOperador   from './pages/operador/PainelOperador';
 import PainelAdmin      from './pages/operador/PainelAdmin';
+import Estoque          from './pages/operador/Estoque';
 import RegistroEntradas from './pages/operador/RegistroEntradas';
 import MRP             from './pages/operador/MRP';
 import Compras         from './pages/operador/Compras';
@@ -110,6 +111,9 @@ export default function App() {
             } />
             <Route path="/entradas" element={
               <RotaPerfil perfis={['admin']}><RegistroEntradas /></RotaPerfil>
+            } />
+            <Route path="/estoque" element={
+              <RotaPerfil perfis={['admin']}><Estoque /></RotaPerfil>
             } />
             <Route path="/admin" element={
               <RotaPerfil perfis={['admin']}><PainelAdmin /></RotaPerfil>
