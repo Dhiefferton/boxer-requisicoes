@@ -82,7 +82,7 @@ export default function PedidosOrcamento() {
     setMsgSync('');
     try {
       const { data } = await pedidosOrcamentoService.sincronizarPipefy();
-      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s)${data.reativados ? `, ${data.reativados} reaberto(s)` : ''}${data.alterados ? `, ${data.alterados} com peças alteradas` : ''}. Zen: ${data.separados || 0} separado(s). Aprovado/Recusado: ${data.aprovadosRecusados || 0}.`);
+      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s)${data.reativados ? `, ${data.reativados} reaberto(s)` : ''}${data.alterados ? `, ${data.alterados} com peças alteradas` : ''}. Zen: ${data.separados || 0} separado(s). Aprovado/Recusado: ${data.aprovadosRecusados || 0}${data.naoLiberados ? ` (+${data.naoLiberados} não liberado(s))` : ''}.`);
       await carregar();
     } catch (err) {
       setMsgSync(err.response?.data?.erro || 'Erro ao sincronizar com o Pipefy.');
@@ -300,6 +300,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
           parcial ? 'text-amber-300 bg-amber-500/20'
           : aprovacao.startsWith('aprov') ? 'text-green-300 bg-green-500/20'
           : aprovacao.startsWith('recus') ? 'text-red-300 bg-red-500/20'
+          : aprovacao.startsWith('não lib') || aprovacao.startsWith('nao lib') ? 'text-red-300 bg-red-500/20'
           : 'text-[var(--c-suave)] bg-[var(--c-borda)]'}`}>{pedido.aprovacao}</span>
       )}
       {pedido.pipefy_card_id && (
