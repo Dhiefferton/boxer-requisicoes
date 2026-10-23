@@ -111,7 +111,7 @@ const localDe = (v) => (LOCAIS[v] ? v : 'almoxarifado');
 const DEPOSITO_MKT = LOCAIS.marketplace.deposito;
 
 // Estoque inteiro do depósito do marketplace (reserva SISTEMA), por produto
-async function estoqueMarketplace() {
+export async function estoqueMarketplace() {
   const token = await getToken();
   const filtro = `address.warehouse.code=="${DEPOSITO_MKT}";type=="REGULAR";reservation.id==0`;
   const porProduto = {};
