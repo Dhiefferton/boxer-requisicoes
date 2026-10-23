@@ -193,7 +193,7 @@ router.get('/inventarios/:id/itens/:itemId/historico', ...inv, historicoItem);
 router.post('/inventarios/:id/recontar',           ...inv, pedirRecontagem);
 router.post('/inventarios/:id/finalizar',          ...inv, finalizarInventario);
 router.post('/inventarios/:id/planilha',           ...inv, marcarPlanilha);
-router.post('/inventarios/:id/itens/:itemId/ajuste-zen', autenticar, exigirPerfil('admin'), marcarAjusteZen);
+router.post('/inventarios/:id/itens/:itemId/ajuste-zen', ...inv, marcarAjusteZen);   // admin ou Alexsander (checado no controller)
 router.post('/inventarios/:id/cancelar',           autenticar, exigirPerfil('admin'), cancelarInventario);
 
 // Marketplace — saídas (dia/mês/ano) e reposição semanal, na tela do Inventário
