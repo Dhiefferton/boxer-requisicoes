@@ -409,7 +409,9 @@ export async function detalharInventario(req, res, next) {
 }
 
 // Quem pode recontar: só admin (Matheus Sabino já é admin)
-const podeRecontar = (u) => u?.perfil === 'admin';
+// Recontagem: só o Alexsander (pedido do Dhiefferton, 23/10/2026)
+const RECONTAGEM_EMAILS = ['alexsander.lucas@boxer.com.br'];
+const podeRecontar = (u) => RECONTAGEM_EMAILS.includes(String(u?.email || '').trim().toLowerCase());
 
 // GET /inventarios/:id/meu — dados leves para a tela do celular
 export async function meuInventario(req, res, next) {
@@ -419,7 +421,7 @@ export async function meuInventario(req, res, next) {
     // Recontagem fica numa tela à parte, só para admin. Na contagem normal (coletor)
     // os itens marcados para recontagem não aparecem.
     const recontagem = req.query.modo === 'recontagem';
-    if (recontagem && !podeRecontar(req.usuario)) return res.status(403).json({ erro: 'A recontagem é só para administradores.' });
+    if (recontagem && !podeRecontar(req.usuario)) return res.status(403).json({ erro: 'A recontagem é só para o Alexsander.' });
     const inv = await query(`SELECT id, status, criado_em, local FROM inventarios WHERE id = $1`, [id]);
     if (!inv.rows[0]) return res.status(404).json({ erro: 'Inventário não encontrado.' });
     const resumo = (await resumoInventarios([id]))[id];
