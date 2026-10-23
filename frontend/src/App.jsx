@@ -27,7 +27,7 @@ import InventarioDetalhe from './pages/operador/InventarioDetalhe';
 import InventarioContagem from './pages/operador/InventarioContagem';
 import InventarioIndicadores from './pages/operador/InventarioIndicadores';
 import { podeVerOrcamentos } from './utils/acessoOrcamentos';
-import { podeVerInventario } from './utils/acessoInventario';
+import { podeVerInventario, podeRecontar } from './utils/acessoInventario';
 import { Spinner } from './components/ui';
 
 function RotaProtegida({ children }) {
@@ -43,7 +43,7 @@ function RotaProtegida({ children }) {
   return <AppLayout>{children}</AppLayout>;
 }
 
-function RotaInventario({ children }) {
+function RotaInventario({ children, recontagem }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -53,6 +53,7 @@ function RotaInventario({ children }) {
   if (!usuario) return <Navigate to="/login" replace />;
   if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
   if (!podeVerInventario(usuario)) return <Navigate to="/catalogo" replace />;
+  if (recontagem && !podeRecontar(usuario)) return <Navigate to="/inventario" replace />;
   return <AppLayout>{children}</AppLayout>;
 }
 
@@ -163,7 +164,7 @@ export default function App() {
               <RotaInventario><InventarioContagem /></RotaInventario>
             } />
             <Route path="/inventario/:id/recontar" element={
-              <RotaPerfil perfis={['admin']}><InventarioContagem key="recontagem" modo="recontagem" /></RotaPerfil>
+              <RotaInventario recontagem><InventarioContagem key="recontagem" modo="recontagem" /></RotaInventario>
             } />
             <Route path="/"  element={<Navigate to="/catalogo" replace />} />
             <Route path="*"  element={<Navigate to="/catalogo" replace />} />
