@@ -27,6 +27,7 @@ import InventarioDetalhe from './pages/operador/InventarioDetalhe';
 import InventarioContagem from './pages/operador/InventarioContagem';
 import InventarioIndicadores from './pages/operador/InventarioIndicadores';
 import { podeVerOrcamentos } from './utils/acessoOrcamentos';
+import { podeVerInventario } from './utils/acessoInventario';
 import { Spinner } from './components/ui';
 
 function RotaProtegida({ children }) {
@@ -39,6 +40,19 @@ function RotaProtegida({ children }) {
   if (!usuario) return <Navigate to="/login" replace />;
   // Redireciona para troca de senha obrigatória
   if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
+  return <AppLayout>{children}</AppLayout>;
+}
+
+function RotaInventario({ children }) {
+  const { usuario, carregando } = useAuth();
+  if (carregando) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Spinner size={32} className="text-[var(--c-destaque)]" />
+    </div>
+  );
+  if (!usuario) return <Navigate to="/login" replace />;
+  if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
+  if (!podeVerInventario(usuario)) return <Navigate to="/catalogo" replace />;
   return <AppLayout>{children}</AppLayout>;
 }
 
@@ -137,16 +151,16 @@ export default function App() {
               <RotaOrcamentos><PedidosOrcamento /></RotaOrcamentos>
             } />
             <Route path="/inventario" element={
-              <RotaPerfil perfis={['operador', 'admin']}><Inventario /></RotaPerfil>
+              <RotaInventario><Inventario /></RotaInventario>
             } />
             <Route path="/inventario/indicadores" element={
-              <RotaPerfil perfis={['operador', 'admin']}><InventarioIndicadores /></RotaPerfil>
+              <RotaInventario><InventarioIndicadores /></RotaInventario>
             } />
             <Route path="/inventario/:id" element={
-              <RotaPerfil perfis={['operador', 'admin']}><InventarioDetalhe /></RotaPerfil>
+              <RotaInventario><InventarioDetalhe /></RotaInventario>
             } />
             <Route path="/inventario/:id/contar" element={
-              <RotaPerfil perfis={['operador', 'admin']}><InventarioContagem /></RotaPerfil>
+              <RotaInventario><InventarioContagem /></RotaInventario>
             } />
             <Route path="/inventario/:id/recontar" element={
               <RotaPerfil perfis={['admin']}><InventarioContagem key="recontagem" modo="recontagem" /></RotaPerfil>
