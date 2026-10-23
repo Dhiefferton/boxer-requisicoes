@@ -623,7 +623,7 @@ export async function marcarPlanilha(req, res, next) {
 export async function marcarAjusteZen(req, res, next) {
   try {
     await garantirEstrutura();
-    if (req.usuario?.perfil !== 'admin') return res.status(403).json({ erro: 'Só administradores marcam o ajuste no Zen.' });
+    if (req.usuario?.perfil !== 'admin' && !podeRecontar(req.usuario)) return res.status(403).json({ erro: 'Só administradores e o Alexsander marcam o ajuste no Zen.' });
     const ajustado = req.body?.ajustado !== false;
     const r = await query(
       `UPDATE inventario_itens
