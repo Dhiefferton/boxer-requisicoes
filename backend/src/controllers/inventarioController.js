@@ -167,7 +167,7 @@ const enderecoValido = (e, categoria) =>
 
 // Endereços (com saldo) de todos os produtos, numa chamada só
 async function enderecosZenEmLote() {
-  const linhas = await buscaEstoque([1001, 1002, 1003], { SHOW_ADDRESS: true, SHOW_RESERVATION: true });
+  const linhas = await buscaEstoque([1001, 1002, 1003, 1004, 1005], { SHOW_ADDRESS: true, SHOW_RESERVATION: true });
   const mapa = {};
   for (const l of (Array.isArray(linhas) ? linhas : [])) {
     if (!l.product_code || !l.address_code || !(Number(l.sum_quantity) > 0)) continue;
