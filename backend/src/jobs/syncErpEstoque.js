@@ -28,7 +28,9 @@ async function executarSync(db) {
     // Saldo das peças: só o que está em endereço PE/PEC ou RACK01/RACK02 (estoque físico do almoxarifado)
     // e na reserva SISTEMA (AVAILABLE, id 0). MERCADO_LIVRE, AVA, DEVOLUCAO, TERCEIRO etc.
     // e unidades presas em reserva (ex.: FINALIZADA) não entram no saldo do catálogo.
-    const dados = await buscaEstoque([1002, 1003], { SHOW_ADDRESS: true, SHOW_RESERVATION: true });
+    // Perfis do Zen: PEC, PEC/S e também ALM/CNS — há peças cadastradas no Zen
+    // com perfil de almoxarifado (ex.: 1540001); o catálogo é que decide o que é peça.
+    const dados = await buscaEstoque([1002, 1003, 1004, 1005], { SHOW_ADDRESS: true, SHOW_RESERVATION: true });
     const linhas = Array.isArray(dados) ? dados : [];
     const saldos = {};
     for (const item of linhas) {
