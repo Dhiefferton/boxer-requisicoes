@@ -10,6 +10,11 @@ export const INVENTARIO_COLABORADORES = [
   'alexsander.lucas@boxer.com.br',
 ];
 
+// Recontagem: só o Alexsander. Manter igual a RECONTAGEM_EMAILS em
+// backend/src/controllers/inventarioController.js
+export const RECONTAGEM_EMAILS = ['alexsander.lucas@boxer.com.br'];
+export const podeRecontar = (usuario) => RECONTAGEM_EMAILS.includes(String(usuario?.email || '').trim().toLowerCase());
+
 export function podeVerInventario(usuario) {
   return ['admin', 'operador'].includes(usuario?.perfil)
     || INVENTARIO_COLABORADORES.includes(String(usuario?.email || '').trim().toLowerCase());
