@@ -6,6 +6,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, FileSpreadsheet, RotateCcw, Check, ScanLine, Search, X, Ban, RefreshCw } from 'lucide-react';
 import { inventarioService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { podeRecontar } from '../../utils/acessoInventario';
 import { Spinner } from '../../components/ui';
 import { Kpi, TagCurva, TagStatus, fmtData, fmtHora, fmtDataHora, fmtNum, fmtPct, fmtTempo } from '../../components/inventario/util';
 
@@ -128,7 +129,7 @@ export default function InventarioDetalhe() {
             <button onClick={() => navigate(`/inventario/${inv.id}/contar`)} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-borda)] text-[var(--c-texto)]">
               <ScanLine size={14} /> Contar
             </button>
-            {usuario?.perfil === 'admin' && (
+            {podeRecontar(usuario) && (
               <button onClick={() => navigate(`/inventario/${inv.id}/recontar`)} disabled={!contagem.recontagem}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-500 text-white disabled:opacity-40">
                 <ScanLine size={14} /> Recontar ({contagem.recontagem})
