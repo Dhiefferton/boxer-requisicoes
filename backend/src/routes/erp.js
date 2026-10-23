@@ -5,6 +5,7 @@ import { pipefyQuery } from '../integrations/pipefyService.js';
 import { pedidoLIBruto, buscarPedidoLI, tentativasLI } from '../integrations/lojaIntegrada.js';
 import { fasesDosCards } from '../integrations/pipefyLojinha.js';
 import { query } from '../config/db.js';
+import { sincronizarSaidas, garantirRelatorioSemanal, compararPlanilhaZen } from '../integrations/marketplaceSaidas.js';
 
 const router = express.Router();
 
@@ -101,6 +102,19 @@ router.post('/sync', async (req, res) => {
   }
 });
 
+// DIAGNÓSTICO — saídas do marketplace. Só com o secret.
+//   ?acao=sync      → copia mais dias do Zen (≈40 s por chamada)
+//   ?acao=comparar  → planilha × Zen nos dias que existem nos dois
+//   ?acao=relatorio → fecha o relatório da última sexta (se faltar)
+router.get('/debug-mkt', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    if (req.query.acao === 'comparar') return res.json(await compararPlanilhaZen());
+    if (req.query.acao === 'relatorio') return res.json(await garantirRelatorioSemanal({ forcar: req.query.forcar === '1' }));
+    res.json(await sincronizarSaidas({ intervaloMs: 0, limiteMs: 40000 }));
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // GET /api/erp/cron
 // Rota que o Cron Job do Vercel chama (1x por dia, no plano
 // gratuito). Protegida por um segredo - o Vercel manda esse cabeçalho
@@ -115,7 +129,13 @@ router.get('/cron', async (req, res) => {
   }
   try {
     const resultado = await forcerSync(req.app.locals.db);
-    res.json({ sucesso: true, resultado });
+    // Marketplace: copia as saídas do Zen e, na sexta, fecha o relatório de reposição
+    let marketplace = null;
+    try {
+      const sync = await sincronizarSaidas({ intervaloMs: 0, limiteMs: 20000 });
+      marketplace = { sync, relatorio: await garantirRelatorioSemanal() };
+    } catch (e) { marketplace = { erro: e.message }; console.error('[Cron ERP] marketplace:', e.message); }
+    res.json({ sucesso: true, resultado, marketplace });
   } catch (err) {
     console.error('[Cron ERP] Erro:', err.message);
     res.status(500).json({ sucesso: false, erro: err.message });

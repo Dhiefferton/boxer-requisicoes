@@ -50,6 +50,7 @@ import {
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { relatorioUsoPipefy } from '../integrations/usoPipefy.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
+import { saidasMarketplace, reposicaoMarketplace, relatoriosMarketplace, relatorioMarketplace, gerarRelatorioMarketplace, sincronizarMarketplace } from '../controllers/marketplaceController.js';
 
 const router = Router();
 
@@ -194,6 +195,14 @@ router.post('/inventarios/:id/finalizar',          ...inv, finalizarInventario);
 router.post('/inventarios/:id/planilha',           ...inv, marcarPlanilha);
 router.post('/inventarios/:id/itens/:itemId/ajuste-zen', autenticar, exigirPerfil('admin'), marcarAjusteZen);
 router.post('/inventarios/:id/cancelar',           autenticar, exigirPerfil('admin'), cancelarInventario);
+
+// Marketplace — saídas (dia/mês/ano) e reposição semanal, na tela do Inventário
+router.get('/marketplace/saidas',                  ...inv, saidasMarketplace);
+router.get('/marketplace/reposicao',               ...inv, reposicaoMarketplace);
+router.get('/marketplace/relatorios',              ...inv, relatoriosMarketplace);
+router.get('/marketplace/relatorios/:id',          ...inv, relatorioMarketplace);
+router.post('/marketplace/relatorios/gerar',       autenticar, exigirPerfil('admin'), gerarRelatorioMarketplace);
+router.post('/marketplace/sincronizar',            autenticar, exigirPerfil('admin'), sincronizarMarketplace);
 
 // ── Lojinha Boxer (admin, operador e SAC / Suporte)
 const loja = [autenticar, acessoLojinha];
