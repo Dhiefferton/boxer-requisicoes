@@ -3,7 +3,7 @@
 // ============================================================
 // Mesmo padrão dos pedidos da Lojinha feitos à mão no Zen:
 //   • Empresa TEKSP · perfil de venda "VendaConsumidor" (Venda consumidor final);
-//     cliente "Regime Normal" no Zen → perfil "Venda padrão" (DEFAULT)
+//     cliente "Regime Normal" ou de SP (mesmo estado) → perfil "Venda padrão" (DEFAULT), operação Venda
 //   • Operação fiscal: "Venda" (contribuinte) ou "Venda não contribuinte" (6.108)
 //   • Frete por conta do emitente (ISSUER) · forma de pagamento 0
 //   • Vendedora = vendedora escolhida na tela (pessoa do Zen)
@@ -99,7 +99,13 @@ export function cfopLojinha(pessoa) {
 // ---------- Perfil de venda pelo regime do cliente ----------
 export const clienteRegimeNormal = (pessoa) =>
   /regime\s+normal/i.test(String(pessoa?.fiscalProfilePerson?.description || ''));
-export const perfilVendaLojinha = (pessoa) => (clienteRegimeNormal(pessoa)
+// Cliente do mesmo estado da empresa (SP), pessoa física ou não, também
+// sai como "Venda padrão" (operação Venda, CFOP 5.102) — não como consumidor final
+export const clienteMesmoEstado = (pessoa) => {
+  const uf = String(pessoa?.city?.state?.code || '').toUpperCase();
+  return !uf || uf === CFG.ufEmpresa;
+};
+export const perfilVendaLojinha = (pessoa) => (clienteRegimeNormal(pessoa) || clienteMesmoEstado(pessoa)
   ? { id: CFG.saleProfileRegimeNormal, nome: 'Venda padrão' }
   : { id: CFG.saleProfile, nome: 'Venda consumidor final' });
 
@@ -176,7 +182,7 @@ export async function criarPedidoLojinhaZen(pedido) {
     const venda = await zen('POST', '/sale/sale', {
       company:                { id: CFG.company },
       saleProfile:            { id: perfil.id },
-      fiscalProfileOperation: { id: cfop.codigo === '6.108' && !clienteRegimeNormal(pessoa) ? CFG.fiscalOpNaoContrib : CFG.fiscalOpVenda },
+      fiscalProfileOperation: { id: perfil.id === CFG.saleProfileRegimeNormal || cfop.codigo !== '6.108' ? CFG.fiscalOpVenda : CFG.fiscalOpNaoContrib },
       person:                 { id: pessoa.id },
       personSalesperson:      { id: Number(pedido.vendedora_id_zen) },
       ...(transportadoraZen(pedido) ? { personShipping: { id: transportadoraZen(pedido) } } : {}),
