@@ -213,14 +213,14 @@ export default function InventarioDetalhe() {
                           </span>
                         )}
                         {i.ajuste_zen_em ? (
-                          <button disabled={usuario?.perfil !== 'admin'}
+                          <button disabled={!(usuario?.perfil === 'admin' || podeRecontar(usuario))}
                             onClick={() => confirm('Desmarcar o ajuste no Zen deste item?') && acao(() => inventarioService.ajusteZen(inv.id, i.id, false))}
                             title={`Ajustado por ${i.ajuste_zen_por_nome || '—'} em ${fmtDataHora(i.ajuste_zen_em)}`}
                             className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 disabled:cursor-default">
                             <Check size={11} /> Ajustado no Zen
                           </button>
                         ) : (i.status === 'divergente' || i.recontado_em) && (
-                          usuario?.perfil === 'admin' ? (
+                          usuario?.perfil === 'admin' || podeRecontar(usuario) ? (
                             <button onClick={() => acao(() => inventarioService.ajusteZen(inv.id, i.id, true))}
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-[var(--c-borda)] text-[11px] text-[var(--c-suave)] hover:border-green-500 hover:text-green-400">
                               <Check size={11} /> Marcar ajustado
