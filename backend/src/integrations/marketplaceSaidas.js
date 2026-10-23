@@ -120,13 +120,19 @@ async function zenGet(caminho) {
 async function itensDoDia(dia, tag) {
   const todos = [];
   const q = encodeURIComponent(`invoice.date==${dia};invoice.tags==*${tag}*`);
-  for (let first = 0; first < 3000; first += 50) {
-    const pagina = await zenGet(`/fiscal/outgoingInvoiceItem?q=${q}&first=${first}&max=50`);
-    const lista = Array.isArray(pagina) ? pagina : [];
-    todos.push(...lista);
-    if (lista.length < 50) break;
+  // Páginas de 50 (a resposta do Zen é pesada), 3 de cada vez em paralelo
+  for (let first = 0; first < 3000; first += 150) {
+    const paginas = await Promise.all([0, 50, 100].map(d => zenGet(`/fiscal/outgoingInvoiceItem?q=${q}&first=${first + d}&max=50`)));
+    let fim = false;
+    for (const pagina of paginas) {
+      const lista = Array.isArray(pagina) ? pagina : [];
+      todos.push(...lista);
+      if (lista.length < 50) { fim = true; break; }
+    }
+    if (fim) break;
   }
-  return todos.filter(it => it?.id && !STATUS_FORA.includes(it.invoice?.status) && it.invoice?.flow !== 'IN');
+  const vistos = new Set();
+  return todos.filter(it => it?.id && !vistos.has(it.id) && vistos.add(it.id) && !STATUS_FORA.includes(it.invoice?.status) && it.invoice?.flow !== 'IN');
 }
 
 async function gravarDia(dia, itens) {
@@ -159,24 +165,24 @@ export async function sincronizarSaidas({ limiteMs = 20000, intervaloMs = 10 * 6
     const inicio = Date.now();
     const st = (await query(`SELECT dia_concluido FROM mkt_saidas_sync WHERE id = 1`)).rows[0] || {};
     const hoje = hojeSP();
-    let dia = ZEN_INICIO;
-    if (st.dia_concluido) {
-      const proximo = somarDias(isoDe(st.dia_concluido), 1);
-      const refazer = somarDias(hoje, -3);
-      dia = proximo < refazer ? proximo : refazer;
-    }
-    if (dia < ZEN_INICIO) dia = ZEN_INICIO;
+    // Primeiro os dias que ainda não foram copiados (em ordem); depois,
+    // se sobrar tempo, refaz os 3 últimos dias (do mais recente para trás)
+    const fila = [];
+    let d = st.dia_concluido ? somarDias(isoDe(st.dia_concluido), 1) : ZEN_INICIO;
+    if (d < ZEN_INICIO) d = ZEN_INICIO;
+    for (; d <= hoje; d = somarDias(d, 1)) fila.push(d);
+    for (let i = 0; i <= 3; i++) { const r = somarDias(hoje, -i); if (r >= ZEN_INICIO && !fila.includes(r)) fila.push(r); }
     const feitos = [];
-    while (dia <= hoje && Date.now() - inicio < limiteMs) {
+    for (const dia of fila) {
+      if (Date.now() - inicio >= limiteMs) break;
       const porCanal = await Promise.all(CANAIS.map(async c => (await itensDoDia(dia, c.tag)).map(item => ({ item, canal: c.canal }))));
       const itens = porCanal.flat();
       await gravarDia(dia, itens);
       await query(`UPDATE mkt_saidas_sync SET dia_concluido = GREATEST(COALESCE(dia_concluido, $1::date), $1::date), atualizado_em = NOW() WHERE id = 1`, [dia]);
       feitos.push({ dia, itens: itens.length, unidades: itens.reduce((s, i) => s + (Number(i.item.quantity) || 0), 0) });
-      dia = somarDias(dia, 1);
     }
     ultimaVez = Date.now();
-    return { dias: feitos, completo: dia > hoje };
+    return { dias: feitos, completo: feitos.length === fila.length };
   })().finally(() => { rodando = null; });
   return rodando;
 }
