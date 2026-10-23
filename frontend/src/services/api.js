@@ -92,6 +92,14 @@ export const inventarioService = {
   ajusteZen:    (id, itemId, ajustado) => api.post(`/inventarios/${id}/itens/${itemId}/ajuste-zen`, { ajustado }),
 };
 
+export const marketplaceService = {
+  saidas:        (params)          => api.get('/marketplace/saidas', { params, timeout: 60000 }),
+  reposicao:     (params)          => api.get('/marketplace/reposicao', { params, timeout: 60000 }),
+  relatorios:    ()                => api.get('/marketplace/relatorios'),
+  relatorio:     (id)              => api.get(`/marketplace/relatorios/${id}`),
+  gerarRelatorio: ()               => api.post('/marketplace/relatorios/gerar', null, { timeout: 90000 }),
+};
+
 export const recebimentoImportacaoService = {
   notas:      ()               => api.get('/recebimento-importacao/notas', { timeout: 60000 }),
   nota:       (id)             => api.get(`/recebimento-importacao/notas/${id}`, { timeout: 60000 }),
