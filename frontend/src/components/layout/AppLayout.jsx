@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
 import { podeVerOrcamentos } from '../../utils/acessoOrcamentos';
+import { podeVerInventario } from '../../utils/acessoInventario';
 import BotaoTema from '../ui/BotaoTema';
 
 export default function AppLayout({ children }) {
@@ -28,7 +29,7 @@ export default function AppLayout({ children }) {
     { to: '/catalogo',  icon: Package,        label: 'Catálogo',   perfis: ['colaborador', 'operador', 'admin'] },
     { to: '/historico', icon: ClipboardList,   label: 'Histórico',  perfis: ['colaborador', 'operador', 'admin'] },
     { to: '/operador',  icon: LayoutDashboard, label: 'Operador',   perfis: ['operador', 'admin'] },
-    { to: '/inventario', icon: ClipboardCheck, label: 'Inventário', perfis: ['operador', 'admin'] },
+    { to: '/inventario', icon: ClipboardCheck, label: 'Inventário', perfis: ['operador', 'admin'], permitir: podeVerInventario },
     { to: '/entradas',  icon: PackagePlus,     label: 'Entradas',   perfis: ['admin'] },
     { to: '/estoque',   icon: Boxes,           label: 'Estoque',    perfis: ['admin'] },
     { to: '/admin',     icon: ShieldCheck,     label: 'Admin',      perfis: ['admin'] },
