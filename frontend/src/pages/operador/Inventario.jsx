@@ -9,6 +9,7 @@ import { inventarioService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Spinner, Empty } from '../../components/ui';
 import { Kpi, Progresso, TagStatus, fmtData, fmtHora, fmtPct, fmtNum, fmtTempo } from '../../components/inventario/util';
+import MarketplaceSaidas from '../../components/inventario/MarketplaceSaidas';
 
 // Onde o inventário é feito — cada local tem seus próprios inventários
 export const LOCAIS_INVENTARIO = [
@@ -22,6 +23,7 @@ export default function Inventario() {
   const [params, setParams] = useSearchParams();
   const local = LOCAIS_INVENTARIO.some(l => l.id === params.get('local')) ? params.get('local') : 'almoxarifado';
   const mkt = local === 'marketplace';
+  const aba = mkt && params.get('aba') === 'saidas' ? 'saidas' : 'inventarios';
   const { usuario } = useAuth();
   const [lista, setLista] = useState([]);
   const [saldoMax, setSaldoMax] = useState(30);
@@ -64,7 +66,9 @@ export default function Inventario() {
         <div className="min-w-0">
           <h1 className="text-lg sm:text-xl font-bold text-[var(--c-texto)]">Inventário</h1>
           <p className="text-xs sm:text-sm text-[var(--c-suave)]">
-            {mkt
+            {aba === 'saidas'
+              ? 'Quanto sai por dia, mês e ano no Mercado Livre e na Shopee, e a reposição semanal do estoque do marketplace'
+              : mkt
               ? 'Itens com saldo no depósito MKT_PLACE (endereço MERCADO_LIVRE) — saldo e endereço vêm do Zen na hora da contagem'
               : `Contagem cíclica dos itens com saldo até ${saldoMax} — saldo e endereço vêm do Zen na hora da contagem`}
           </p>
@@ -77,6 +81,7 @@ export default function Inventario() {
               {LOCAIS_INVENTARIO.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}
             </select>
           </label>
+          {aba === 'inventarios' && <>
           <button onClick={carregar} className="p-2 rounded-xl border border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]" title="Atualizar">
             <RefreshCw size={15} />
           </button>
@@ -92,9 +97,20 @@ export default function Inventario() {
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-destaque)] text-white hover:bg-[var(--c-destaque-h)] disabled:opacity-40">
             <Plus size={14} /> Novo inventário
           </button>
+          </>}
         </div>
       </div>
 
+      {mkt && (
+        <div className="flex gap-1 border-b border-[var(--c-borda)]">
+          {[['inventarios', 'Inventários'], ['saidas', 'Saídas e reposição']].map(([v, l]) => (
+            <button key={v} onClick={() => setParams(v === 'saidas' ? { local, aba: v } : { local })}
+              className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px ${aba === v ? 'border-[var(--c-destaque)] text-[var(--c-texto)]' : 'border-transparent text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>{l}</button>
+          ))}
+        </div>
+      )}
+
+      {aba === 'saidas' ? <MarketplaceSaidas /> : <>
       {erro && <p className="text-sm text-red-400">{erro}</p>}
       {carregando ? (
         <div className="flex justify-center py-16"><Spinner size={28} className="text-[var(--c-destaque)]" /></div>
@@ -179,6 +195,7 @@ export default function Inventario() {
           </div>
         </>
       )}
+      </>}
 
       {novo && <NovoInventario local={local} saldoMax={saldoMax} onFechar={() => setNovo(false)}
         onCriado={(id) => { setNovo(false); navigate(`/inventario/${id}`); }} />}
