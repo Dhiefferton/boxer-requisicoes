@@ -167,8 +167,18 @@ router.post('/necessidades-pecas/:id/aprovar',      autenticar, exigirPerfil('ad
 router.post('/necessidades-pecas/:id/recusar',      autenticar, exigirPerfil('admin'), recusarNecessidade);
 router.post('/necessidades-pecas/:id/enviar',       autenticar, exigirPerfil('admin'), enviarOutroSistema);
 
-// Inventário — admin e operador
-const inv = [autenticar, exigirPerfil('operador', 'admin')];
+// Inventário — admin, operador e colaboradores liberados (contagem, igual ao operador)
+// Manter igual a frontend/src/utils/acessoInventario.js
+const INVENTARIO_COLABORADORES = [
+  'caua.pedroso@boxer.com.br',
+  'alexsander.lucas@boxer.com.br',
+];
+function acessoInventario(req, res, next) {
+  const email = String(req.usuario?.email || '').trim().toLowerCase();
+  if (['admin', 'operador'].includes(req.usuario?.perfil) || INVENTARIO_COLABORADORES.includes(email)) return next();
+  return res.status(403).json({ erro: 'Acesso restrito à tela de Inventário.' });
+}
+const inv = [autenticar, acessoInventario];
 router.get('/inventarios',                         ...inv, listarInventarios);
 router.get('/inventarios/indicadores',             ...inv, indicadoresInventario);
 router.get('/inventarios/planilha/config',         ...inv, configPlanilha);
