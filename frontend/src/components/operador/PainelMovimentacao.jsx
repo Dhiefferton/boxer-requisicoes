@@ -6,6 +6,7 @@
 // exportação para Excel. Também abre direto em um card (botão no card).
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { NOME_STATUS_ORCAMENTO, COR_STATUS_ORCAMENTO } from '../../utils/fasesOrcamento';
 import * as XLSX from 'xlsx';
 import {
   X, Search, FileDown, RefreshCw, ArrowRight, User, Bot, Cloud, History,
@@ -32,13 +33,11 @@ const TIPOS = {
   cancelado:                 { label: 'Cancelado',               cor: 'bg-red-500/15 text-red-400' },
   erro_zen:                  { label: 'Erro no Zen',             cor: 'bg-red-500/15 text-red-400' },
   sincronizacao:             { label: 'Atualizar (sincronização)', cor: 'bg-[var(--c-borda)] text-[var(--c-suave)]' },
+  campos_editados:           { label: 'Campos editados',         cor: 'bg-amber-500/15 text-amber-400' },
 };
 const tipoInfo = (t) => TIPOS[t] || { label: t, cor: 'bg-[var(--c-borda)] text-[var(--c-suave)]' };
 
-const STATUS = {
-  solicitacao: 'Solicitado', separando: 'Em Separação', separado: 'Separado',
-  aprovado_recusado: 'Aprovado/Recusado', finalizado: 'Finalizado', cancelado: 'Cancelado',
-};
+const STATUS = NOME_STATUS_ORCAMENTO;
 const ORIGENS = {
   usuario:       { label: 'Usuário',       icon: User },
   sincronizacao: { label: 'Sincronização', icon: Cloud },
@@ -91,11 +90,7 @@ function textoDetalhes(det) {
     }).join(' · ');
 }
 
-const COR_STATUS = {
-  solicitacao: 'bg-blue-500/15 text-blue-400', separando: 'bg-amber-500/15 text-amber-400',
-  separado: 'bg-purple-500/15 text-purple-400', aprovado_recusado: 'bg-cyan-500/15 text-cyan-400',
-  finalizado: 'bg-green-500/15 text-green-400', cancelado: 'bg-red-500/15 text-red-400',
-};
+const COR_STATUS = COR_STATUS_ORCAMENTO;
 const fmtDataCurta = (iso) => new Date(iso).toLocaleString('pt-BR', {
   day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo',
 });
