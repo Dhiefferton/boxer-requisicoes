@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { query } from '../config/db.js';
 import {
   pipefyQuery, listarCardsDaFase, extrairDadosOrcamento,
-  buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO,
+  buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO, estruturaPipeOrcamento,
 } from '../integrations/pipefyService.js';
 import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
@@ -25,6 +25,7 @@ const BASE_SELECT = `
     p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em, p.aprovacao,
     p.zen_romaneio_id, p.zen_nota_id,
     p.pecas_recusadas, p.recusadas_retiradas_em, p.itens_recusados, p.itens_alterados_em,
+    p.campos_editados,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome
   FROM pedidos_orcamento p
@@ -39,9 +40,9 @@ function garantirColunas() {
       const r = await query(
         `SELECT COUNT(*)::int AS n FROM information_schema.columns
           WHERE table_name = 'pedidos_orcamento'
-            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em', 'nao_liberado_ignorado_em')`
+            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em', 'nao_liberado_ignorado_em', 'campos_editados')`
       );
-      if (r.rows[0].n < 6) {
+      if (r.rows[0].n < 7) {
         await query(
           `ALTER TABLE pedidos_orcamento
               ADD COLUMN IF NOT EXISTS pecas_recusadas        TEXT,
@@ -49,7 +50,8 @@ function garantirColunas() {
               ADD COLUMN IF NOT EXISTS itens_recusados        JSONB,
               ADD COLUMN IF NOT EXISTS cancelado_status       TEXT,
               ADD COLUMN IF NOT EXISTS itens_alterados_em     TIMESTAMPTZ,
-              ADD COLUMN IF NOT EXISTS nao_liberado_ignorado_em TIMESTAMPTZ`
+              ADD COLUMN IF NOT EXISTS nao_liberado_ignorado_em TIMESTAMPTZ,
+              ADD COLUMN IF NOT EXISTS campos_editados        JSONB`
         );
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
@@ -131,10 +133,23 @@ async function registrarMovimento(pedidoId, tipo, { de = null, para = null, desc
   }
 }
 
+// Colunas = fases do pipe "Orçamento BOXER SOLDAS" + Em Separação / Separado
+// (etapas do Zen). Solicitado = "Requisitar Peças"; Finalizado = "Expedição".
+// Manter igual a frontend/src/utils/fasesOrcamento.js
 const NOME_STATUS = {
-  solicitacao: 'Solicitado', separando: 'Em Separação', separado: 'Separado',
-  aprovado_recusado: 'Aprovado/Recusado', finalizado: 'Finalizado', cancelado: 'Cancelado',
+  entrada: 'Entrada', divergencia_entrada: 'Divergência de entrada', liberado_orcar: 'Liberado p/ Orçar',
+  orcando: 'Orçando', solicitacao: 'Requisitar Peças', separando: 'Em Separação', separado: 'Separado',
+  envio_orcamento: 'Envio de orçamento', aguardando_aprovacao: 'Aguardando aprovação',
+  aprovado_recusado: 'Aprovado/Recusado', em_manutencao: 'Em manutenção', nao_liberado: 'Concluído - Não Liberado',
+  liberado_saida: 'Liberado para Saída', finalizado: 'Expedição', sucata: 'Sucata', cancelado: 'Cancelado',
 };
+// Colunas novas (vindas do Pipefy): só o admin move cards para elas ou a partir delas
+const STATUS_ADMIN = ['entrada', 'divergencia_entrada', 'liberado_orcar', 'orcando', 'envio_orcamento',
+  'aguardando_aprovacao', 'em_manutencao', 'nao_liberado', 'liberado_saida', 'sucata'];
+// Até aqui a sincronização com o Pipefy ainda pode levar o card para Aprovado/Recusado
+const STATUS_ANTES_APROVACAO = ['solicitacao', 'separando', 'separado', 'envio_orcamento', 'aguardando_aprovacao', 'aprovado_recusado'];
+// Saindo destas para Expedição, fecha o romaneio e cria a nota no Zen
+const STATUS_FINALIZA_ZEN = ['aprovado_recusado', 'em_manutencao', 'liberado_saida'];
 
 // GET /pedidos-orcamento/movimentos?de=AAAA-MM-DD&ate=AAAA-MM-DD&pedido=ID
 export async function listarMovimentos(req, res, next) {
@@ -201,7 +216,7 @@ export async function criarPedido(req, res, next) {
 // Fase "Concluído - Não Liberado" do pipe Orçamento
 const FASE_NAO_LIBERADO = String(process.env.PIPEFY_ORCAMENTO_PHASE_NAO_LIBERADO_ID || '309113144');
 
-const STATUS_VALIDOS = ['solicitacao', 'separando', 'separado', 'aprovado_recusado', 'finalizado'];
+const STATUS_VALIDOS = Object.keys(NOME_STATUS).filter(s => s !== 'cancelado');
 export async function moverPedido(req, res, next) {
   try {
     const { id } = req.params;
@@ -216,6 +231,9 @@ export async function moverPedido(req, res, next) {
     );
     const pedido = atual.rows[0];
     if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (req.usuario?.perfil !== 'admin' && (STATUS_ADMIN.includes(status) || STATUS_ADMIN.includes(pedido.status))) {
+      return res.status(403).json({ erro: 'Só o administrador move cards nessa coluna.' });
+    }
     const detalhesMov = {};
 
     // Solicitação -> Separando: cria o pedido de venda no ZenERP antes de mover.
@@ -251,7 +269,8 @@ export async function moverPedido(req, res, next) {
     }
 
     // Aprovado/Recusado -> Finalizado: finaliza o romaneio e cria a nota no Zen
-    if (pedido.status === 'aprovado_recusado' && status === 'finalizado' && pedido.zen_ordem_separacao_id) {
+    if (STATUS_FINALIZA_ZEN.includes(pedido.status) && status === 'finalizado' && pedido.zen_ordem_separacao_id
+        && (pedido.status === 'aprovado_recusado' || !pedido.zen_nota_id)) {
       try {
         const fim = await finalizarRomaneioZen(pedido);
         await query(
@@ -335,6 +354,39 @@ export async function voltarParaSeparacao(id, usuario) {
 export async function voltarSeparacaoRota(req, res, next) {
   try { res.json(await voltarParaSeparacao(req.params.id, req.usuario)); }
   catch (err) { if (err.status) return res.status(err.status).json({ erro: err.message }); next(err); }
+}
+
+// GET /pedidos-orcamento/estrutura — fases e campos do pipe (para mostrar os campos do card)
+export async function estruturaOrcamento(req, res, next) {
+  try { res.json({ fases: await estruturaPipeOrcamento() }); }
+  catch (err) { next(err); }
+}
+
+// PATCH /pedidos-orcamento/:id/campos (admin) — edita campos do card aqui no
+// B-Requisições. Fica gravado em campos_editados (vale mais que o valor do
+// Pipefy) e não é enviado ao Pipefy. Valor vazio/null volta a usar o do Pipefy.
+export async function editarCampos(req, res, next) {
+  try {
+    await garantirColunas();
+    const campos = req.body?.campos;
+    if (!campos || typeof campos !== 'object' || Array.isArray(campos)) return res.status(400).json({ erro: 'Envie { campos: { id_do_campo: valor } }.' });
+    const atual = (await query(`SELECT id, campos_editados FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`, [parseInt(req.params.id)])).rows[0];
+    if (!atual) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    const novo = { ...(atual.campos_editados || {}) };
+    const alterados = {};
+    for (const [k, v] of Object.entries(campos)) {
+      if (!/^[a-z0-9_]{1,80}$/i.test(k)) continue;
+      const valor = v == null ? '' : String(v).slice(0, 5000);
+      if (valor === '') delete novo[k]; else novo[k] = valor;
+      alterados[k] = valor || null;
+    }
+    await query(`UPDATE pedidos_orcamento SET campos_editados = $1::jsonb, atualizado_em = NOW() WHERE id = $2`,
+      [Object.keys(novo).length ? JSON.stringify(novo) : null, atual.id]);
+    await registrarMovimento(atual.id, 'campos_editados', {
+      usuario: req.usuario, descricao: `Campos do card editados: ${Object.keys(alterados).join(', ')}`, detalhes: alterados,
+    });
+    res.json({ sucesso: true, campos_editados: novo });
+  } catch (err) { next(err); }
 }
 
 // PATCH /pedidos-orcamento/:id — edita referência/observações
@@ -554,9 +606,9 @@ export async function sincronizarPipefy(req, res, next) {
     // retiradas volta pra "Em Separação" e só segue depois de separado de novo.
     let aprovadosRecusados = 0, naoLiberados = 0;
     const acompanhados = await query(
-      `SELECT id, pipefy_card_id, status, aprovacao, nao_liberado_ignorado_em FROM pedidos_orcamento
+      `SELECT id, pipefy_card_id, status, aprovacao, nao_liberado_ignorado_em, pipefy_campos FROM pedidos_orcamento
         WHERE pipefy_card_id IS NOT NULL
-          AND status NOT IN ('finalizado', 'cancelado')
+          AND status NOT IN ('finalizado', 'cancelado', 'sucata')
           AND NOT (recusadas_retiradas_em IS NOT NULL AND status IN ('solicitacao', 'separando'))
           AND (status <> 'aprovado_recusado' OR aprovacao IS NULL OR recusadas_retiradas_em IS NULL)`
     );
@@ -565,6 +617,15 @@ export async function sincronizarPipefy(req, res, next) {
         const situacao = await buscarSituacaoCards(acompanhados.rows.map(p => p.pipefy_card_id));
         for (const p of acompanhados.rows) {
           const s = situacao.get(String(p.pipefy_card_id));
+          // Todos os campos preenchidos do card (todas as fases) — mantém os
+          // registros conectados que já tinham sido lidos (ex.: cadastro do cliente)
+          if (s?.campos?.length) {
+            const antigos = new Map((Array.isArray(p.pipefy_campos) ? p.pipefy_campos : []).filter(c => c?.id).map(c => [c.id, c]));
+            const novos = s.campos.map(c => (antigos.get(c.id)?.conectados ? { ...c, conectados: antigos.get(c.id).conectados } : c));
+            await query(`UPDATE pedidos_orcamento SET pipefy_campos = $1::jsonb, pipefy_sincronizado_em = NOW() WHERE id = $2`,
+              [JSON.stringify(novos), p.id]);
+          }
+          if (!STATUS_ANTES_APROVACAO.includes(p.status)) continue;   // admin já levou para outra coluna
           if (s?.faseId === String(ORCAMENTO_PHASE_APROVADO_RECUSADO)) {
             await query(
               `UPDATE pedidos_orcamento
