@@ -5,6 +5,7 @@ import { pipefyQuery } from '../integrations/pipefyService.js';
 import { pedidoLIBruto, buscarPedidoLI, tentativasLI } from '../integrations/lojaIntegrada.js';
 import { fasesDosCards } from '../integrations/pipefyLojinha.js';
 import { query } from '../config/db.js';
+import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
 import { sincronizarSaidas, garantirRelatorioSemanal, compararPlanilhaZen } from '../integrations/marketplaceSaidas.js';
 
 const router = express.Router();
@@ -113,6 +114,14 @@ router.get('/debug-mkt', async (req, res) => {
     if (req.query.acao === 'relatorio') return res.json(await garantirRelatorioSemanal({ forcar: req.query.forcar === '1' }));
     res.json(await sincronizarSaidas({ intervaloMs: 0, limiteMs: 40000 }));
   } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Volta um orçamento "Não liberado" para Em Separação (cria pedido/ordem no Zen se faltar).
+// Ex: GET /api/erp/debug-voltar-separacao?secret=...&id=614
+router.get('/debug-voltar-separacao', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try { res.json(await voltarParaSeparacao(req.query.id, { nome: 'Claude (pedido do Dhiefferton)' })); }
+  catch (e) { res.status(e.status || 500).json({ erro: e.message }); }
 });
 
 // GET /api/erp/cron
