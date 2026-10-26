@@ -25,7 +25,7 @@ const BASE_SELECT = `
     p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em, p.aprovacao,
     p.zen_romaneio_id, p.zen_nota_id,
     p.pecas_recusadas, p.recusadas_retiradas_em, p.itens_recusados, p.itens_alterados_em,
-    p.campos_editados,
+    p.campos_editados, p.pipefy_fase,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome
   FROM pedidos_orcamento p
@@ -40,9 +40,9 @@ function garantirColunas() {
       const r = await query(
         `SELECT COUNT(*)::int AS n FROM information_schema.columns
           WHERE table_name = 'pedidos_orcamento'
-            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em', 'nao_liberado_ignorado_em', 'campos_editados')`
+            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em', 'nao_liberado_ignorado_em', 'campos_editados', 'pipefy_fase')`
       );
-      if (r.rows[0].n < 7) {
+      if (r.rows[0].n < 8) {
         await query(
           `ALTER TABLE pedidos_orcamento
               ADD COLUMN IF NOT EXISTS pecas_recusadas        TEXT,
@@ -51,7 +51,8 @@ function garantirColunas() {
               ADD COLUMN IF NOT EXISTS cancelado_status       TEXT,
               ADD COLUMN IF NOT EXISTS itens_alterados_em     TIMESTAMPTZ,
               ADD COLUMN IF NOT EXISTS nao_liberado_ignorado_em TIMESTAMPTZ,
-              ADD COLUMN IF NOT EXISTS campos_editados        JSONB`
+              ADD COLUMN IF NOT EXISTS campos_editados        JSONB,
+              ADD COLUMN IF NOT EXISTS pipefy_fase            TEXT`
         );
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
@@ -150,6 +151,13 @@ const STATUS_ADMIN = ['entrada', 'divergencia_entrada', 'liberado_orcar', 'orcan
 const STATUS_ANTES_APROVACAO = ['solicitacao', 'separando', 'separado', 'envio_orcamento', 'aguardando_aprovacao', 'aprovado_recusado'];
 // Saindo destas para Expedição, fecha o romaneio e cria a nota no Zen
 const STATUS_FINALIZA_ZEN = ['aprovado_recusado', 'em_manutencao', 'liberado_saida'];
+// Fase do Pipefy (pipe Orçamento BOXER SOLDAS) -> coluna aqui
+const FASE_PARA_STATUS = {
+  '309113139': 'entrada', '321786152': 'divergencia_entrada', '309251963': 'liberado_orcar',
+  '309113140': 'orcando', '344449850': 'solicitacao', '309113141': 'envio_orcamento',
+  '312761688': 'aguardando_aprovacao', '309113142': 'aprovado_recusado', '309252064': 'em_manutencao',
+  '309113144': 'nao_liberado', '309713436': 'liberado_saida', '309113145': 'finalizado', '310056658': 'sucata',
+};
 
 // GET /pedidos-orcamento/movimentos?de=AAAA-MM-DD&ate=AAAA-MM-DD&pedido=ID
 export async function listarMovimentos(req, res, next) {
@@ -600,33 +608,49 @@ export async function sincronizarPipefy(req, res, next) {
       }
     }
 
-    // Card chegou em "Aprovado/Recusado" no Pipefy -> coluna Aprovado/Recusado,
-    // com a tag do campo "Aprovação" (Aprovado / Aprovado Parcial / Recusado)
-    // e o campo "Peças Recusadas". Pedido que já teve as peças recusadas
-    // retiradas volta pra "Em Separação" e só segue depois de separado de novo.
-    let aprovadosRecusados = 0, naoLiberados = 0;
+    // Os cards seguem a fase do Pipefy (mesma visualização nos dois sistemas).
+    // Exceções (etapas do Zen):
+    //  • Em Separação fica até a separação terminar no Zen quando o Pipefy ainda
+    //    está antes da aprovação, ou quando as peças recusadas acabaram de ser
+    //    retiradas (volta pra separação e só segue depois de separado de novo);
+    //  • Separado fica enquanto o Pipefy estiver em "Requisitar Peças";
+    //  • Expedição: card com ordem de separação e sem nota no Zen não vai sozinho
+    //    (a nota é criada ao mover pra Expedição aqui) — fica marcado "No Pipefy: Expedição";
+    //  • card que voltou de "Não liberado" para Em Separação ignora essa fase.
+    let aprovadosRecusados = 0, naoLiberados = 0, movidosPipefy = 0;
     const acompanhados = await query(
-      `SELECT id, pipefy_card_id, status, aprovacao, nao_liberado_ignorado_em, pipefy_campos FROM pedidos_orcamento
+      `SELECT id, pipefy_card_id, status, aprovacao, nao_liberado_ignorado_em, pipefy_campos,
+              recusadas_retiradas_em, zen_ordem_separacao_id, zen_nota_id, pipefy_fase
+         FROM pedidos_orcamento
         WHERE pipefy_card_id IS NOT NULL
-          AND status NOT IN ('finalizado', 'cancelado', 'sucata')
-          AND NOT (recusadas_retiradas_em IS NOT NULL AND status IN ('solicitacao', 'separando'))
-          AND (status <> 'aprovado_recusado' OR aprovacao IS NULL OR recusadas_retiradas_em IS NULL)`
+          AND status NOT IN ('finalizado', 'cancelado', 'sucata')`
     );
     if (acompanhados.rows.length) {
       try {
         const situacao = await buscarSituacaoCards(acompanhados.rows.map(p => p.pipefy_card_id));
         for (const p of acompanhados.rows) {
           const s = situacao.get(String(p.pipefy_card_id));
+          if (!s) continue;
           // Todos os campos preenchidos do card (todas as fases) — mantém os
           // registros conectados que já tinham sido lidos (ex.: cadastro do cliente)
-          if (s?.campos?.length) {
+          const novosCampos = s.campos?.length ? (() => {
             const antigos = new Map((Array.isArray(p.pipefy_campos) ? p.pipefy_campos : []).filter(c => c?.id).map(c => [c.id, c]));
-            const novos = s.campos.map(c => (antigos.get(c.id)?.conectados ? { ...c, conectados: antigos.get(c.id).conectados } : c));
-            await query(`UPDATE pedidos_orcamento SET pipefy_campos = $1::jsonb, pipefy_sincronizado_em = NOW() WHERE id = $2`,
-              [JSON.stringify(novos), p.id]);
-          }
-          if (!STATUS_ANTES_APROVACAO.includes(p.status)) continue;   // admin já levou para outra coluna
-          if (s?.faseId === String(ORCAMENTO_PHASE_APROVADO_RECUSADO)) {
+            return s.campos.map(c => (antigos.get(c.id)?.conectados ? { ...c, conectados: antigos.get(c.id).conectados } : c));
+          })() : null;
+          await query(
+            `UPDATE pedidos_orcamento SET pipefy_campos = COALESCE($1::jsonb, pipefy_campos), pipefy_fase = $2, pipefy_sincronizado_em = NOW() WHERE id = $3`,
+            [novosCampos ? JSON.stringify(novosCampos) : null, s.faseNome || null, p.id]);
+
+          const alvo = FASE_PARA_STATUS[s.faseId];
+          if (!alvo) continue;
+          const antesDaAprovacao = ['solicitacao', 'envio_orcamento', 'aguardando_aprovacao'].includes(alvo);
+          if (p.status === 'separando' && (antesDaAprovacao || p.recusadas_retiradas_em)) continue;
+          if (p.status === 'separado' && alvo === 'solicitacao') continue;
+          if (alvo === 'nao_liberado' && p.nao_liberado_ignorado_em) continue;
+          if (alvo === 'finalizado' && p.zen_ordem_separacao_id && !p.zen_nota_id && p.status !== 'nao_liberado') continue;
+
+          if (alvo === 'aprovado_recusado') {
+            // Aprovação (Aprovado / Aprovado Parcial / Recusado) e "Peças Recusadas"
             await query(
               `UPDATE pedidos_orcamento
                   SET status = 'aprovado_recusado',
@@ -642,6 +666,7 @@ export async function sincronizarPipefy(req, res, next) {
                 descricao: `Card chegou em "Aprovado/Recusado" no Pipefy${s.aprovacao ? ` — ${s.aprovacao}` : ''}`,
                 detalhes: { aprovacao: s.aprovacao || null, pecas_recusadas: s.pecasRecusadas || null },
               });
+              aprovadosRecusados++;
             } else if (s.aprovacao && s.aprovacao !== p.aprovacao) {
               await registrarMovimento(p.id, 'aprovacao_pipefy', {
                 de: p.status, para: p.status, origem: 'sincronizacao', usuario: req.usuario,
@@ -649,19 +674,20 @@ export async function sincronizarPipefy(req, res, next) {
                 detalhes: { aprovacao: s.aprovacao, pecas_recusadas: s.pecasRecusadas || null },
               });
             }
-            aprovadosRecusados++;
-          } else if (s?.faseId === FASE_NAO_LIBERADO && !p.nao_liberado_ignorado_em && !(p.status === 'aprovado_recusado' && p.aprovacao === 'Não liberado')) {
-            // "Concluído - Não Liberado": orçamento não aprovado — vai para
-            // Aprovado/Recusado aqui, marcado como "Não liberado"
-            await query(
-              `UPDATE pedidos_orcamento SET status = 'aprovado_recusado', aprovacao = 'Não liberado', atualizado_em = NOW() WHERE id = $1`,
-              [p.id]);
-            await registrarMovimento(p.id, 'nao_liberado_pipefy', {
-              de: p.status, para: 'aprovado_recusado', origem: 'sincronizacao', usuario: req.usuario,
-              descricao: 'Card em "Concluído - Não Liberado" no Pipefy',
-            });
-            naoLiberados++;
+            continue;
           }
+          if (alvo === p.status) continue;
+          if (alvo === 'nao_liberado') {
+            await query(`UPDATE pedidos_orcamento SET status = 'nao_liberado', aprovacao = 'Não liberado', atualizado_em = NOW() WHERE id = $1`, [p.id]);
+            naoLiberados++;
+          } else {
+            await query(`UPDATE pedidos_orcamento SET status = $1, atualizado_em = NOW() WHERE id = $2`, [alvo, p.id]);
+          }
+          movidosPipefy++;
+          await registrarMovimento(p.id, 'fase_pipefy', {
+            de: p.status, para: alvo, origem: 'sincronizacao', usuario: req.usuario,
+            descricao: `Card movido no Pipefy para "${s.faseNome || NOME_STATUS[alvo]}"`,
+          });
         }
       } catch (err) {
         console.error('⚠️ Não consegui consultar a fase dos cards no Pipefy:', err.message);
@@ -670,10 +696,10 @@ export async function sincronizarPipefy(req, res, next) {
 
     await registrarMovimento(null, 'sincronizacao', {
       usuario: req.usuario, origem: 'sincronizacao',
-      descricao: `Atualizar (Pipefy/Zen): ${cards.length} card(s) em "Requisitar Peças" — ${novos} novo(s), ${reativados} reaberto(s), ${alterados} com peças alteradas, ${separados} separado(s), ${aprovadosRecusados} em Aprovado/Recusado, ${naoLiberados} não liberado(s)`,
-      detalhes: { total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados, naoLiberados },
+      descricao: `Atualizar (Pipefy/Zen): ${cards.length} card(s) em "Requisitar Peças" — ${novos} novo(s), ${reativados} reaberto(s), ${alterados} com peças alteradas, ${separados} separado(s), ${aprovadosRecusados} em Aprovado/Recusado, ${naoLiberados} não liberado(s), ${movidosPipefy} movido(s) conforme o Pipefy`,
+      detalhes: { total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados, naoLiberados, movidosPipefy },
     });
-    res.json({ total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados, naoLiberados });
+    res.json({ total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados, naoLiberados, movidosPipefy });
   } catch (err) { next(err); }
 }
 
@@ -759,7 +785,7 @@ export async function retirarRecusadas(req, res, next) {
     );
     const pedido = atual.rows[0];
     if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    if (pedido.status !== 'aprovado_recusado') {
+    if (!['aprovado_recusado', 'em_manutencao', 'liberado_saida'].includes(pedido.status)) {
       return res.status(400).json({ erro: 'Só dá pra retirar peças de pedidos na coluna Aprovado/Recusado.' });
     }
     if (pedido.recusadas_retiradas_em) {
