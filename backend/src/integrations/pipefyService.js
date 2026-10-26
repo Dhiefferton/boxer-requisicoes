@@ -263,6 +263,26 @@ export const ORCAMENTO_PHASE_APROVADO_RECUSADO = process.env.PIPEFY_ORCAMENTO_PH
  * Também traz "Peças Recusadas" (códigos a retirar quando Aprovado Parcial).
  * @returns {Map<string, { faseId, faseNome, aprovacao, pecasRecusadas }>}
  */
+/**
+ * Estrutura do pipe Orçamento: formulário inicial + fases, com os campos
+ * (id, rótulo, tipo, opções) na ordem do Pipefy. Cache de 1 hora.
+ */
+let estruturaCache = null, estruturaEm = 0;
+export async function estruturaPipeOrcamento() {
+  if (estruturaCache && Date.now() - estruturaEm < 3600000) return estruturaCache;
+  const d = await pipefyQuery(`query { pipe(id: ${ORCAMENTO_PIPE_ID}) {
+    start_form_fields { id label type options }
+    phases { id name fields { id label type options } } } }`);
+  const pipe = d?.pipe || {};
+  const campo = (f) => ({ id: f.id, rotulo: String(f.label || '').trim(), tipo: f.type, opcoes: f.options || [] });
+  estruturaCache = [
+    { faseId: 'inicio', nome: 'Abertura do card', campos: (pipe.start_form_fields || []).map(campo) },
+    ...(pipe.phases || []).map(ph => ({ faseId: String(ph.id), nome: ph.name, campos: (ph.fields || []).map(campo) })),
+  ];
+  estruturaEm = Date.now();
+  return estruturaCache;
+}
+
 export async function buscarSituacaoCards(cardIds) {
   const resultado = new Map();
   const ids = [...new Set((cardIds || []).map(String))];
@@ -303,6 +323,8 @@ export async function buscarSituacaoCards(cardIds) {
         faseNome:  card.current_phase?.name || null,
         aprovacao: valorTexto(campo?.value),
         pecasRecusadas: valorTexto(campoRecusadas?.value),
+        // Todos os campos preenchidos do card (todas as fases)
+        campos: fields.map(f => ({ id: f.field?.id || null, nome: f.name, valor: f.value })),
       });
     });
   }
