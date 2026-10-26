@@ -72,6 +72,8 @@ export const pedidosOrcamentoService = {
   atualizarItensZen: (id)        => api.post(`/pedidos-orcamento/${id}/atualizar-itens-zen`, {}, { timeout: 120000 }),
   sincronizarPipefy: ()          => api.post('/pedidos-orcamento/sincronizar-pipefy'),
   movimentos: (params)           => api.get('/pedidos-orcamento/movimentos', { params, timeout: 30000 }),
+  estrutura: ()                  => api.get('/pedidos-orcamento/estrutura', { timeout: 30000 }),
+  editarCampos: (id, campos)     => api.patch(`/pedidos-orcamento/${id}/campos`, { campos }),
 };
 
 export const inventarioService = {
