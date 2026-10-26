@@ -8,6 +8,7 @@
 //   • Frete por conta do emitente (ISSUER) · forma de pagamento 0
 //   • Vendedora = vendedora escolhida na tela (pessoa do Zen)
 //   • Código do pedido = nº do pedido da lojinha; observação "LB: <nº>"
+//   • Tag do pedido = ID da transação do pagamento na Loja Integrada (Mercado Pago)
 //   • Transportadora: Sedex/PAC = Correios, Próprio = Proprio, ou a escolhida
 //   • Itens: preço da tela; Assistente Autorizado = 23% de desconto em
 //     cada peça; o frete é rateado entre os itens (proporcional ao valor)
@@ -19,6 +20,7 @@
 // Idempotente: segue do status atual do pedido no Zen.
 // ============================================================
 import { getToken } from './erpZen.js';
+import { pedidoLIBruto, lojaIntegradaConfigurada } from './lojaIntegrada.js';
 
 const ZEN_BASE_URL = 'https://api.zenerp.app.br';
 const ZEN_TENANT   = 'boxer';
@@ -159,6 +161,15 @@ async function buscarPessoa(pedido) {
  * Cria (ou completa) o pedido da Lojinha no Zen até a ordem de separação.
  * @returns {{ zenPedidoId, ordemSeparacaoId, cfop }}
  */
+/** ID(s) da transação do pagamento do pedido na Loja Integrada (vazio se não achar) */
+async function transacaoLojinha(numero) {
+  try {
+    if (!lojaIntegradaConfigurada() || !/^\d+$/.test(String(numero || ''))) return '';
+    const li = await pedidoLIBruto(String(numero));
+    return [...new Set((li?.pagamentos || []).map(p => String(p?.transacao_id || '').trim()).filter(Boolean))].join(',');
+  } catch { return ''; }
+}
+
 export async function criarPedidoLojinhaZen(pedido) {
   if (!pedido.vendedora_id_zen) throw new Error('Vendedora sem cadastro no Zen.');
   const itens = calcularItens(pedido);
@@ -174,6 +185,7 @@ export async function criarPedidoLojinhaZen(pedido) {
   const cfop = cfopLojinha(pessoa);
   const perfil = perfilVendaLojinha(pessoa);
   const resultado = { zenPedidoId: null, ordemSeparacaoId: null, cfop: cfop.codigo, perfilVenda: perfil.nome };
+  const transacao = await transacaoLojinha(pedido.numero_pedido);
 
   // 1. Cabeçalho
   if (!zenPedidoId) {
@@ -187,6 +199,7 @@ export async function criarPedidoLojinhaZen(pedido) {
       personSalesperson:      { id: Number(pedido.vendedora_id_zen) },
       ...(transportadoraZen(pedido) ? { personShipping: { id: transportadoraZen(pedido) } } : {}),
       code:                   String(pedido.numero_pedido),
+      ...(transacao ? { tags: transacao } : {}),
       freightType:            'ISSUER',
       currency:               { id: CFG.currency },
       availabilityDate:       hojeSP(),
@@ -221,8 +234,10 @@ export async function criarPedidoLojinhaZen(pedido) {
         if (emb.product?.fiscalProfileProduct?.id) corpo.fiscalProfileProduct = { id: emb.product.fiscalProfileProduct.id };
         await zen('POST', '/sale/saleItem', corpo);
       }
-      if (venda.properties?.paymentMethods == null) {
-        venda.properties = { ...(venda.properties || {}), paymentMethods: '0' };
+      const semTag = transacao && !String(venda.tags || '').split(',').includes(transacao.split(',')[0]);
+      if (venda.properties?.paymentMethods == null || semTag) {
+        venda.properties = { ...(venda.properties || {}), paymentMethods: venda.properties?.paymentMethods ?? '0' };
+        if (semTag) venda.tags = [venda.tags, transacao].filter(Boolean).join(',');
         await zen('PUT', '/sale/sale', venda);
       }
       await zen('POST', `/sale/saleOpPrepare/${zenPedidoId}`);
