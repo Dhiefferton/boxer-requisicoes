@@ -85,7 +85,7 @@ export default function PedidosOrcamento() {
     setMsgSync('');
     try {
       const { data } = await pedidosOrcamentoService.sincronizarPipefy();
-      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s)${data.reativados ? `, ${data.reativados} reaberto(s)` : ''}${data.alterados ? `, ${data.alterados} com peças alteradas` : ''}. Zen: ${data.separados || 0} separado(s). Aprovado/Recusado: ${data.aprovadosRecusados || 0}${data.naoLiberados ? ` (+${data.naoLiberados} não liberado(s))` : ''}.`);
+      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s)${data.reativados ? `, ${data.reativados} reaberto(s)` : ''}${data.alterados ? `, ${data.alterados} com peças alteradas` : ''}. Zen: ${data.separados || 0} separado(s). Aprovado/Recusado: ${data.aprovadosRecusados || 0}${data.naoLiberados ? `, não liberado(s): ${data.naoLiberados}` : ''}. Movidos conforme o Pipefy: ${data.movidosPipefy || 0}.`);
       await carregar();
     } catch (err) {
       setMsgSync(err.response?.data?.erro || 'Erro ao sincronizar com o Pipefy.');
@@ -211,7 +211,10 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
   const parcial = aprovacao.includes('parcial');
   const codigosRecusados = separarCodigos(pedido.pecas_recusadas);
   const recusadosSet = new Set(codigosRecusados);
-  const precisaRetirar = parcial && pedido.status === 'aprovado_recusado' && !pedido.recusadas_retiradas_em;
+  const precisaRetirar = parcial && ['aprovado_recusado', 'em_manutencao', 'liberado_saida'].includes(pedido.status) && !pedido.recusadas_retiradas_em;
+  // Fase atual do card no Pipefy, quando é diferente da coluna daqui
+  const colunaAtual = COLUNAS.find(c => c.status === pedido.status);
+  const faseDiferente = pedido.pipefy_fase && semAcento(pedido.pipefy_fase) !== semAcento(colunaAtual?.titulo) ? pedido.pipefy_fase : null;
   const itensRetirados = Array.isArray(pedido.itens_recusados) ? pedido.itens_recusados : [];
   const [retirando, setRetirando] = useState(false);
   const proxima = precisaRetirar || !PROXIMA[pedido.status] ? null : COLUNAS.find(c => c.status === PROXIMA[pedido.status]);
@@ -330,6 +333,11 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
       )}
       {pedido.pipefy_card_id && (
         <span className="inline-block text-[10px] font-semibold text-[var(--c-destaque)] bg-[var(--c-destaque)]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
+      )}
+      {faseDiferente && (
+        <span title={pedido.status === 'separando' || pedido.status === 'separado' ? 'Etapa do Zen — segue o Pipefy quando a separação terminar'
+          : pedido.zen_ordem_separacao_id && !pedido.zen_nota_id && semAcento(faseDiferente) === 'expedicao' ? 'Mova para Expedição aqui para fechar o romaneio e criar a nota no Zen' : undefined}
+          className="inline-block ml-1 text-[10px] font-semibold text-amber-300 bg-amber-500/15 rounded px-1.5 py-0.5">No Pipefy: {faseDiferente}</span>
       )}
       {pedido.zen_pedido_id && (
         <a href={`${ZEN_APP_URL}/sale/sale?q=id==${pedido.zen_pedido_id}`} target="_blank" rel="noreferrer" title="Abrir pedido no Zen"
