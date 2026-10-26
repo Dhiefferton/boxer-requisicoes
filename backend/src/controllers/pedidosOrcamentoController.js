@@ -39,16 +39,17 @@ function garantirColunas() {
       const r = await query(
         `SELECT COUNT(*)::int AS n FROM information_schema.columns
           WHERE table_name = 'pedidos_orcamento'
-            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em')`
+            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em', 'nao_liberado_ignorado_em')`
       );
-      if (r.rows[0].n < 5) {
+      if (r.rows[0].n < 6) {
         await query(
           `ALTER TABLE pedidos_orcamento
               ADD COLUMN IF NOT EXISTS pecas_recusadas        TEXT,
               ADD COLUMN IF NOT EXISTS recusadas_retiradas_em TIMESTAMPTZ,
               ADD COLUMN IF NOT EXISTS itens_recusados        JSONB,
               ADD COLUMN IF NOT EXISTS cancelado_status       TEXT,
-              ADD COLUMN IF NOT EXISTS itens_alterados_em     TIMESTAMPTZ`
+              ADD COLUMN IF NOT EXISTS itens_alterados_em     TIMESTAMPTZ,
+              ADD COLUMN IF NOT EXISTS nao_liberado_ignorado_em TIMESTAMPTZ`
         );
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
@@ -293,6 +294,49 @@ export async function moverPedido(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// POST /pedidos-orcamento/:id/voltar-separacao (admin)
+// Card que foi para "Concluído - Não Liberado" no Pipefy antes de ter o pedido
+// e a ordem de separação no Zen: cria o pedido de venda + ordem de separação
+// (se ainda não existir) e volta o card para "Em Separação". A partir daí a
+// sincronização não puxa mais esse card de volta para "Não liberado".
+export async function voltarParaSeparacao(id, usuario) {
+  await garantirColunas();
+  const pedido = (await query(`SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`, [parseInt(id)])).rows[0];
+  if (!pedido) throw Object.assign(new Error('Pedido não encontrado.'), { status: 404 });
+  if (pedido.status === 'finalizado') throw Object.assign(new Error('Pedido já finalizado.'), { status: 400 });
+  let zen = null;
+  if (!pedido.zen_pedido_id || !pedido.zen_ordem_separacao_id) {
+    try {
+      zen = await criarPedidoVendaZen(pedido);
+    } catch (err) {
+      await query(`UPDATE pedidos_orcamento SET zen_pedido_id = COALESCE($1, zen_pedido_id), zen_erro = $2, atualizado_em = NOW() WHERE id = $3`,
+        [err.zenPedidoId || null, err.message.slice(0, 1000), pedido.id]);
+      await registrarMovimento(pedido.id, 'erro_zen', { de: pedido.status, para: 'separando', usuario,
+        descricao: `Falha ao criar o pedido no Zen: ${err.message.slice(0, 500)}`, detalhes: { acao: 'criar_pedido' } });
+      throw Object.assign(new Error(`Não foi possível criar o pedido no ZenERP: ${err.message}`), { status: 502 });
+    }
+  }
+  await query(
+    `UPDATE pedidos_orcamento
+        SET status = 'separando', aprovacao = NULL, nao_liberado_ignorado_em = NOW(),
+            zen_pedido_id = COALESCE($1, zen_pedido_id), zen_ordem_separacao_id = COALESCE($2, zen_ordem_separacao_id),
+            zen_erro = NULL, zen_enviado_em = COALESCE(zen_enviado_em, NOW()), atualizado_em = NOW()
+      WHERE id = $3`,
+    [zen?.zenPedidoId || null, zen?.ordemSeparacaoId || null, pedido.id]);
+  await registrarMovimento(pedido.id, 'movido', {
+    de: pedido.status, para: 'separando', usuario,
+    detalhes: zen ? { zen_pedido_id: zen.zenPedidoId, ordem_separacao: zen.ordemSeparacaoId } : null,
+    descricao: zen
+      ? `Voltou para Em Separação — pedido de venda #${zen.zenPedidoId} e ordem de separação #${zen.ordemSeparacaoId} criados no Zen`
+      : 'Voltou para Em Separação',
+  });
+  return { sucesso: true, zen_pedido_id: zen?.zenPedidoId || pedido.zen_pedido_id, zen_ordem_separacao_id: zen?.ordemSeparacaoId || pedido.zen_ordem_separacao_id };
+}
+export async function voltarSeparacaoRota(req, res, next) {
+  try { res.json(await voltarParaSeparacao(req.params.id, req.usuario)); }
+  catch (err) { if (err.status) return res.status(err.status).json({ erro: err.message }); next(err); }
+}
+
 // PATCH /pedidos-orcamento/:id — edita referência/observações
 export async function editarPedido(req, res, next) {
   try {
@@ -510,7 +554,7 @@ export async function sincronizarPipefy(req, res, next) {
     // retiradas volta pra "Em Separação" e só segue depois de separado de novo.
     let aprovadosRecusados = 0, naoLiberados = 0;
     const acompanhados = await query(
-      `SELECT id, pipefy_card_id, status, aprovacao FROM pedidos_orcamento
+      `SELECT id, pipefy_card_id, status, aprovacao, nao_liberado_ignorado_em FROM pedidos_orcamento
         WHERE pipefy_card_id IS NOT NULL
           AND status NOT IN ('finalizado', 'cancelado')
           AND NOT (recusadas_retiradas_em IS NOT NULL AND status IN ('solicitacao', 'separando'))
@@ -545,7 +589,7 @@ export async function sincronizarPipefy(req, res, next) {
               });
             }
             aprovadosRecusados++;
-          } else if (s?.faseId === FASE_NAO_LIBERADO && !(p.status === 'aprovado_recusado' && p.aprovacao === 'Não liberado')) {
+          } else if (s?.faseId === FASE_NAO_LIBERADO && !p.nao_liberado_ignorado_em && !(p.status === 'aprovado_recusado' && p.aprovacao === 'Não liberado')) {
             // "Concluído - Não Liberado": orçamento não aprovado — vai para
             // Aprovado/Recusado aqui, marcado como "Não liberado"
             await query(
