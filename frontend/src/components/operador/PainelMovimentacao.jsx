@@ -34,6 +34,7 @@ const TIPOS = {
   erro_zen:                  { label: 'Erro no Zen',             cor: 'bg-red-500/15 text-red-400' },
   sincronizacao:             { label: 'Atualizar (sincronização)', cor: 'bg-[var(--c-borda)] text-[var(--c-suave)]' },
   campos_editados:           { label: 'Campos editados',         cor: 'bg-amber-500/15 text-amber-400' },
+  fase_pipefy:               { label: 'Fase do Pipefy',          cor: 'bg-[var(--c-destaque)]/15 text-[var(--c-destaque)]' },
 };
 const tipoInfo = (t) => TIPOS[t] || { label: t, cor: 'bg-[var(--c-borda)] text-[var(--c-suave)]' };
 
