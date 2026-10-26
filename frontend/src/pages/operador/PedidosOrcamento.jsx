@@ -6,20 +6,19 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity, History, Search, X } from 'lucide-react';
+import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity, History, Search, X, ListTree, MoveRight, EyeOff, Eye } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { podeEditarOrcamentos } from '../../utils/acessoOrcamentos';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
+import CamposCardOrcamento from '../../components/operador/CamposCardOrcamento';
+import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN } from '../../utils/fasesOrcamento';
 
-const COLUNAS = [
-  { status: 'solicitacao', titulo: 'Solicitado',  resumo: 'Solicitados',  cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
-  { status: 'separando',   titulo: 'Em Separação', resumo: 'Em Separação', cor: 'border-amber-500/40',  badge: 'bg-amber-500/15 text-amber-400' },
-  { status: 'separado',    titulo: 'Separado',    resumo: 'Separados',    cor: 'border-purple-500/40', badge: 'bg-purple-500/15 text-purple-400' },
-  { status: 'aprovado_recusado', titulo: 'Aprovado/Recusado', resumo: 'Aprovados/Recusados', cor: 'border-cyan-500/40', badge: 'bg-cyan-500/15 text-cyan-400' },
-  { status: 'finalizado',  titulo: 'Finalizado',  resumo: 'Finalizados',  cor: 'border-green-500/40',  badge: 'bg-green-500/15 text-green-400' },
-];
+// Colunas: fases do Pipefy + Em Separação / Separado (utils/fasesOrcamento.js).
+// Colunas novas só o admin move; o fluxo de sempre continua igual:
+// Requisitar Peças -> Em Separação (cria no Zen), Aprovado/Recusado -> Expedição (nota no Zen).
+const PROXIMA = { solicitacao: 'separando', aprovado_recusado: 'finalizado' };
 
 const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
 
@@ -64,6 +63,10 @@ export default function PedidosOrcamento() {
   const [msgSync, setMsgSync] = useState('');
   const [verMovimentacao, setVerMovimentacao] = useState(false);
   const [busca, setBusca] = useState('');
+  const [ocultarVazias, setOcultarVazias] = useState(() => { try { return localStorage.getItem('orc_ocultar_vazias') === '1'; } catch { return false; } });
+  function alternarVazias() {
+    setOcultarVazias(v => { try { localStorage.setItem('orc_ocultar_vazias', v ? '0' : '1'); } catch { /* sem storage */ } return !v; });
+  }
 
   async function carregar() {
     try {
@@ -75,7 +78,7 @@ export default function PedidosOrcamento() {
 
   useEffect(() => { carregar(); }, []);
 
-  const ativos = pedidos.filter(p => p.status !== 'finalizado' && p.status !== 'cancelado').length;
+  const ativos = pedidos.filter(p => !['finalizado', 'cancelado', 'sucata'].includes(p.status)).length;
 
   async function sincronizarPipefy() {
     setSincronizando(true);
@@ -125,6 +128,10 @@ export default function PedidosOrcamento() {
             {sincronizando ? 'Atualizando...' : 'Atualizar'}
           </button>
           )}
+          <button onClick={alternarVazias} title={ocultarVazias ? 'Mostrar colunas vazias' : 'Esconder colunas vazias'}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]">
+            {ocultarVazias ? <Eye size={13} /> : <EyeOff size={13} />} {ocultarVazias ? 'Mostrar vazias' : 'Esconder vazias'}
+          </button>
           <button onClick={carregar} disabled={loading} title="Recarregar"
             className="p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)] transition-colors">
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -139,11 +146,12 @@ export default function PedidosOrcamento() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 xl:grid-rows-1 xl:flex-1 xl:min-h-0 gap-4">
-          {COLUNAS.map(({ status, titulo, cor, badge }) => {
+        <div className="flex gap-4 overflow-x-auto pb-2 xl:flex-1 xl:min-h-0">
+          {COLUNAS.map(({ status, titulo, cor, badge, arquivada, admin }) => {
             const itens = pedidos.filter(p => p.status === status && combinaBusca(p, busca));
+            if (ocultarVazias && !itens.length) return null;
             return (
-              <Coluna key={`${status}${busca ? '-busca' : ''}`} titulo={titulo} cor={cor} badge={badge} total={itens.length} arquivada={status === 'finalizado' && !busca}>
+              <Coluna key={`${status}${busca ? '-busca' : ''}`} titulo={titulo} cor={cor} badge={badge} total={itens.length} arquivada={arquivada && !busca} soAdmin={admin}>
                 {itens.length === 0 ? (
                   <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
                     <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem pedidos'}</p>
@@ -162,12 +170,12 @@ export default function PedidosOrcamento() {
   );
 }
 
-function Coluna({ titulo, cor, badge, total, arquivada = false, children }) {
+function Coluna({ titulo, cor, badge, total, arquivada = false, soAdmin = false, children }) {
   // Finalizado: arquivado — lista fechada, abre na seta
   const [aberta, setAberta] = useState(!arquivada);
   const pilula = <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>;
   return (
-    <div className="space-y-2 min-w-0 xl:min-h-0 xl:flex xl:flex-col">
+    <div className="space-y-2 w-[17.5rem] shrink-0 xl:min-h-0 xl:flex xl:flex-col">
       <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[var(--c-superficie)] xl:shrink-0`}>
         {arquivada ? (
           <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1.5 text-[var(--c-suave)] hover:text-[var(--c-texto)]">
@@ -176,7 +184,7 @@ function Coluna({ titulo, cor, badge, total, arquivada = false, children }) {
             {pilula}
           </button>
         ) : (
-          <div className="flex items-center gap-2">{pilula}</div>
+          <div className="flex items-center gap-2" title={soAdmin ? 'Coluna do Pipefy — só o admin move cards aqui' : undefined}>{pilula}</div>
         )}
         <span className="text-xs font-bold text-[var(--c-suave)]">{total}</span>
       </div>
@@ -196,7 +204,6 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
   const [mudando, setMudando] = useState(false);
   const itens = pedido.itens || [];
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
-  const indiceAtual = COLUNAS.findIndex(c => c.status === pedido.status);
   // Automáticos (via "Atualizar"): Separando -> Separado (reserva finalizada no Zen)
   // e -> Aprovado/Recusado (fase do card no Pipefy)
   const aprovacao = String(pedido.aprovacao || '').toLowerCase();
@@ -207,7 +214,22 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
   const precisaRetirar = parcial && pedido.status === 'aprovado_recusado' && !pedido.recusadas_retiradas_em;
   const itensRetirados = Array.isArray(pedido.itens_recusados) ? pedido.itens_recusados : [];
   const [retirando, setRetirando] = useState(false);
-  const proxima = ['separando', 'separado'].includes(pedido.status) || precisaRetirar ? null : COLUNAS[indiceAtual + 1];
+  const proxima = precisaRetirar || !PROXIMA[pedido.status] ? null : COLUNAS.find(c => c.status === PROXIMA[pedido.status]);
+  const [verCampos, setVerCampos] = useState(false);
+  const [movendoPara, setMovendoPara] = useState(false);
+  // Admin: mover para qualquer coluna
+  async function moverPara(status) {
+    if (!status || status === pedido.status) return;
+    const destino = COLUNAS.find(c => c.status === status);
+    const avisoZen = status === 'separando' && pedido.status === 'solicitacao' ? '\n\nIsso cria o pedido de venda e a ordem de separação no Zen.'
+      : status === 'finalizado' && pedido.zen_ordem_separacao_id && !pedido.zen_nota_id && ['aprovado_recusado', 'em_manutencao', 'liberado_saida'].includes(pedido.status)
+        ? '\n\nIsso fecha o romaneio e cria a nota fiscal no Zen.' : '';
+    if (!confirm(`Mover este card para "${destino?.titulo || status}"?${avisoZen}`)) return;
+    setMovendoPara(true);
+    try { await pedidosOrcamentoService.mover(pedido.id, status); onAtualizar(); }
+    catch (err) { alert(err.response?.data?.erro || 'Erro ao mover.'); onAtualizar(); }
+    finally { setMovendoPara(false); }
+  }
 
   async function avancar() {
     setMudando(true);
@@ -282,6 +304,8 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
       <div className="flex items-center gap-1.5">
         <FileText size={13} className="text-[var(--c-destaque)] shrink-0" />
         <p className="text-sm text-[var(--c-texto)] font-medium flex-1">{pedido.cliente_nome || pedido.referencia}</p>
+        <button onClick={() => setVerCampos(true)} title="Todos os campos do card"
+          className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ListTree size={13} /></button>
         {ehAdmin && (
           <button onClick={() => setVerHistorico(true)} title="Histórico deste card"
             className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><History size={13} /></button>
@@ -291,6 +315,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
             className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
         )}
       </div>
+      {verCampos && <CamposCardOrcamento pedido={pedido} ehAdmin={ehAdmin} onFechar={() => setVerCampos(false)} onSalvo={onAtualizar} />}
       {ehAdmin && verHistorico && (
         <PainelMovimentacao pedidoInicial={{ id: pedido.id, nome: pedido.cliente_nome || pedido.referencia }}
           onFechar={() => setVerHistorico(false)} />
@@ -396,6 +421,16 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
       {pedido.observacoes && <p className="text-xs text-[var(--c-suave)]">{pedido.observacoes}</p>}
       <p className="text-[11px] text-[var(--c-suave)]">{formatarData(pedido.created_at)} · por {pedido.criado_por_nome || '—'}</p>
 
+      {ehAdmin && (
+        <label className="flex items-center gap-1.5 text-[11px] text-[var(--c-suave)]">
+          <MoveRight size={12} className="shrink-0" />
+          <select value="" disabled={movendoPara} onChange={e => moverPara(e.target.value)}
+            className="flex-1 min-w-0 bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-1.5 py-1 text-[11px] text-[var(--c-texto)] disabled:opacity-40">
+            <option value="">{movendoPara ? 'Movendo…' : 'Mover para… (admin)'}</option>
+            {COLUNAS.filter(c => c.status !== pedido.status).map(c => <option key={c.status} value={c.status}>{c.titulo}</option>)}
+          </select>
+        </label>
+      )}
       {podeEditar && (
       <div className="flex gap-2 pt-1">
         {ehAdmin && podeAtualizarItens && (itensAlterados || !precisaRetirar) && (
@@ -413,7 +448,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
             {retirando ? 'Retirando no Zen...' : <><Scissors size={13} /> Retirar peças recusadas no Zen</>}
           </button>
         )}
-        {proxima && (
+        {proxima && !(STATUS_SO_ADMIN.includes(pedido.status) && !ehAdmin) && (
           <button onClick={avancar} disabled={mudando}
             className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 disabled:opacity-40">
             {mudando ? (proxima.status === 'separando' ? 'Criando pedido no Zen...' : proxima.status === 'finalizado' ? 'Finalizando no Zen...' : 'Movendo...') : <>Mover p/ {proxima.titulo} <ArrowRight size={13} /></>}
