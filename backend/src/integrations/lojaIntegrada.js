@@ -127,3 +127,6 @@ export async function contatoClienteLI(numero) {
     };
   } catch { return {}; }
 }
+
+// Leitura crua de um caminho da API (diagnóstico)
+export const getLIBruto = (caminho) => getLI(caminho);
