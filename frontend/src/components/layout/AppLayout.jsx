@@ -122,7 +122,7 @@ export default function AppLayout({ children }) {
 
       {/* ── Header (celular) ────────────────────────────────── */}
       <header className="md:hidden sticky top-0 z-40 bg-[var(--c-fundo)]/95 backdrop-blur border-b border-[var(--c-borda)]">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+        <div className="w-full px-3 sm:px-4 md:px-6 h-14 flex items-center justify-between gap-3">
 
           <div className="flex items-center gap-2.5 shrink-0">
             <div className="w-7 h-7 rounded-lg bg-[var(--c-destaque)] flex items-center justify-center">
@@ -193,7 +193,7 @@ export default function AppLayout({ children }) {
         )}
       </header>
 
-      <main className="flex-1 max-w-[1600px] mx-auto w-full min-w-0 px-3 sm:px-4 md:px-6 py-4 sm:py-6">{children}</main>
+      <main className="flex-1 w-full min-w-0 px-3 sm:px-4 md:px-6 py-4 sm:py-6">{children}</main>
 
       {/* Nav inferior mobile */}
       <nav className="md:hidden sticky bottom-0 z-40 bg-[var(--c-fundo)]/95 backdrop-blur border-t border-[var(--c-borda)] pb-[env(safe-area-inset-bottom)]">
