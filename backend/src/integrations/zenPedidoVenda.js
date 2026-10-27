@@ -93,16 +93,30 @@ function mascararDocumento(doc) {
   return null;
 }
 
-export async function buscarClienteZen(documento) {
+// Busca o cliente pelo CNPJ/CPF. Se o documento do card estiver errado
+// (dígito a mais/a menos) ou não achar, tenta pelo nome exato do cliente —
+// só aceita se houver UM cadastro com esse nome no Zen.
+export async function buscarClienteZen(documento, nome) {
   const mascarado = mascararDocumento(documento);
-  if (!mascarado) throw new Error(`CNPJ/CPF do cliente inválido ou vazio no card ("${documento || ''}").`);
-  const digitos = mascarado.replace(/\D/g, '');
-  for (const valor of [mascarado, digitos]) {
-    const lista = await zen('GET', `/catalog/person/person?q=${q(`documentNumber=="${valor}"`)}&max=2`);
-    if (Array.isArray(lista) && lista.length > 0) {
-      return zen('GET', `/catalog/person/person/${lista[0].id}`);
+  if (mascarado) {
+    const digitos = mascarado.replace(/\D/g, '');
+    for (const valor of [mascarado, digitos]) {
+      const lista = await zen('GET', `/catalog/person/person?q=${q(`documentNumber=="${valor}"`)}&max=2`);
+      if (Array.isArray(lista) && lista.length > 0) {
+        return zen('GET', `/catalog/person/person/${lista[0].id}`);
+      }
     }
   }
+  const n = String(nome || '').trim().replace(/"/g, '');
+  if (n) {
+    const lista = await zen('GET', `/catalog/person/person?q=${q(`name=="${n}"`)}&max=3`);
+    if (Array.isArray(lista) && lista.length === 1) {
+      const pessoa = await zen('GET', `/catalog/person/person/${lista[0].id}`);
+      pessoa._achadoPeloNome = true;
+      return pessoa;
+    }
+  }
+  if (!mascarado) throw new Error(`CNPJ/CPF do cliente inválido no card ("${documento || ''}") e não achei "${n || '—'}" pelo nome no Zen. Corrija o CNPJ/CPF do card.`);
   throw new Error(`Cliente ${mascarado} não está cadastrado no Zen. Cadastre o cliente no Zen e tente de novo.`);
 }
 
@@ -165,7 +179,7 @@ export async function criarPedidoVendaZen(pedido) {
 
   // 1–2. Cabeçalho
   if (!zenPedidoId) {
-    cliente = baixa ? await zen('GET', `/catalog/person/person/${CFG.pessoaTekweld}`) : await buscarClienteZen(pedido.cliente_cnpj);
+    cliente = baixa ? await zen('GET', `/catalog/person/person/${CFG.pessoaTekweld}`) : await buscarClienteZen(pedido.cliente_cnpj, pedido.cliente_nome);
     const obs = montarObservacoes(pedido);
     const venda = await zen('POST', '/sale/sale', {
       company:                { id: CFG.company },
