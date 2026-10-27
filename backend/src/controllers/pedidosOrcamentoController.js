@@ -8,7 +8,7 @@
 import { z } from 'zod';
 import { query } from '../config/db.js';
 import {
-  pipefyQuery, listarCardsDaFase, extrairDadosOrcamento,
+  pipefyQuery, listarCardsDaFase, extrairDadosOrcamento, listarCardsNovosOrcamento,
   buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO, estruturaPipeOrcamento,
 } from '../integrations/pipefyService.js';
 import {
@@ -151,6 +151,8 @@ const STATUS_ADMIN = ['entrada', 'divergencia_entrada', 'liberado_orcar', 'orcan
 const STATUS_ANTES_APROVACAO = ['solicitacao', 'separando', 'separado', 'envio_orcamento', 'aguardando_aprovacao', 'aprovado_recusado'];
 // Saindo destas para Expedição, fecha o romaneio e cria a nota no Zen
 const STATUS_FINALIZA_ZEN = ['aprovado_recusado', 'em_manutencao', 'liberado_saida'];
+// Cards criados no Pipefy a partir daqui entram em qualquer fase (27/10/2026 00:00 de Brasília)
+const CARDS_NOVOS_DESDE = '2026-10-27T03:00:00Z';
 // Fase do Pipefy (pipe Orçamento BOXER SOLDAS) -> coluna aqui
 const FASE_PARA_STATUS = {
   '309113139': 'entrada', '321786152': 'divergencia_entrada', '309251963': 'liberado_orcar',
@@ -579,6 +581,47 @@ export async function sincronizarPipefy(req, res, next) {
         });
       } else atualizados++;
     }
+
+    // Cards criados no Pipefy a partir de 27/10/2026 entram aqui em qualquer fase
+    // (Entrada, Liberado p/ Orçar, Orçando…), já na coluna da fase atual.
+    // Busca os atualizados nos últimos 7 dias (filtro do Pipefy) e importa os que faltam.
+    let novosPipe = 0;
+    try {
+      const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
+      const atualizadosDesde = desde7 > CARDS_NOVOS_DESDE ? desde7 : CARDS_NOVOS_DESDE;
+      const recentes = await listarCardsNovosOrcamento(CARDS_NOVOS_DESDE, atualizadosDesde);
+      if (recentes.length) {
+        const ja = new Set((await query(`SELECT pipefy_card_id FROM pedidos_orcamento WHERE pipefy_card_id = ANY($1::text[])`,
+          [recentes.map(c => c.id)])).rows.map(r => String(r.pipefy_card_id)));
+        for (const card of recentes) {
+          if (ja.has(card.id)) continue;
+          const status = FASE_PARA_STATUS[card.faseId];
+          if (!status) continue;
+          const d = extrairDadosOrcamento(card);
+          const r = await query(
+            `INSERT INTO pedidos_orcamento
+               (referencia, pipefy_card_id, pipefy_campos, pipefy_url, pipefy_sincronizado_em, pipefy_fase, status,
+                cliente_nome, cliente_cnpj, tecnico, frete_por_conta, entregue_por, ns_entrada, itens, criado_por, created_at)
+             VALUES ($1, $2, $3::jsonb, $4, NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, COALESCE($15::timestamptz, NOW()))
+             ON CONFLICT (pipefy_card_id) WHERE pipefy_card_id IS NOT NULL DO NOTHING
+             RETURNING id`,
+            [(d.cliente_nome || card.titulo || `Card ${card.id}`).slice(0, 255), card.id, JSON.stringify(card.campos), card.url || null,
+             card.faseNome, status, d.cliente_nome, d.cliente_cnpj, d.tecnico, d.frete_por_conta, d.entregue_por, d.ns_entrada,
+             JSON.stringify(d.itens), req.usuario.id, card.criadoEm || null]);
+          if (r.rows[0]) {
+            novosPipe++;
+            await registrarMovimento(r.rows[0].id, 'importado', {
+              para: status, usuario: req.usuario, origem: 'sincronizacao',
+              descricao: `Card novo importado do Pipefy (fase "${card.faseNome}")`,
+              detalhes: { pipefy_card_id: card.id },
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error('⚠️ Não consegui buscar os cards novos do Pipefy:', err.message);
+    }
+    novos += novosPipe;
 
     // Separando -> Separado: quando a reserva da ordem de separação é finalizada no Zen
     let separados = 0;
