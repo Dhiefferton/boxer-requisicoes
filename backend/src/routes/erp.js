@@ -2,7 +2,7 @@ import express from 'express';
 import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncErpEstoque.js';
 import { getToken } from '../integrations/erpZen.js';
 import { pipefyQuery } from '../integrations/pipefyService.js';
-import { pedidoLIBruto, buscarPedidoLI, tentativasLI } from '../integrations/lojaIntegrada.js';
+import { pedidoLIBruto, buscarPedidoLI, tentativasLI, getLIBruto } from '../integrations/lojaIntegrada.js';
 import { fasesDosCards } from '../integrations/pipefyLojinha.js';
 import { query } from '../config/db.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
@@ -77,7 +77,10 @@ router.get('/debug-fases', async (req, res) => {
 router.get('/debug-li', async (req, res) => {
   if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
   const numero = String(req.query.numero || '').replace(/\D/g, '');
-  try { res.json({ mapeado: await buscarPedidoLI(numero), bruto: req.query.bruto ? await pedidoLIBruto(numero) : undefined }); }
+  try {
+    if (req.query.path) return res.json({ dados: await getLIBruto(String(req.query.path)) });
+    res.json({ mapeado: await buscarPedidoLI(numero), bruto: req.query.bruto ? await pedidoLIBruto(numero) : undefined });
+  }
   catch (e) { res.status(e.status || 502).json({ erro: e.message, tentativas: tentativasLI }); }
 });
 
