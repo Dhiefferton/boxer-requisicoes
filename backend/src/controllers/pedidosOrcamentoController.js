@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { query } from '../config/db.js';
 import {
   pipefyQuery, listarCardsDaFase, extrairDadosOrcamento, listarCardsNovosOrcamento,
-  buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO, estruturaPipeOrcamento,
+  buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO, estruturaPipeOrcamento, CAMPO_DOC_CLIENTE,
 } from '../integrations/pipefyService.js';
 import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
@@ -249,7 +249,7 @@ export async function moverPedido(req, res, next) {
     // Solicitação -> Separando: cria o pedido de venda no ZenERP antes de mover.
     // Se o Zen falhar, o card fica onde está e o erro aparece na tela.
     let zen = null;
-    if (pedido.status === 'solicitacao' && status === 'separando' && pedido.pipefy_card_id) {
+    if (pedido.status === 'solicitacao' && status === 'separando' && (pedido.pipefy_card_id || (pedido.itens || []).length)) {
       try {
         zen = await criarPedidoVendaZen(pedido);
         await query(
@@ -380,8 +380,16 @@ export async function editarCampos(req, res, next) {
     await garantirColunas();
     const campos = req.body?.campos;
     if (!campos || typeof campos !== 'object' || Array.isArray(campos)) return res.status(400).json({ erro: 'Envie { campos: { id_do_campo: valor } }.' });
-    const atual = (await query(`SELECT id, campos_editados FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`, [parseInt(req.params.id)])).rows[0];
+    const atual = (await query(`SELECT id, campos_editados, pipefy_card_id, pipefy_campos FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`, [parseInt(req.params.id)])).rows[0];
     if (!atual) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (!atual.pipefy_card_id) {
+      // Card criado aqui: os campos são do próprio card
+      await salvarCamposNativos(atual, campos);
+      await registrarMovimento(atual.id, 'campos_editados', {
+        usuario: req.usuario, descricao: `Campos do card preenchidos: ${Object.keys(campos).join(', ')}`, detalhes: campos,
+      });
+      return res.json({ sucesso: true });
+    }
     const novo = { ...(atual.campos_editados || {}) };
     const alterados = {};
     for (const [k, v] of Object.entries(campos)) {
@@ -396,6 +404,55 @@ export async function editarCampos(req, res, next) {
       usuario: req.usuario, descricao: `Campos do card editados: ${Object.keys(alterados).join(', ')}`, detalhes: alterados,
     });
     res.json({ sucesso: true, campos_editados: novo });
+  } catch (err) { next(err); }
+}
+
+// ── Cards criados direto no B-Requisições (sem Pipefy) ─────────
+// Os campos ficam em pipefy_campos (mesmo formato dos cards do Pipefy:
+// [{ id, nome, valor }]) e os dados usados no Zen (cliente, CNPJ, técnico,
+// NS, peças…) são recalculados a cada edição, como na sincronização.
+async function salvarCamposNativos(pedido, novos) {
+  const estrutura = await estruturaPipeOrcamento();
+  const rotulos = new Map(estrutura.flatMap(f => f.campos.map(c => [c.id, c.rotulo])));
+  const lista = (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).filter(c => c?.id);
+  const porId = new Map(lista.map(c => [c.id, c]));
+  for (const [k, v] of Object.entries(novos || {})) {
+    if (!/^[a-z0-9_]{1,80}$/i.test(k)) continue;
+    const valor = v == null ? '' : String(v).slice(0, 5000);
+    if (valor === '') porId.delete(k);
+    else porId.set(k, { id: k, nome: rotulos.get(k) || porId.get(k)?.nome || k, valor });
+  }
+  const campos = [...porId.values()];
+  const d = extrairDadosOrcamento({ campos, titulo: null });
+  const doc = String(campos.find(c => c.id === CAMPO_DOC_CLIENTE)?.valor || '').trim() || d.cliente_cnpj;
+  await query(
+    `UPDATE pedidos_orcamento
+        SET pipefy_campos = $1::jsonb, referencia = COALESCE($2, referencia), cliente_nome = $2, cliente_cnpj = $3,
+            tecnico = $4, frete_por_conta = $5, entregue_por = $6, ns_entrada = $7,
+            itens = CASE WHEN recusadas_retiradas_em IS NULL THEN $8::jsonb ELSE itens END, atualizado_em = NOW()
+      WHERE id = $9`,
+    [JSON.stringify(campos), d.cliente_nome ? d.cliente_nome.slice(0, 255) : null, doc || null, d.tecnico, d.frete_por_conta,
+     d.entregue_por, d.ns_entrada, JSON.stringify(d.itens), pedido.id]);
+}
+
+// POST /pedidos-orcamento/novo-card (admin) — cria o card aqui, na coluna
+// Entrada, com os campos do formulário inicial do Pipefy
+export async function criarCardBoxer(req, res, next) {
+  try {
+    await garantirColunas();
+    const campos = req.body?.campos || {};
+    const estrutura = await estruturaPipeOrcamento();
+    const inicio = estrutura.find(f => f.faseId === 'inicio')?.campos || [];
+    const faltando = inicio.filter(c => c.obrigatorio && c.tipo !== 'id' && !String(campos[c.id] ?? '').replace(/[\[\]"]/g, '').trim());
+    if (faltando.length) return res.status(400).json({ erro: `Preencha: ${faltando.map(c => c.rotulo).join(', ')}.` });
+    const ins = await query(
+      `INSERT INTO pedidos_orcamento (referencia, status, criado_por, pipefy_campos) VALUES ('Card novo', 'entrada', $1, '[]'::jsonb) RETURNING *`,
+      [req.usuario.id]);
+    await salvarCamposNativos(ins.rows[0], campos);
+    await registrarMovimento(ins.rows[0].id, 'criado_manual', {
+      para: 'entrada', usuario: req.usuario, descricao: 'Card criado no B-Requisições',
+    });
+    res.status(201).json({ id: ins.rows[0].id });
   } catch (err) { next(err); }
 }
 
