@@ -472,3 +472,47 @@ export async function excluirCardPipefy(cardId) {
     console.error(`❌ Erro ao excluir card ${cardId} do Pipefy:`, err.message);
   }
 }
+
+// ── Edição dos campos de um card do Pipefy (feita pelo admin no B-Requisições) ──
+// Tipos que dá para gravar com updateCardField. Anexos, conexões, responsáveis
+// e etiquetas ficam só no B-Requisições.
+export const TIPOS_EDITAVEIS_PIPEFY = new Set([
+  'short_text', 'long_text', 'number', 'currency', 'email', 'phone', 'cpf', 'cnpj',
+  'select', 'radio_vertical', 'radio_horizontal', 'checklist_vertical', 'checklist_horizontal',
+  'date', 'datetime', 'due_date', 'time',
+]);
+const TIPOS_LISTA = new Set(['checklist_vertical', 'checklist_horizontal']);
+
+function valorParaPipefy(tipo, valor) {
+  const s = valor == null ? '' : String(valor).trim();
+  if (TIPOS_LISTA.has(tipo)) {
+    if (!s) return [];
+    if (s.startsWith('[')) { try { const a = JSON.parse(s); if (Array.isArray(a)) return a.map(String); } catch { /* texto */ } }
+    return [s];
+  }
+  if ((tipo === 'number' || tipo === 'currency') && /^-?[\d.]+,\d+$/.test(s)) return s.replace(/\./g, '').replace(',', '.');
+  return s;
+}
+
+/**
+ * Grava os campos no card do Pipefy, um por um.
+ * @param {string} cardId
+ * @param {{id:string, tipo:string, valor:string}[]} campos
+ * @returns {{ gravados: string[], erros: {id:string, erro:string}[] }}
+ */
+export async function atualizarCamposCardPipefy(cardId, campos) {
+  const gravados = [], erros = [];
+  const mutation = `mutation UpdateField($input: UpdateCardFieldInput!) { updateCardField(input: $input) { success } }`;
+  for (const c of campos) {
+    try {
+      const r = await pipefyMutation(mutation, {
+        input: { card_id: String(cardId), field_id: c.id, new_value: valorParaPipefy(c.tipo, c.valor) },
+      });
+      if (r?.updateCardField?.success === false) throw new Error('Pipefy recusou o valor.');
+      gravados.push(c.id);
+    } catch (e) {
+      erros.push({ id: c.id, erro: e.message });
+    }
+  }
+  return { gravados, erros };
+}
