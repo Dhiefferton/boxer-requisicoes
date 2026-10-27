@@ -31,7 +31,7 @@ import {
   gerarRelatorio, listarRelatorios, detalharRelatorio
 } from '../controllers/necessidadesPecasController.js';
 import {
-  listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, listarMovimentos
+  listarPedidos, criarPedido, moverPedido, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, criarCardBoxer, listarMovimentos
 } from '../controllers/pedidosOrcamentoController.js';
 import {
   listarInventarios, previaInventario, criarInventario, detalharInventario, meuInventario,
@@ -154,6 +154,7 @@ router.get('/pedidos-orcamento',                autenticar, exigirLeituraOrcamen
 router.get('/pedidos-orcamento/movimentos',     autenticar, exigirPerfil('admin'), listarMovimentos);
 router.get('/pedidos-orcamento/estrutura',      autenticar, exigirLeituraOrcamentos, estruturaOrcamento);
 router.patch('/pedidos-orcamento/:id/campos',   autenticar, exigirPerfil('admin'), editarCampos);
+router.post('/pedidos-orcamento/novo-card',     autenticar, exigirPerfil('admin'), criarCardBoxer);
 router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operador', 'admin'), criarPedido);
 router.patch('/pedidos-orcamento/:id/mover',    autenticar, exigirPerfil('operador', 'admin'), moverPedido);
 router.patch('/pedidos-orcamento/:id',          autenticar, exigirPerfil('operador', 'admin'), editarPedido);
