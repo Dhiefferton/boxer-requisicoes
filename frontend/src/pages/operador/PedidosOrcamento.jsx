@@ -6,13 +6,14 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect } from 'react';
-import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity, History, Search, X, ListTree, MoveRight, EyeOff, Eye } from 'lucide-react';
+import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity, History, Search, X, ListTree, MoveRight, EyeOff, Eye, Plus } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { podeEditarOrcamentos } from '../../utils/acessoOrcamentos';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
-import CamposCardOrcamento from '../../components/operador/CamposCardOrcamento';
+import CamposCardOrcamento, { carregarEstrutura, valorLista } from '../../components/operador/CamposCardOrcamento';
+import NovoCardOrcamento from '../../components/operador/NovoCardOrcamento';
 import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN } from '../../utils/fasesOrcamento';
 
 // Colunas: fases do Pipefy + Em Separação / Separado (utils/fasesOrcamento.js).
@@ -63,6 +64,7 @@ export default function PedidosOrcamento() {
   const [msgSync, setMsgSync] = useState('');
   const [verMovimentacao, setVerMovimentacao] = useState(false);
   const [busca, setBusca] = useState('');
+  const [novoCard, setNovoCard] = useState(false);
   const [ocultarVazias, setOcultarVazias] = useState(() => { try { return localStorage.getItem('orc_ocultar_vazias') === '1'; } catch { return false; } });
   function alternarVazias() {
     setOcultarVazias(v => { try { localStorage.setItem('orc_ocultar_vazias', v ? '0' : '1'); } catch { /* sem storage */ } return !v; });
@@ -113,6 +115,12 @@ export default function PedidosOrcamento() {
             {busca && <button onClick={() => setBusca('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
           </div>
           {usuario?.perfil === 'admin' && (
+            <button onClick={() => setNovoCard(true)} title="Criar card aqui no B-Requisições"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-destaque)] text-white hover:bg-[var(--c-destaque-h)]">
+              <Plus size={13} /> Novo card
+            </button>
+          )}
+          {usuario?.perfil === 'admin' && (
             <button onClick={() => setVerMovimentacao(true)} title="Relatório de movimentação"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
                 bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
@@ -140,6 +148,7 @@ export default function PedidosOrcamento() {
       </div>
 
       {verMovimentacao && usuario?.perfil === 'admin' && <PainelMovimentacao onFechar={() => setVerMovimentacao(false)} />}
+      {novoCard && usuario?.perfil === 'admin' && <NovoCardOrcamento onFechar={() => setNovoCard(false)} onCriado={() => { setNovoCard(false); carregar(); }} />}
 
       {msgSync && <p className="text-xs text-[var(--c-suave)] bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-3 py-2">{msgSync}</p>}
 
@@ -227,7 +236,18 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
     const avisoZen = status === 'separando' && pedido.status === 'solicitacao' ? '\n\nIsso cria o pedido de venda e a ordem de separação no Zen.'
       : status === 'finalizado' && pedido.zen_ordem_separacao_id && !pedido.zen_nota_id && ['aprovado_recusado', 'em_manutencao', 'liberado_saida'].includes(pedido.status)
         ? '\n\nIsso fecha o romaneio e cria a nota fiscal no Zen.' : '';
-    if (!confirm(`Mover este card para "${destino?.titulo || status}"?${avisoZen}`)) return;
+    // Card criado aqui: avisa os campos obrigatórios da fase atual ainda vazios (como no Pipefy)
+    let avisoCampos = '';
+    if (!pedido.pipefy_card_id && colunaAtual?.faseId) {
+      try {
+        const fases = await carregarEstrutura();
+        const valores = Object.fromEntries((pedido.pipefy_campos || []).filter(c => c?.id).map(c => [c.id, c.valor]));
+        const faltando = (fases.find(f => f.faseId === colunaAtual.faseId)?.campos || [])
+          .filter(c => c.obrigatorio && c.tipo !== 'attachment' && !valorLista(valores[c.id]).length);
+        if (faltando.length) avisoCampos = `\n\nCampos obrigatórios desta fase ainda vazios: ${faltando.slice(0, 12).map(c => c.rotulo).join(', ')}${faltando.length > 12 ? '…' : ''}`;
+      } catch { /* sem estrutura: segue */ }
+    }
+    if (!confirm(`Mover este card para "${destino?.titulo || status}"?${avisoZen}${avisoCampos}`)) return;
     setMovendoPara(true);
     try { await pedidosOrcamentoService.mover(pedido.id, status); onAtualizar(); }
     catch (err) { alert(err.response?.data?.erro || 'Erro ao mover.'); onAtualizar(); }
@@ -318,7 +338,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
             className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
         )}
       </div>
-      {verCampos && <CamposCardOrcamento pedido={pedido} ehAdmin={ehAdmin} onFechar={() => setVerCampos(false)} onSalvo={onAtualizar} />}
+      {verCampos && <CamposCardOrcamento pedido={pedido} ehAdmin={ehAdmin} faseAtualId={colunaAtual?.faseId} onFechar={() => setVerCampos(false)} onSalvo={onAtualizar} />}
       {ehAdmin && verHistorico && (
         <PainelMovimentacao pedidoInicial={{ id: pedido.id, nome: pedido.cliente_nome || pedido.referencia }}
           onFechar={() => setVerHistorico(false)} />
@@ -384,7 +404,10 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
       {pedido.zen_erro && (
         <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg px-2 py-1 break-words">ZenERP: {pedido.zen_erro}</p>
       )}
-      {pedido.pipefy_card_id && (
+      {!pedido.pipefy_card_id && (
+        <span className="inline-block text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 rounded px-1.5 py-0.5">Criado no B-Requisições</span>
+      )}
+      {(pedido.pipefy_card_id || pedido.cliente_cnpj || pedido.ns_entrada || pedido.tecnico) && (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <Info rotulo="CNPJ" valor={formatarDoc(pedido.cliente_cnpj)} />
           <Info rotulo="NS de entrada" valor={pedido.ns_entrada} />
