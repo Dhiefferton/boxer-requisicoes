@@ -145,6 +145,44 @@ async function buscarConectados(cardId, fieldId) {
   }
 }
 
+/**
+ * Cards do pipe Orçamento criados a partir de `criadosDesde`, em qualquer fase.
+ * Para não varrer o pipe inteiro, busca só os atualizados desde `atualizadosDesde`
+ * (filtro do próprio Pipefy). Traz a fase atual e todos os campos.
+ */
+export async function listarCardsNovosOrcamento(criadosDesde, atualizadosDesde) {
+  const gql = `
+    query($after: String) {
+      allCards(pipeId: ${ORCAMENTO_PIPE_ID}, first: 50, after: $after,
+               filter: { field: "updated_at", operator: gte, value: "${atualizadosDesde}" }) {
+        pageInfo { hasNextPage endCursor }
+        edges { node { id title url createdAt current_phase { id name } fields { name value field { id } } } }
+      }
+    }`;
+  const cards = [];
+  let after = null;
+  for (let pagina = 0; pagina < 40; pagina++) {
+    const data = await pipefyQuery(gql, { after });
+    const conn = data?.allCards;
+    if (!conn) break;
+    for (const { node } of conn.edges || []) {
+      if (!node?.createdAt || node.createdAt < criadosDesde) continue;
+      cards.push({
+        id: String(node.id), titulo: node.title, url: node.url, criadoEm: node.createdAt,
+        faseId: node.current_phase?.id ? String(node.current_phase.id) : null, faseNome: node.current_phase?.name || null,
+        campos: (node.fields || []).map(f => ({ id: f.field?.id || null, nome: f.name, valor: f.value })),
+      });
+    }
+    if (!conn.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  for (const card of cards) {
+    const campoCliente = card.campos.find(c => c.id === 'cadastro_cliente');
+    if (campoCliente) campoCliente.conectados = await buscarConectados(card.id, 'cadastro_cliente');
+  }
+  return cards;
+}
+
 export async function listarCardsDaFase(phaseId = ORCAMENTO_PHASE_REQUISITAR) {
   const cards = await buscarCardsFase(phaseId);
   for (const card of cards) {
