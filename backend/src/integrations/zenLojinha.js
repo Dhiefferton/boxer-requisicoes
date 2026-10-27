@@ -173,7 +173,10 @@ async function transacaoLojinha(numero) {
   try {
     if (!lojaIntegradaConfigurada() || !/^\d+$/.test(String(numero || ''))) return '';
     const li = await pedidoLIBruto(String(numero));
-    return [...new Set((li?.pagamentos || []).map(p => String(p?.transacao_id || '').trim()).filter(Boolean))].join(',');
+    // Só o ID numérico do pagamento (o mesmo do painel). No Checkout PRO do
+    // Mercado Pago a API devolve o ID da preferência ("343482863-uuid"), que
+    // não é o ID da transação: nesse caso fica sem tag.
+    return [...new Set((li?.pagamentos || []).map(p => String(p?.transacao_id || '').trim()).filter(t => /^\d{6,}$/.test(t)))].join(',');
   } catch { return ''; }
 }
 
