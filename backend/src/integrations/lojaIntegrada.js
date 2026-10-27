@@ -112,3 +112,18 @@ export async function buscarPedidoLI(numero) {
     tipo_envio: tipoEnvioLI(nomeEnvio),
   };
 }
+
+// E-mail e telefone do cliente do pedido na Loja Integrada (vazio se não achar)
+export async function contatoClienteLI(numero) {
+  try {
+    if (!lojaIntegradaConfigurada() || !/^\d+$/.test(String(numero || ''))) return {};
+    const p = await pedidoLIBruto(String(numero));
+    let cliente = p?.cliente;
+    if (typeof cliente === 'string') { try { cliente = await getLI(cliente); } catch { cliente = null; } }
+    const end = p?.endereco_entrega || {};
+    return {
+      email: String(cliente?.email || p?.email || '').trim(),
+      telefone: String(cliente?.telefone_celular || cliente?.telefone_principal || end.telefone || '').trim(),
+    };
+  } catch { return {}; }
+}

@@ -12,6 +12,8 @@
 // Pode ser repetido: cada card segue da fase em que está.
 // ============================================================
 import { pipefyQuery } from './pipefyService.js';
+import { buscarClienteZen } from './zenPedidoVenda.js';
+import { contatoClienteLI } from './lojaIntegrada.js';
 
 const CFG = {
   pipe:            process.env.PIPEFY_LOJINHA_PIPE_ID || '301502578',   // Peças p/ Envio
@@ -94,16 +96,56 @@ async function acharCliente(documento) {
   return todos.find(x => soDigitos(x.campos.cpf_cnpj).replace(/^0+/, '') === semZeros)?.id || null;
 }
 
-async function criarCliente({ documento, nome, uf }) {
-  const d = soDigitos(documento);
+// Telefone no formato do campo "phone" do Pipefy (+55DDDNÚMERO)
+function telefonePipefy(t) {
+  let d = soDigitos(t).replace(/^0+/, '');
+  if (d.length < 10) return null;
+  if (!(d.startsWith('55') && d.length >= 12)) d = `55${d}`;
+  return `+${d}`;
+}
+
+// Dados obrigatórios do cadastro (Contato com, E-mail, Telefone, Tipo de
+// cliente): vêm do cadastro do cliente no Zen; o que faltar, do pedido na
+// Loja Integrada.
+async function dadosContato(pedido) {
+  let pessoa = null;
+  try { pessoa = await buscarClienteZen(pedido.documento, pedido.cliente_nome); } catch { /* segue com a LI */ }
+  const li = (!pessoa?.email || !pessoa?.phone) ? await contatoClienteLI(pedido.numero_pedido) : {};
+  const email = String(pessoa?.email || li.email || '').split(/[;,\s]+/).find(e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) || null;
+  const telefone = telefonePipefy(pessoa?.phone) || telefonePipefy(li.telefone);
+  const regime = String(pessoa?.fiscalProfilePerson?.description || '');
+  const tipo = pedido.assistente_autorizado ? 'Posto Autorizado'
+    : /regime\s+normal/i.test(regime) ? 'Lojista/Revenda' : 'Consumidor Final';
+  return {
+    contato: String(pessoa?.fantasyName || pessoa?.name || pedido.cliente_nome || '').trim(),
+    email, telefone, tipo,
+    cep: soDigitos(pessoa?.zipcode) || null,
+    uf: pedido.cliente_uf || pessoa?.city?.state?.code || null,
+  };
+}
+
+async function criarCliente(pedido) {
+  const d = soDigitos(pedido.documento);
+  const nome = pedido.cliente_nome;
+  const c = await dadosContato(pedido);
+  const est = estadoPipefy(c.uf);
+  const faltando = [!c.email && 'e-mail', !c.telefone && 'telefone', !est && 'estado'].filter(Boolean);
+  if (faltando.length) {
+    throw new Error(`Cliente não está na tabela Cadastro do Pipefy e falta ${faltando.join(', ')} para cadastrá-lo `
+      + '(não achei no cadastro do Zen nem no pedido da Loja Integrada). Preencha no cadastro do cliente no Zen e clique em "Criar cards no Pipefy".');
+  }
   const campos = [
     { field_id: 'nome_raz_o_social', field_value: nome },
+    { field_id: 'contato_com', field_value: c.contato || nome },
+    { field_id: 'e_mail', field_value: c.email },
     { field_id: 'cpf_cnpj', field_value: d },
+    { field_id: 'estado', field_value: est },
+    { field_id: 'numero_para_contato', field_value: c.telefone },
+    { field_id: 'tipo_de_cliente', field_value: [c.tipo] },
     { field_id: 'pessoa', field_value: [d.length === 14 ? 'Juridica' : 'Fisica'] },
     { field_id: 'data_de_cadastro', field_value: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) },
   ];
-  const est = estadoPipefy(uf);
-  if (est) campos.push({ field_id: 'estado', field_value: est });
+  if (c.cep) campos.push({ field_id: 'cep', field_value: c.cep });
   const r = await pipefyQuery(
     `mutation($i: CreateTableRecordInput!) { createTableRecord(input: $i) { table_record { id } } }`,
     { i: { table_id: CFG.tabelaClientes, title: nome, fields_attributes: campos } });
@@ -194,7 +236,7 @@ export async function criarCardsLojinha(pedido, usuario, progresso = [], salvar 
     let clienteId = await acharCliente(pedido.documento);
     if (!clienteId) {
       try {
-        clienteId = await criarCliente({ documento: pedido.documento, nome: pedido.cliente_nome, uf: pedido.cliente_uf });
+        clienteId = await criarCliente(pedido);
         avisos.push('Cliente cadastrado na tabela Cadastro do Pipefy.');
       } catch (e) {
         // Já existe (CPF/CNPJ único) mas a busca não achou: tenta de novo
