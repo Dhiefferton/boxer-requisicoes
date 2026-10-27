@@ -75,6 +75,7 @@ export const pedidosOrcamentoService = {
   estrutura: ()                  => api.get('/pedidos-orcamento/estrutura', { timeout: 30000 }),
   editarCampos: (id, campos)     => api.patch(`/pedidos-orcamento/${id}/campos`, { campos }),
   novoCard: (campos)             => api.post('/pedidos-orcamento/novo-card', { campos }),
+  clienteZen: (documento)        => api.get('/pedidos-orcamento/cliente-zen', { params: { documento }, timeout: 30000 }),
 };
 
 export const inventarioService = {
