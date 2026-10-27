@@ -10,6 +10,7 @@ import { query } from '../config/db.js';
 import {
   pipefyQuery, listarCardsDaFase, extrairDadosOrcamento, listarCardsNovosOrcamento,
   buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO, estruturaPipeOrcamento, CAMPO_DOC_CLIENTE,
+  atualizarCamposCardPipefy, TIPOS_EDITAVEIS_PIPEFY,
 } from '../integrations/pipefyService.js';
 import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
@@ -390,20 +391,51 @@ export async function editarCampos(req, res, next) {
       });
       return res.json({ sucesso: true });
     }
+    // Card do Pipefy: grava no Pipefy também. O que o Pipefy aceitar entra nos
+    // campos do card (pipefy_campos); o que não der para gravar lá (anexo,
+    // campo só do Boxer, erro do Pipefy) fica como edição local (campos_editados).
+    const estrutura = await estruturaPipeOrcamento();
+    const infoCampo = new Map(estrutura.flatMap(f => f.campos.map(c => [c.id, c])));
+    const validos = Object.entries(campos)
+      .filter(([k]) => /^[a-z0-9_]{1,80}$/i.test(k))
+      .map(([k, v]) => [k, v == null ? '' : String(v).slice(0, 5000)]);
+    const paraPipefy = validos
+      .filter(([k]) => { const c = infoCampo.get(k); return c && !c.boxer && TIPOS_EDITAVEIS_PIPEFY.has(c.tipo); })
+      .map(([k, v]) => ({ id: k, tipo: infoCampo.get(k).tipo, valor: v }));
+    const { gravados, erros } = paraPipefy.length
+      ? await atualizarCamposCardPipefy(atual.pipefy_card_id, paraPipefy)
+      : { gravados: [], erros: [] };
+    const noPipefy = new Set(gravados);
+
     const novo = { ...(atual.campos_editados || {}) };
     const alterados = {};
-    for (const [k, v] of Object.entries(campos)) {
-      if (!/^[a-z0-9_]{1,80}$/i.test(k)) continue;
-      const valor = v == null ? '' : String(v).slice(0, 5000);
-      if (valor === '') delete novo[k]; else novo[k] = valor;
+    const confirmados = {};
+    for (const [k, valor] of validos) {
       alterados[k] = valor || null;
+      if (noPipefy.has(k)) { delete novo[k]; confirmados[k] = valor; continue; }
+      if (valor === '') delete novo[k]; else novo[k] = valor;
     }
     await query(`UPDATE pedidos_orcamento SET campos_editados = $1::jsonb, atualizado_em = NOW() WHERE id = $2`,
       [Object.keys(novo).length ? JSON.stringify(novo) : null, atual.id]);
+    // Atualiza os campos do card e os dados usados no Zen (cliente, CNPJ, peças…)
+    if (Object.keys(confirmados).length) await salvarCamposNativos(atual, confirmados);
+
+    const nomes = (ids) => ids.map(id => infoCampo.get(id)?.rotulo || id);
     await registrarMovimento(atual.id, 'campos_editados', {
-      usuario: req.usuario, descricao: `Campos do card editados: ${Object.keys(alterados).join(', ')}`, detalhes: alterados,
+      usuario: req.usuario,
+      descricao: `Campos do card editados: ${nomes(Object.keys(alterados)).join(', ')}`
+        + (gravados.length ? ` · gravados no Pipefy: ${gravados.length}` : '')
+        + (erros.length ? ` · não gravados no Pipefy: ${nomes(erros.map(e => e.id)).join(', ')}` : ''),
+      detalhes: { ...alterados, _pipefy: { gravados, erros } },
     });
-    res.json({ sucesso: true, campos_editados: novo });
+    res.json({
+      sucesso: true, campos_editados: novo,
+      pipefy: {
+        gravados: nomes(gravados),
+        erros: erros.map(e => ({ campo: infoCampo.get(e.id)?.rotulo || e.id, erro: e.erro })),
+        so_local: nomes(validos.map(([k]) => k).filter(k => !paraPipefy.some(p => p.id === k))),
+      },
+    });
   } catch (err) { next(err); }
 }
 
