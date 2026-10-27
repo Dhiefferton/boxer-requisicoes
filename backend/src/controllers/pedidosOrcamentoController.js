@@ -13,7 +13,7 @@ import {
 } from '../integrations/pipefyService.js';
 import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
-  retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen, atualizarItensPedidoZen,
+  retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen, atualizarItensPedidoZen, buscarClienteZen,
 } from '../integrations/zenPedidoVenda.js';
 
 const BASE_SELECT = `
@@ -433,6 +433,30 @@ async function salvarCamposNativos(pedido, novos) {
       WHERE id = $9`,
     [JSON.stringify(campos), d.cliente_nome ? d.cliente_nome.slice(0, 255) : null, doc || null, d.tecnico, d.frete_por_conta,
      d.entregue_por, d.ns_entrada, JSON.stringify(d.itens), pedido.id]);
+}
+
+// GET /pedidos-orcamento/cliente-zen?documento= (admin) — cadastro do cliente no Zen
+// pelo CPF/CNPJ, para preencher o card novo. Só os dados de cadastro (nunca as
+// observações/propriedades da pessoa no Zen).
+export async function clienteZen(req, res, next) {
+  try {
+    const doc = String(req.query.documento || '').replace(/\D/g, '');
+    if (doc.length !== 11 && doc.length !== 14) return res.status(400).json({ erro: 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos).' });
+    let p;
+    try { p = await buscarClienteZen(doc); }
+    catch (e) {
+      if (/não está cadastrado|inválido/i.test(e.message)) return res.status(404).json({ erro: e.message });
+      throw e;
+    }
+    const uf = p.city?.state?.code || '';
+    const endereco = [p.street, p.number, p.complement, p.district].filter(Boolean).join(', ');
+    res.json({ cliente: {
+      zen_id: p.id, nome: p.name || '', fantasia: p.fantasyName || '', tipo: p.type,
+      documento: p.documentNumber || doc, ie: p.document2Number || '', perfil_fiscal: p.fiscalProfilePerson?.description || '',
+      endereco, cidade: p.city?.name ? `${p.city.name}${uf ? ` / ${uf}` : ''}` : '', uf, estado: p.city?.state?.name || '',
+      cep: p.zipcode || '', telefone: p.phone || '', email: p.email || '',
+    } });
+  } catch (err) { next(err); }
 }
 
 // POST /pedidos-orcamento/novo-card (admin) — cria o card aqui, na coluna
