@@ -307,6 +307,17 @@ export const ORCAMENTO_PHASE_APROVADO_RECUSADO = process.env.PIPEFY_ORCAMENTO_PH
  */
 let estruturaCache = null, estruturaEm = 0;
 export const CAMPO_DOC_CLIENTE = 'boxer_cliente_documento';
+export const CAMPOS_CLIENTE_ZEN = [
+  ['boxer_cliente_zen_id', 'Código do cliente no Zen'],
+  ['boxer_cliente_fantasia', 'Nome fantasia'],
+  ['boxer_cliente_ie', 'Inscrição estadual'],
+  ['boxer_cliente_perfil_fiscal', 'Perfil fiscal (Zen)'],
+  ['boxer_cliente_endereco', 'Endereço'],
+  ['boxer_cliente_cidade', 'Cidade / UF'],
+  ['boxer_cliente_cep', 'CEP'],
+  ['boxer_cliente_telefone', 'Telefone (Zen)'],
+  ['boxer_cliente_email', 'E-mail (Zen)'],
+];
 export async function estruturaPipeOrcamento() {
   if (estruturaCache && Date.now() - estruturaEm < 3600000) return estruturaCache;
   const d = await pipefyQuery(`query { pipe(id: ${ORCAMENTO_PIPE_ID}) {
@@ -319,6 +330,8 @@ export async function estruturaPipeOrcamento() {
       ...(pipe.start_form_fields || []).map(campo),
       // Só no B-Requisições: documento do cliente (no Pipefy vem do cadastro conectado)
       { id: CAMPO_DOC_CLIENTE, rotulo: 'CNPJ / CPF do cliente', tipo: 'short_text', opcoes: [], obrigatorio: true, boxer: true },
+      // Preenchidos pela busca do cliente no Zen (cadastro de pessoas)
+      ...CAMPOS_CLIENTE_ZEN.map(([id, rotulo]) => ({ id, rotulo, tipo: 'short_text', opcoes: [], obrigatorio: false, boxer: true })),
     ] },
     ...(pipe.phases || []).map(ph => ({ faseId: String(ph.id), nome: ph.name, campos: (ph.fields || []).map(campo) })),
   ];
