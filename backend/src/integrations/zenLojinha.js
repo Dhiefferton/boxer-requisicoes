@@ -12,7 +12,7 @@
 //   • Transportadora: Sedex/PAC = Correios, Próprio = Proprio, ou a escolhida
 //   • Itens: preço da tela; Assistente Autorizado = 23% de desconto em
 //     cada peça; o frete é rateado entre os itens (proporcional ao valor)
-//   • CFOP pelo cadastro do cliente:
+//   • CFOP pelo cadastro do cliente (cliente sem UF no Zen → pedido bloqueado):
 //       mesmo estado da empresa (SP) .................. 5.102
 //       outro estado, "Regime Normal" (contribuinte) .. 6.102
 //       outro estado, "Consumidor" / pessoa física .... 6.108
@@ -88,9 +88,19 @@ export async function listarVendedorasZen() {
 }
 
 // ---------- CFOP pelo cadastro do cliente ----------
+// UF do cliente no Zen. Sem UF não dá para saber se é 5.102 ou 6.xxx:
+// o pedido é bloqueado em vez de adivinhar.
+export function ufCliente(pessoa) {
+  const uf = String(pessoa?.city?.state?.code || '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(uf)) {
+    const quem = [pessoa?.name, pessoa?.documentNumber].filter(Boolean).join(' · ') || `pessoa ${pessoa?.id || '?'}`;
+    throw new Error(`Cliente sem UF no Zen (${quem}). Preencha a cidade/estado no cadastro do cliente no Zen e envie de novo.`);
+  }
+  return uf;
+}
 export function cfopLojinha(pessoa) {
-  const uf = String(pessoa?.city?.state?.code || '').toUpperCase();
-  if (!uf || uf === CFG.ufEmpresa) return { id: CFG.cfop5102, codigo: '5.102' };
+  const uf = ufCliente(pessoa);
+  if (uf === CFG.ufEmpresa) return { id: CFG.cfop5102, codigo: '5.102' };
   const regime = String(pessoa?.fiscalProfilePerson?.description || '');
   if (/regime\s+normal/i.test(regime)) return { id: CFG.cfop6102, codigo: '6.102' };
   if (/consumidor/i.test(regime) || pessoa?.type === 'INDIVIDUAL') return { id: CFG.cfop6108, codigo: '6.108' };
@@ -103,10 +113,7 @@ export const clienteRegimeNormal = (pessoa) =>
   /regime\s+normal/i.test(String(pessoa?.fiscalProfilePerson?.description || ''));
 // Cliente do mesmo estado da empresa (SP), pessoa física ou não, também
 // sai como "Venda padrão" (operação Venda, CFOP 5.102) — não como consumidor final
-export const clienteMesmoEstado = (pessoa) => {
-  const uf = String(pessoa?.city?.state?.code || '').toUpperCase();
-  return !uf || uf === CFG.ufEmpresa;
-};
+export const clienteMesmoEstado = (pessoa) => ufCliente(pessoa) === CFG.ufEmpresa;
 export const perfilVendaLojinha = (pessoa) => (clienteRegimeNormal(pessoa) || clienteMesmoEstado(pessoa)
   ? { id: CFG.saleProfileRegimeNormal, nome: 'Venda padrão' }
   : { id: CFG.saleProfile, nome: 'Venda consumidor final' });
