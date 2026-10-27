@@ -306,15 +306,20 @@ export const ORCAMENTO_PHASE_APROVADO_RECUSADO = process.env.PIPEFY_ORCAMENTO_PH
  * (id, rótulo, tipo, opções) na ordem do Pipefy. Cache de 1 hora.
  */
 let estruturaCache = null, estruturaEm = 0;
+export const CAMPO_DOC_CLIENTE = 'boxer_cliente_documento';
 export async function estruturaPipeOrcamento() {
   if (estruturaCache && Date.now() - estruturaEm < 3600000) return estruturaCache;
   const d = await pipefyQuery(`query { pipe(id: ${ORCAMENTO_PIPE_ID}) {
-    start_form_fields { id label type options }
-    phases { id name fields { id label type options } } } }`);
+    start_form_fields { id label type options required }
+    phases { id name fields { id label type options required } } } }`);
   const pipe = d?.pipe || {};
-  const campo = (f) => ({ id: f.id, rotulo: String(f.label || '').trim(), tipo: f.type, opcoes: f.options || [] });
+  const campo = (f) => ({ id: f.id, rotulo: String(f.label || '').trim(), tipo: f.type, opcoes: f.options || [], obrigatorio: !!f.required });
   estruturaCache = [
-    { faseId: 'inicio', nome: 'Abertura do card', campos: (pipe.start_form_fields || []).map(campo) },
+    { faseId: 'inicio', nome: 'Abertura do card', campos: [
+      ...(pipe.start_form_fields || []).map(campo),
+      // Só no B-Requisições: documento do cliente (no Pipefy vem do cadastro conectado)
+      { id: CAMPO_DOC_CLIENTE, rotulo: 'CNPJ / CPF do cliente', tipo: 'short_text', opcoes: [], obrigatorio: true, boxer: true },
+    ] },
     ...(pipe.phases || []).map(ph => ({ faseId: String(ph.id), nome: ph.name, campos: (ph.fields || []).map(campo) })),
   ];
   estruturaEm = Date.now();
