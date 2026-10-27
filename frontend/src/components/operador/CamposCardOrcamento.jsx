@@ -2,9 +2,10 @@
 // components/operador/CamposCardOrcamento.jsx — Todos os campos do card
 // ============================================================
 // Mostra os campos preenchidos do card (os mesmos do Pipefy), agrupados
-// pela fase em que são preenchidos. O admin pode editar: a edição fica
-// gravada no B-Requisições (vale mais que o valor do Pipefy) e não é
-// enviada ao Pipefy. Os demais só visualizam.
+// pela fase em que são preenchidos. O admin pode editar: a edição é gravada
+// também no card do Pipefy. Campos que o Pipefy não aceita por aqui (conexões
+// como Cliente/Peça, anexos, etiquetas) ficam só no B-Requisições.
+// Os demais só visualizam.
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import { X, Pencil, Save, Paperclip, RotateCcw } from 'lucide-react';
@@ -90,6 +91,7 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState({});
   const [salvando, setSalvando] = useState(false);
+  const [aviso, setAviso] = useState(null);
 
   useEffect(() => {
     carregarEstrutura().then(setFases).catch(e => setErro(e.response?.data?.erro || 'Não consegui ler as fases do Pipefy.'));
@@ -114,7 +116,15 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo
   async function salvar() {
     setSalvando(true); setErro('');
     try {
-      await pedidosOrcamentoService.editarCampos(pedido.id, rascunho);
+      const { data } = await pedidosOrcamentoService.editarCampos(pedido.id, rascunho);
+      const pf = data?.pipefy;
+      if (pf) {
+        const linhas = [];
+        if (pf.gravados?.length) linhas.push({ ok: true, txt: `Gravado no Pipefy: ${pf.gravados.join(', ')}.` });
+        if (pf.so_local?.length) linhas.push({ ok: false, txt: `Só no B-Requisições (o Pipefy não aceita editar por aqui): ${pf.so_local.join(', ')}.` });
+        for (const e of pf.erros || []) linhas.push({ ok: false, txt: `Pipefy recusou "${e.campo}": ${e.erro}. Ficou só no B-Requisições.` });
+        setAviso(linhas.length ? linhas : null);
+      }
       setRascunho({}); setEditando(false); onSalvo?.();
     } catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar os campos.'); }
     finally { setSalvando(false); }
@@ -143,8 +153,13 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo
 
         <div className="overflow-y-auto p-4 space-y-4">
           {erro && <p className="text-xs text-red-400">{erro}</p>}
+          {aviso && !editando && (
+            <div className="rounded-lg border border-[var(--c-borda)] p-2 space-y-0.5">
+              {aviso.map((l, i) => <p key={i} className={`text-[11px] ${l.ok ? 'text-green-400' : 'text-amber-400'}`}>{l.txt}</p>)}
+            </div>
+          )}
           {!fases && !erro && <div className="flex justify-center py-10"><Spinner className="text-[var(--c-destaque)]" /></div>}
-          {editando && <p className="text-[11px] text-amber-400">{nativo ? 'Card do B-Requisições: os campos ficam gravados aqui.' : 'A edição fica gravada só no B-Requisições (não altera o card no Pipefy).'} Anexos não são editáveis por aqui. * = obrigatório no Pipefy.</p>}
+          {editando && <p className="text-[11px] text-amber-400">{nativo ? 'Card do B-Requisições: os campos ficam gravados aqui.' : 'A edição é gravada também no card do Pipefy. Conexões (Cliente, Peça, Técnico…) e anexos ficam só no B-Requisições.'} Anexos não são editáveis por aqui. * = obrigatório no Pipefy.</p>}
           {grupos.map(g => {
             const lista = editando ? g.campos.filter(c => !SO_LEITURA.includes(c.tipo) || temValor(c.id)) : g.campos.filter(c => temValor(c.id));
             if (!lista.length) return null;
@@ -160,7 +175,7 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo
                           <span title="Editado no B-Requisições" className="text-[10px] text-amber-400">(editado)</span>
                         )}
                         {editando && c.id in editados && !(c.id in rascunho) && (
-                          <button title="Voltar ao valor do Pipefy" onClick={() => setRascunho(r => ({ ...r, [c.id]: '' }))}
+                          <button title="Desfazer a edição local" onClick={() => setRascunho(r => ({ ...r, [c.id]: '' }))}
                             className="text-[var(--c-suave)] hover:text-[var(--c-texto)]"><RotateCcw size={10} /></button>
                         )}
                       </dt>
