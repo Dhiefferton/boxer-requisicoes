@@ -12,7 +12,7 @@ import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 
 let estruturaCache = null;
-async function carregarEstrutura() {
+export async function carregarEstrutura() {
   if (!estruturaCache) {
     estruturaCache = pedidosOrcamentoService.estrutura().then(r => r.data.fases)
       .catch(e => { estruturaCache = null; throw e; });
@@ -51,7 +51,7 @@ function Valor({ campo, valor }) {
   return <span className="whitespace-pre-wrap break-words">{lista.join(', ')}</span>;
 }
 
-function Editor({ campo, valor, onChange }) {
+export function Editor({ campo, valor, onChange }) {
   const cls = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]';
   if (MULTI.includes(campo.tipo) && campo.opcoes?.length) {
     const sel = valorLista(valor);
@@ -84,7 +84,7 @@ function Editor({ campo, valor, onChange }) {
   return <input value={texto} onChange={e => onChange(e.target.value)} className={cls} />;
 }
 
-export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo }) {
+export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo, faseAtualId }) {
   const [fases, setFases] = useState(null);
   const [erro, setErro] = useState('');
   const [editando, setEditando] = useState(false);
@@ -106,7 +106,10 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo
   const conhecidos = new Set((fases || []).flatMap(f => f.campos.map(c => c.id)));
   const outros = (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [])
     .filter(c => c?.id && !conhecidos.has(c.id)).map(c => ({ id: c.id, rotulo: c.nome, tipo: 'short_text', opcoes: [] }));
-  const grupos = fases ? [...fases, ...(outros.length ? [{ faseId: 'outros', nome: 'Outros campos', campos: outros }] : [])] : [];
+  // A fase atual do card vem primeiro (são os campos a preencher agora)
+  const ordenadas = fases ? [...fases.filter(f => f.faseId === faseAtualId), ...fases.filter(f => f.faseId !== faseAtualId)] : [];
+  const grupos = fases ? [...ordenadas, ...(outros.length ? [{ faseId: 'outros', nome: 'Outros campos', campos: outros }] : [])] : [];
+  const nativo = !pedido.pipefy_card_id;
 
   async function salvar() {
     setSalvando(true); setErro('');
@@ -123,7 +126,7 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo
         <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--c-borda)]">
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-[var(--c-texto)] truncate">{pedido.cliente_nome || pedido.referencia}</p>
-            <p className="text-[11px] text-[var(--c-suave)]">Campos do card{pedido.pipefy_card_id ? ` · Pipefy #${pedido.pipefy_card_id}` : ''}{!ehAdmin ? ' · somente visualização' : ''}</p>
+            <p className="text-[11px] text-[var(--c-suave)]">Campos do card{pedido.pipefy_card_id ? ` · Pipefy #${pedido.pipefy_card_id}` : ' · criado no B-Requisições'}{!ehAdmin ? ' · somente visualização' : ''}</p>
           </div>
           {ehAdmin && !editando && fases && (
             <button onClick={() => setEditando(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--c-destaque)]/15 text-[var(--c-destaque)]"><Pencil size={12} /> Editar</button>
@@ -141,18 +144,18 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo
         <div className="overflow-y-auto p-4 space-y-4">
           {erro && <p className="text-xs text-red-400">{erro}</p>}
           {!fases && !erro && <div className="flex justify-center py-10"><Spinner className="text-[var(--c-destaque)]" /></div>}
-          {editando && <p className="text-[11px] text-amber-400">A edição fica gravada só no B-Requisições (não altera o card no Pipefy). Anexos não são editáveis por aqui.</p>}
+          {editando && <p className="text-[11px] text-amber-400">{nativo ? 'Card do B-Requisições: os campos ficam gravados aqui.' : 'A edição fica gravada só no B-Requisições (não altera o card no Pipefy).'} Anexos não são editáveis por aqui. * = obrigatório no Pipefy.</p>}
           {grupos.map(g => {
             const lista = editando ? g.campos.filter(c => !SO_LEITURA.includes(c.tipo) || temValor(c.id)) : g.campos.filter(c => temValor(c.id));
             if (!lista.length) return null;
             return (
               <div key={g.faseId}>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--c-suave)] mb-1.5">{g.nome}</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--c-suave)] mb-1.5">{g.nome}{g.faseId === faseAtualId && <span className="ml-1.5 normal-case font-semibold text-[var(--c-destaque)]">· fase atual</span>}</p>
                 <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
                   {lista.map(c => (
                     <div key={c.id} className={`min-w-0 ${c.tipo === 'long_text' || c.tipo === 'attachment' ? 'sm:col-span-2' : ''}`}>
                       <dt className="text-[var(--c-suave)] flex items-center gap-1">
-                        {c.rotulo}
+                        {c.rotulo}{editando && c.obrigatorio && <span className="text-red-400">*</span>}
                         {c.id in editados && !(c.id in rascunho) && (
                           <span title="Editado no B-Requisições" className="text-[10px] text-amber-400">(editado)</span>
                         )}
