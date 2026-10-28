@@ -17,6 +17,8 @@
 //       mesmo estado da empresa (SP) .................. 5.102
 //       outro estado, "Regime Normal" (contribuinte) .. 6.102
 //       outro estado, "Consumidor" / pessoa física .... 6.108
+//       outro estado, pessoa jurídica SEM I.E. ......... 6.108 (Venda consumidor final /
+//         Venda não contribuinte), mesmo com perfil "Regime Normal" no Zen
 //   • Prepara → aprova → ordem de separação (perfil LOJINHA)
 // Idempotente: segue do status atual do pedido no Zen.
 // ============================================================
@@ -100,9 +102,14 @@ export function ufCliente(pessoa) {
   }
   return uf;
 }
+// Pessoa jurídica sem Inscrição Estadual (vazia, sem número ou "ISENTO") = não contribuinte
+export const juridicaSemIE = (pessoa) => pessoa?.type === 'CORPORATION'
+  && (!/\d/.test(String(pessoa?.document2Number || '')) || /isent/i.test(String(pessoa?.document2Number || '')));
+
 export function cfopLojinha(pessoa) {
   const uf = ufCliente(pessoa);
   if (uf === CFG.ufEmpresa) return { id: CFG.cfop5102, codigo: '5.102' };
+  if (juridicaSemIE(pessoa)) return { id: CFG.cfop6108, codigo: '6.108' };
   const regime = String(pessoa?.fiscalProfilePerson?.description || '');
   if (/regime\s+normal/i.test(regime)) return { id: CFG.cfop6102, codigo: '6.102' };
   if (/consumidor/i.test(regime) || pessoa?.type === 'INDIVIDUAL') return { id: CFG.cfop6108, codigo: '6.108' };
@@ -116,7 +123,10 @@ export const clienteRegimeNormal = (pessoa) =>
 // Cliente do mesmo estado da empresa (SP), pessoa física ou não, também
 // sai como "Venda padrão" (operação Venda, CFOP 5.102) — não como consumidor final
 export const clienteMesmoEstado = (pessoa) => ufCliente(pessoa) === CFG.ufEmpresa;
-export const perfilVendaLojinha = (pessoa) => (clienteRegimeNormal(pessoa) || clienteMesmoEstado(pessoa)
+// Outro estado + pessoa jurídica sem I.E. = Venda consumidor final (operação
+// Venda não contribuinte, CFOP 6.108), mesmo com perfil "Regime Normal" no Zen
+export const perfilVendaLojinha = (pessoa) => (clienteMesmoEstado(pessoa)
+  || (clienteRegimeNormal(pessoa) && !juridicaSemIE(pessoa))
   ? { id: CFG.saleProfileRegimeNormal, nome: 'Venda padrão' }
   : { id: CFG.saleProfile, nome: 'Venda consumidor final' });
 
