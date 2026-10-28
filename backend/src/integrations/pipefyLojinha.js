@@ -323,3 +323,14 @@ export async function excluirCardLojinha(cardId) {
     throw e;
   }
 }
+
+// Cards do pipe com esse "Nº Pedido Lojinha" (para religar quando o card
+// gravado aqui foi excluído no Pipefy e substituído por outro)
+export async function cardsDoPedidoLojinha(numero) {
+  const r = await pipefyQuery(
+    `query($pipe: ID!, $valor: String!) { findCards(pipeId: $pipe, first: 20, search: { fieldId: "${CFG.campoPedidoLoja}", fieldValue: $valor }) {
+       edges { node { id url current_phase { id name } } } } }`,
+    { pipe: String(CFG.pipe), valor: String(numero) });
+  return (r?.findCards?.edges || []).map(e => e.node).filter(Boolean)
+    .map(n => ({ id: String(n.id), url: n.url || null, faseId: String(n.current_phase?.id || ''), fase: n.current_phase?.name || null }));
+}
