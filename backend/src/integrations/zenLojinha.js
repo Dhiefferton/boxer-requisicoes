@@ -196,7 +196,8 @@ async function transacaoLojinha(numero, manual) {
     throw new Error(`ID da transação inválido no pedido ${numero} da Loja Integrada: "${invalidos.join(', ')}"`
       + `${forma ? ` (pagamento: ${forma})` : ''}. O ID da transação é só números, como aparece no painel da Loja Integrada`
       + `${invalidos.some(t => /^\d+-[0-9a-f-]{20,}$/i.test(t)) ? ' — esse é o código do checkout do Mercado Pago, não o da transação' : ''}; `
-      + 'por isso o pedido não foi criado no Zen. Digite o ID da transação certo (painel da Loja Integrada) no campo abaixo e envie de novo.');
+      + 'por isso o pedido não foi criado no Zen. No painel da Loja Integrada, abra o pedido, clique no link do ID da transação '
+      + '(em "Pagamento via") e copie o "ID no Meio de Pagamento"; digite no campo abaixo e envie de novo.');
   }
   return ''; // pagamento sem ID de transação (ex.: depósito/boleto manual): segue sem tag
 }
