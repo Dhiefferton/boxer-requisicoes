@@ -428,6 +428,15 @@ export async function editarCampos(req, res, next) {
       [Object.keys(novo).length ? JSON.stringify(novo) : null, atual.id]);
     // Atualiza os campos do card e os dados usados no Zen (cliente, CNPJ, peças…)
     if (Object.keys(confirmados).length) await salvarCamposNativos(atual, confirmados);
+    // "Peças Recusadas" e "Aprovação" também alimentam o card (risco das peças, retirada no Zen)
+    const normRot = (id) => String(infoCampo.get(id)?.rotulo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    for (const [k, valor] of validos) {
+      if (/pecas?\s+recusad/.test(normRot(k))) {
+        await query(`UPDATE pedidos_orcamento SET pecas_recusadas = $1 WHERE id = $2 AND recusadas_retiradas_em IS NULL`, [valor || null, atual.id]);
+      } else if (/^aprovacao$/.test(normRot(k).trim()) && valor) {
+        await query(`UPDATE pedidos_orcamento SET aprovacao = $1 WHERE id = $2 AND recusadas_retiradas_em IS NULL`, [valor, atual.id]);
+      }
+    }
 
     const nomes = (ids) => ids.map(id => infoCampo.get(id)?.rotulo || id);
     await registrarMovimento(atual.id, 'campos_editados', {
@@ -785,7 +794,7 @@ export async function sincronizarPipefy(req, res, next) {
     let aprovadosRecusados = 0, naoLiberados = 0, movidosPipefy = 0;
     const acompanhados = await query(
       `SELECT id, pipefy_card_id, status, aprovacao, nao_liberado_ignorado_em, pipefy_campos,
-              recusadas_retiradas_em, zen_ordem_separacao_id, zen_nota_id, pipefy_fase
+              recusadas_retiradas_em, zen_ordem_separacao_id, zen_nota_id, pipefy_fase, pecas_recusadas
          FROM pedidos_orcamento
         WHERE pipefy_card_id IS NOT NULL
           AND status NOT IN ('finalizado', 'cancelado', 'sucata')`
@@ -805,6 +814,16 @@ export async function sincronizarPipefy(req, res, next) {
           await query(
             `UPDATE pedidos_orcamento SET pipefy_campos = COALESCE($1::jsonb, pipefy_campos), pipefy_fase = $2, pipefy_sincronizado_em = NOW() WHERE id = $3`,
             [novosCampos ? JSON.stringify(novosCampos) : null, s.faseNome || null, p.id]);
+
+          // Aprovação e "Peças Recusadas" acompanham o Pipefy em qualquer fase
+          // (o card pode ter sido corrigido depois de sair de Aprovado/Recusado),
+          // até as recusadas serem retiradas do pedido no Zen.
+          if (s.aprovacao && !p.recusadas_retiradas_em
+              && (s.aprovacao !== p.aprovacao || (s.pecasRecusadas || null) !== (p.pecas_recusadas || null))) {
+            await query(`UPDATE pedidos_orcamento SET aprovacao = $1, pecas_recusadas = $2 WHERE id = $3 AND recusadas_retiradas_em IS NULL`,
+              [s.aprovacao, s.pecasRecusadas || null, p.id]);
+            p.aprovacao = s.aprovacao;
+          }
 
           const alvo = FASE_PARA_STATUS[s.faseId];
           if (!alvo) continue;
