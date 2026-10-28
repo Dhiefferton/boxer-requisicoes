@@ -498,7 +498,8 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
 
 // "123, 456\n789" -> ['123', '456', '789'] (mesma regra do backend)
 function separarCodigos(texto) {
-  return [...new Set(String(texto || '').split(/[\s,;|]+/).map(c => c.trim().toUpperCase()).filter(Boolean))];
+  // "Peças Recusadas" é campo numérico no Pipefy: os códigos vêm separados por ponto (402086.701894)
+  return [...new Set(String(texto || '').split(/[\s,;|/.]+/).map(c => c.trim().toUpperCase()).filter(Boolean))];
 }
 
 function Info({ rotulo, valor }) {
