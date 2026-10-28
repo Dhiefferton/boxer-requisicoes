@@ -4,6 +4,11 @@
 
 import { query, transaction } from '../config/db.js';
 
+// O MRP considera só materiais das categorias de USO E CONSUMO
+// (nome da categoria com "uso" e "consumo", sem diferenciar acento/maiúscula)
+export const SQL_CATEGORIA_USO_CONSUMO = (alias = 'c') =>
+  `translate(lower(${alias}.nome), 'áàãâäéèêëíìîïóòõôöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') LIKE '%uso%consumo%'`;
+
 // GET /mrp — Calcula necessidade de estoque
 export async function calcularMRP(req, res, next) {
   try {
@@ -81,6 +86,7 @@ export async function calcularMRP(req, res, next) {
         AND (
           COALESCE(saidas_req.total, 0) + COALESCE(saidas_mrp.total, 0) > 0
         )
+        AND ${SQL_CATEGORIA_USO_CONSUMO('c')}
         ${categoriaFiltro}
       ORDER BY
         CASE
@@ -106,17 +112,19 @@ export async function calcularMRP(req, res, next) {
           ELSE 'ok'
         END AS status_calc
         FROM materiais m
+        JOIN categorias c ON c.id = m.categoria_id
         JOIN estoques e ON e.material_id = m.id
         LEFT JOIN (SELECT ir.material_id, SUM(ir.quantidade) AS t FROM itens_requisicao ir JOIN requisicoes r ON r.id=ir.requisicao_id WHERE r.status='entregue' AND r.updated_at>=$1 GROUP BY ir.material_id) s1 ON s1.material_id=m.id
         LEFT JOIN (SELECT material_id, SUM(quantidade) AS t FROM mrp_movimentacoes WHERE tipo='saida' AND created_at>=$1 GROUP BY material_id) s2 ON s2.material_id=m.id
         WHERE m.ativo=TRUE AND (COALESCE(s1.t,0)+COALESCE(s2.t,0))>0
+          AND ${SQL_CATEGORIA_USO_CONSUMO('c')}
       ) sub
     `;
 
     const [result, resumo, cats] = await Promise.all([
       query(sql, params),
       query(resumoSql, [dataInicio.toISOString(), mesesInt]),
-      query(`SELECT id, nome FROM categorias WHERE ativo = TRUE ORDER BY nome`),
+      query(`SELECT c.id, c.nome FROM categorias c WHERE c.ativo = TRUE AND ${SQL_CATEGORIA_USO_CONSUMO('c')} ORDER BY c.nome`),
     ]);
 
     res.json({
