@@ -58,6 +58,15 @@ function garantirColunas() {
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
       await garantirTabelaMovimentos();
+      // "Concluído - Não Liberado" é a fase depois da manutenção (conserto
+      // pronto, aguardando liberação) — não é recusa. Cards que tiveram a
+      // aprovação trocada por "Não liberado" voltam para a aprovação do Pipefy.
+      await query(
+        `UPDATE pedidos_orcamento p
+            SET aprovacao = (SELECT m.detalhes->>'aprovacao' FROM pedidos_orcamento_movimentos m
+                              WHERE m.pedido_id = p.id AND COALESCE(m.detalhes->>'aprovacao', '') NOT IN ('', 'Não liberado')
+                              ORDER BY m.criado_em DESC LIMIT 1)
+          WHERE p.aprovacao = 'Não liberado'`);
     })().catch(err => { colunasOk = null; throw err; });
   }
   return colunasOk;
@@ -834,7 +843,8 @@ export async function sincronizarPipefy(req, res, next) {
           }
           if (alvo === p.status) continue;
           if (alvo === 'nao_liberado') {
-            await query(`UPDATE pedidos_orcamento SET status = 'nao_liberado', aprovacao = 'Não liberado', atualizado_em = NOW() WHERE id = $1`, [p.id]);
+            // Mantém a aprovação (Aprovado/Parcial/Recusado): "Não liberado" é só a fase
+            await query(`UPDATE pedidos_orcamento SET status = 'nao_liberado', atualizado_em = NOW() WHERE id = $1`, [p.id]);
             naoLiberados++;
           } else {
             await query(`UPDATE pedidos_orcamento SET status = $1, atualizado_em = NOW() WHERE id = $2`, [alvo, p.id]);
