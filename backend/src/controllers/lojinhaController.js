@@ -68,6 +68,7 @@ function garantirEstrutura() {
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS pipefy_avisos TEXT;
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS separacao_em TIMESTAMPTZ;
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS finalizado_em TIMESTAMPTZ;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS transacao_manual VARCHAR(80);
       UPDATE lojinha_boxer_pedidos
          SET status = 'liberacao', qtd_cards = GREATEST(1, CEIL(jsonb_array_length(itens) / 7.0))::int
        WHERE status = 'entrada' AND zen_ordem_separacao_id IS NOT NULL;
@@ -172,6 +173,15 @@ export async function reenviarZenLojinha(req, res, next) {
     const p = r.rows[0];
     if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
     if (p.zen_ordem_separacao_id) return res.status(409).json({ erro: 'Este pedido já tem ordem de separação no Zen.' });
+    // ID da transação digitado à mão (quando o da Loja Integrada não é válido)
+    if (req.body?.transacao !== undefined) {
+      const t = String(req.body.transacao || '').replace(/\s+/g, '');
+      if (t && !/^\d{6,}(,\d{6,})*$/.test(t)) {
+        return res.status(400).json({ erro: 'ID da transação inválido: use só números (ex.: 186216402648), como aparece no painel da Loja Integrada.' });
+      }
+      await query(`UPDATE lojinha_boxer_pedidos SET transacao_manual = $2 WHERE id = $1`, [p.id, t || null]);
+      p.transacao_manual = t || null;
+    }
     res.json({ pedido: await enviarZen(p) });
   } catch (err) { next(err); }
 }
