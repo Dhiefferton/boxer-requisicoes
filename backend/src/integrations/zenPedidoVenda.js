@@ -343,10 +343,10 @@ export async function finalizarRomaneioZen(pedido) {
 
 const normCodigo = (c) => String(c || '').trim().toUpperCase();
 
-/** "123, 456\n789" -> ['123','456','789'] */
+/** "123, 456\n789" -> ['123','456','789'] · "402086.701894" (campo numérico do Pipefy) -> ['402086','701894'] */
 export function separarCodigos(texto) {
   return [...new Set(String(texto || '')
-    .split(/[\s,;|]+/)
+    .split(/[\s,;|/.]+/)
     .map(normCodigo)
     .filter(Boolean))];
 }
