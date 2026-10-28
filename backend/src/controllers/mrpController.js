@@ -4,10 +4,12 @@
 
 import { query, transaction } from '../config/db.js';
 
-// O MRP considera só materiais das categorias de USO E CONSUMO
-// (nome da categoria com "uso" e "consumo", sem diferenciar acento/maiúscula)
+// O MRP considera só materiais de USO E CONSUMO: todas as categorias, menos as
+// de produto/revenda (Máquinas e Partes e Peças).
+// Não existe categoria chamada "Uso e consumo" no cadastro — a lista abaixo define.
+const CATEGORIAS_FORA_DO_MRP = ['maquinas', 'partes e pecas'];
 export const SQL_CATEGORIA_USO_CONSUMO = (alias = 'c') =>
-  `translate(lower(${alias}.nome), 'áàãâäéèêëíìîïóòõôöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') LIKE '%uso%consumo%'`;
+  `translate(lower(trim(${alias}.nome)), 'áàãâäéèêëíìîïóòõôöúùûüç', 'aaaaaeeeeiiiiooooouuuuc') NOT IN (${CATEGORIAS_FORA_DO_MRP.map(n => `'${n}'`).join(', ')})`;
 
 // GET /mrp — Calcula necessidade de estoque
 export async function calcularMRP(req, res, next) {
