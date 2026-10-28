@@ -160,7 +160,7 @@ const STATUS_ADMIN = ['entrada', 'divergencia_entrada', 'liberado_orcar', 'orcan
 // Até aqui a sincronização com o Pipefy ainda pode levar o card para Aprovado/Recusado
 const STATUS_ANTES_APROVACAO = ['solicitacao', 'separando', 'separado', 'envio_orcamento', 'aguardando_aprovacao', 'aprovado_recusado'];
 // Saindo destas para Expedição, fecha o romaneio e cria a nota no Zen
-const STATUS_FINALIZA_ZEN = ['aprovado_recusado', 'em_manutencao', 'liberado_saida'];
+const STATUS_FINALIZA_ZEN = ['aprovado_recusado', 'em_manutencao', 'nao_liberado', 'liberado_saida'];
 // Cards criados no Pipefy a partir daqui entram em qualquer fase (27/10/2026 00:00 de Brasília)
 const CARDS_NOVOS_DESDE = '2026-10-27T03:00:00Z';
 // Fase do Pipefy (pipe Orçamento BOXER SOLDAS) -> coluna aqui
@@ -251,7 +251,9 @@ export async function moverPedido(req, res, next) {
     );
     const pedido = atual.rows[0];
     if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    if (req.usuario?.perfil !== 'admin' && (STATUS_ADMIN.includes(status) || STATUS_ADMIN.includes(pedido.status))) {
+    // Aprovado/Recusado -> Concluído - Não Liberado é o passo seguinte do fluxo (botão do card): liberado para todos
+    const passoDoFluxo = pedido.status === 'aprovado_recusado' && status === 'nao_liberado';
+    if (req.usuario?.perfil !== 'admin' && !passoDoFluxo && (STATUS_ADMIN.includes(status) || STATUS_ADMIN.includes(pedido.status))) {
       return res.status(403).json({ erro: 'Só o administrador move cards nessa coluna.' });
     }
     const detalhesMov = {};
@@ -831,7 +833,7 @@ export async function sincronizarPipefy(req, res, next) {
           if (p.status === 'separando' && (antesDaAprovacao || p.recusadas_retiradas_em)) continue;
           if (p.status === 'separado' && alvo === 'solicitacao') continue;
           if (alvo === 'nao_liberado' && p.nao_liberado_ignorado_em) continue;
-          if (alvo === 'finalizado' && p.zen_ordem_separacao_id && !p.zen_nota_id && p.status !== 'nao_liberado') continue;
+          if (alvo === 'finalizado' && p.zen_ordem_separacao_id && !p.zen_nota_id) continue;
 
           if (alvo === 'aprovado_recusado') {
             // Aprovação (Aprovado / Aprovado Parcial / Recusado) e "Peças Recusadas"
@@ -970,7 +972,7 @@ export async function retirarRecusadas(req, res, next) {
     );
     const pedido = atual.rows[0];
     if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    if (!['aprovado_recusado', 'em_manutencao', 'liberado_saida'].includes(pedido.status)) {
+    if (!['aprovado_recusado', 'em_manutencao', 'nao_liberado', 'liberado_saida'].includes(pedido.status)) {
       return res.status(400).json({ erro: 'Só dá pra retirar peças de pedidos na coluna Aprovado/Recusado.' });
     }
     if (pedido.recusadas_retiradas_em) {
