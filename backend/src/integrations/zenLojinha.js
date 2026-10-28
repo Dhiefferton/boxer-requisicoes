@@ -8,7 +8,8 @@
 //   • Frete por conta do emitente (ISSUER) · forma de pagamento 0
 //   • Vendedora = vendedora escolhida na tela (pessoa do Zen)
 //   • Código do pedido = nº do pedido da lojinha; observação "LB: <nº>"
-//   • Tag do pedido = ID da transação do pagamento na Loja Integrada (Mercado Pago)
+//   • Tag do pedido = ID da transação do pagamento na Loja Integrada (Mercado Pago);
+//     sem ID válido o pedido não é criado (mensagem explicando o motivo)
 //   • Transportadora: Sedex/PAC = Correios, Próprio = Proprio, ou a escolhida
 //   • Itens: preço da tela; Assistente Autorizado = 23% de desconto em
 //     cada peça; o frete é rateado entre os itens (proporcional ao valor)
@@ -168,16 +169,33 @@ async function buscarPessoa(pedido) {
  * Cria (ou completa) o pedido da Lojinha no Zen até a ordem de separação.
  * @returns {{ zenPedidoId, ordemSeparacaoId, cfop }}
  */
-/** ID(s) da transação do pagamento do pedido na Loja Integrada (vazio se não achar) */
+/**
+ * ID(s) da transação do pagamento na Loja Integrada (vai na tag do pedido no Zen).
+ * Pedido da Loja Integrada sem um ID de transação válido (numérico, o mesmo do
+ * painel) bloqueia a criação do pedido no Zen com a explicação do problema.
+ * Pagamento sem ID nenhum, ou pedido que não é da Loja Integrada, segue sem tag.
+ */
 async function transacaoLojinha(numero) {
-  try {
-    if (!lojaIntegradaConfigurada() || !/^\d+$/.test(String(numero || ''))) return '';
-    const li = await pedidoLIBruto(String(numero));
-    // Só o ID numérico do pagamento (o mesmo do painel). No Checkout PRO do
-    // Mercado Pago a API devolve o ID da preferência ("343482863-uuid"), que
-    // não é o ID da transação: nesse caso fica sem tag.
-    return [...new Set((li?.pagamentos || []).map(p => String(p?.transacao_id || '').trim()).filter(t => /^\d{6,}$/.test(t)))].join(',');
-  } catch { return ''; }
+  if (!lojaIntegradaConfigurada() || !/^\d+$/.test(String(numero || ''))) return '';
+  let li;
+  try { li = await pedidoLIBruto(String(numero)); }
+  catch (e) {
+    throw new Error(`Não consegui ler o pedido ${numero} na Loja Integrada para pegar o ID da transação (${e.message}). `
+      + 'O pedido não foi criado no Zen. Tente de novo em alguns minutos.');
+  }
+  const pagamentos = Array.isArray(li?.pagamentos) ? li.pagamentos : [];
+  const ids = pagamentos.map(p => String(p?.transacao_id || '').trim());
+  const validos = [...new Set(ids.filter(t => /^\d{6,}$/.test(t)))];
+  if (validos.length) return validos.join(',');
+  const invalidos = ids.filter(Boolean);
+  const forma = pagamentos.map(p => p?.forma_pagamento?.nome).filter(Boolean).join(', ');
+  if (invalidos.length) {
+    throw new Error(`ID da transação inválido no pedido ${numero} da Loja Integrada: "${invalidos.join(', ')}"`
+      + `${forma ? ` (pagamento: ${forma})` : ''}. O ID da transação é só números, como aparece no painel da Loja Integrada`
+      + `${invalidos.some(t => /^\d+-[0-9a-f-]{20,}$/i.test(t)) ? ' — esse é o código do checkout do Mercado Pago, não o da transação' : ''}; `
+      + 'por isso o pedido não foi criado no Zen. Confira o pagamento no painel da Loja Integrada e envie de novo quando o ID da transação estiver certo.');
+  }
+  return ''; // pagamento sem ID de transação (ex.: depósito/boleto manual): segue sem tag
 }
 
 export async function criarPedidoLojinhaZen(pedido) {
@@ -195,7 +213,11 @@ export async function criarPedidoLojinhaZen(pedido) {
   const cfop = cfopLojinha(pessoa);
   const perfil = perfilVendaLojinha(pessoa);
   const resultado = { zenPedidoId: null, ordemSeparacaoId: null, cfop: cfop.codigo, perfilVenda: perfil.nome };
-  const transacao = await transacaoLojinha(pedido.numero_pedido);
+  // Pedido novo: sem ID da transação válido, não cria (erro explicativo na tela).
+  // Pedido já criado no Zen: só completa a tag se der.
+  const transacao = zenPedidoId
+    ? await transacaoLojinha(pedido.numero_pedido).catch(() => '')
+    : await transacaoLojinha(pedido.numero_pedido);
 
   // 1. Cabeçalho
   if (!zenPedidoId) {
