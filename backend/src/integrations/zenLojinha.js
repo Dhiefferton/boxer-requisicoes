@@ -175,7 +175,10 @@ async function buscarPessoa(pedido) {
  * painel) bloqueia a criação do pedido no Zen com a explicação do problema.
  * Pagamento sem ID nenhum, ou pedido que não é da Loja Integrada, segue sem tag.
  */
-async function transacaoLojinha(numero) {
+async function transacaoLojinha(numero, manual) {
+  // Digitado à mão no card (vale mais que o da Loja Integrada)
+  const m = String(manual || '').replace(/\s+/g, '');
+  if (/^\d{6,}(,\d{6,})*$/.test(m)) return m;
   if (!lojaIntegradaConfigurada() || !/^\d+$/.test(String(numero || ''))) return '';
   let li;
   try { li = await pedidoLIBruto(String(numero)); }
@@ -193,7 +196,7 @@ async function transacaoLojinha(numero) {
     throw new Error(`ID da transação inválido no pedido ${numero} da Loja Integrada: "${invalidos.join(', ')}"`
       + `${forma ? ` (pagamento: ${forma})` : ''}. O ID da transação é só números, como aparece no painel da Loja Integrada`
       + `${invalidos.some(t => /^\d+-[0-9a-f-]{20,}$/i.test(t)) ? ' — esse é o código do checkout do Mercado Pago, não o da transação' : ''}; `
-      + 'por isso o pedido não foi criado no Zen. Confira o pagamento no painel da Loja Integrada e envie de novo quando o ID da transação estiver certo.');
+      + 'por isso o pedido não foi criado no Zen. Digite o ID da transação certo (painel da Loja Integrada) no campo abaixo e envie de novo.');
   }
   return ''; // pagamento sem ID de transação (ex.: depósito/boleto manual): segue sem tag
 }
@@ -216,8 +219,8 @@ export async function criarPedidoLojinhaZen(pedido) {
   // Pedido novo: sem ID da transação válido, não cria (erro explicativo na tela).
   // Pedido já criado no Zen: só completa a tag se der.
   const transacao = zenPedidoId
-    ? await transacaoLojinha(pedido.numero_pedido).catch(() => '')
-    : await transacaoLojinha(pedido.numero_pedido);
+    ? await transacaoLojinha(pedido.numero_pedido, pedido.transacao_manual).catch(() => '')
+    : await transacaoLojinha(pedido.numero_pedido, pedido.transacao_manual);
 
   // 1. Cabeçalho
   if (!zenPedidoId) {
