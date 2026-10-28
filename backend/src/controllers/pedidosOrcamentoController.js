@@ -816,6 +816,28 @@ export async function sincronizarPipefy(req, res, next) {
           await query(
             `UPDATE pedidos_orcamento SET pipefy_campos = COALESCE($1::jsonb, pipefy_campos), pipefy_fase = $2, pipefy_sincronizado_em = NOW() WHERE id = $3`,
             [novosCampos ? JSON.stringify(novosCampos) : null, s.faseNome || null, p.id]);
+          // Dados do card (peças, técnico, NS, entregue por…) acompanham os campos do
+          // Pipefy em qualquer fase. Ex.: card importado em "Orçando" (ainda sem
+          // peças) que depois foi para "Requisitar Peças" com as peças preenchidas.
+          // As peças só são trocadas aqui enquanto o card não tem pedido no Zen
+          // (depois disso a troca passa pelo aviso de "peças alteradas").
+          if (novosCampos) try {
+            const d = extrairDadosOrcamento({ campos: novosCampos, titulo: null });
+            await query(
+              `UPDATE pedidos_orcamento
+                  SET cliente_nome    = COALESCE($1, cliente_nome),
+                      referencia      = COALESCE($9, referencia),
+                      cliente_cnpj    = COALESCE($2, cliente_cnpj),
+                      tecnico         = COALESCE($3, tecnico),
+                      frete_por_conta = COALESCE($4, frete_por_conta),
+                      entregue_por    = COALESCE($5, entregue_por),
+                      ns_entrada      = COALESCE($6, ns_entrada),
+                      itens = CASE WHEN zen_pedido_id IS NULL AND recusadas_retiradas_em IS NULL THEN $7::jsonb ELSE itens END
+                WHERE id = $8`,
+              [d.cliente_nome ? d.cliente_nome.slice(0, 255) : null, d.cliente_cnpj || null, d.tecnico || null,
+               d.frete_por_conta || null, d.entregue_por || null, d.ns_entrada || null, JSON.stringify(d.itens || []), p.id,
+               d.cliente_nome ? d.cliente_nome.slice(0, 255) : null]);
+          } catch (e) { console.error(`⚠️ Não consegui atualizar os dados do card ${p.pipefy_card_id}:`, e.message); }
 
           // Aprovação e "Peças Recusadas" acompanham o Pipefy em qualquer fase
           // (o card pode ter sido corrigido depois de sair de Aprovado/Recusado),
