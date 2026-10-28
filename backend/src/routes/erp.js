@@ -3,6 +3,7 @@ import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncEr
 import { getToken } from '../integrations/erpZen.js';
 import { pipefyQuery } from '../integrations/pipefyService.js';
 import { pedidoLIBruto, buscarPedidoLI, tentativasLI, getLIBruto } from '../integrations/lojaIntegrada.js';
+import { pagamentosDaPreferencia, getMPBruto, mercadoPagoConfigurado } from '../integrations/mercadoPago.js';
 import { fasesDosCards } from '../integrations/pipefyLojinha.js';
 import { query } from '../config/db.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
@@ -82,6 +83,20 @@ router.get('/debug-li', async (req, res) => {
     res.json({ mapeado: await buscarPedidoLI(numero), bruto: req.query.bruto ? await pedidoLIBruto(numero) : undefined });
   }
   catch (e) { res.status(e.status || 502).json({ erro: e.message, tentativas: tentativasLI }); }
+});
+
+// Ex: GET /api/erp/debug-mp?secret=...&pref=343482863-uuid — ID do pagamento no Mercado Pago
+router.get('/debug-mp', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  if (!mercadoPagoConfigurado()) return res.json({ configurado: false });
+  const pref = String(req.query.pref || '');
+  try {
+    res.json({
+      configurado: true,
+      pagamentos: await pagamentosDaPreferencia(pref),
+      bruto: req.query.bruto ? await getMPBruto(`/merchant_orders/search?preference_id=${encodeURIComponent(pref)}`) : undefined,
+    });
+  } catch (e) { res.status(502).json({ erro: e.message }); }
 });
 
 // Força sincronização manual (GET, testável no navegador, mesmo secret do cron)
