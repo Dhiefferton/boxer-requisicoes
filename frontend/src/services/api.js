@@ -120,7 +120,7 @@ export const lojinhaService = {
   lojaIntegrada: (numero) => api.get(`/lojinha/loja-integrada/${encodeURIComponent(numero)}`, { timeout: 60000 }),
   pedidos: ()          => api.get('/lojinha/pedidos'),
   criar:   (dados)     => api.post('/lojinha/pedidos', dados, { timeout: 120000 }),
-  reenviarZen: (id)    => api.post(`/lojinha/pedidos/${id}/zen`, {}, { timeout: 120000 }),
+  reenviarZen: (id, transacao) => api.post(`/lojinha/pedidos/${id}/zen`, transacao !== undefined ? { transacao } : {}, { timeout: 120000 }),
   reenviarPipefy: (id) => api.post(`/lojinha/pedidos/${id}/pipefy`, {}, { timeout: 120000 }),
   excluir: (id)        => api.delete(`/lojinha/pedidos/${id}`, { timeout: 120000 }),
 };
