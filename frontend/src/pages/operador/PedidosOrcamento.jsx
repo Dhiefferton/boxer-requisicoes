@@ -19,7 +19,7 @@ import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN } from '../../utils/fases
 // Colunas: fases do Pipefy + Em Separação / Separado (utils/fasesOrcamento.js).
 // Colunas novas só o admin move; o fluxo de sempre continua igual:
 // Requisitar Peças -> Em Separação (cria no Zen), Aprovado/Recusado -> Expedição (nota no Zen).
-const PROXIMA = { solicitacao: 'separando', aprovado_recusado: 'finalizado' };
+const PROXIMA = { solicitacao: 'separando', aprovado_recusado: 'nao_liberado' };
 
 const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
 
@@ -220,7 +220,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
   const parcial = aprovacao.includes('parcial');
   const codigosRecusados = separarCodigos(pedido.pecas_recusadas);
   const recusadosSet = new Set(codigosRecusados);
-  const precisaRetirar = parcial && ['aprovado_recusado', 'em_manutencao', 'liberado_saida'].includes(pedido.status) && !pedido.recusadas_retiradas_em;
+  const precisaRetirar = parcial && ['aprovado_recusado', 'em_manutencao', 'nao_liberado', 'liberado_saida'].includes(pedido.status) && !pedido.recusadas_retiradas_em;
   // Fase atual do card no Pipefy, quando é diferente da coluna daqui
   const colunaAtual = COLUNAS.find(c => c.status === pedido.status);
   const faseDiferente = pedido.pipefy_fase && semAcento(pedido.pipefy_fase) !== semAcento(colunaAtual?.titulo) ? pedido.pipefy_fase : null;
@@ -234,7 +234,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
     if (!status || status === pedido.status) return;
     const destino = COLUNAS.find(c => c.status === status);
     const avisoZen = status === 'separando' && pedido.status === 'solicitacao' ? '\n\nIsso cria o pedido de venda e a ordem de separação no Zen.'
-      : status === 'finalizado' && pedido.zen_ordem_separacao_id && !pedido.zen_nota_id && ['aprovado_recusado', 'em_manutencao', 'liberado_saida'].includes(pedido.status)
+      : status === 'finalizado' && pedido.zen_ordem_separacao_id && !pedido.zen_nota_id && ['aprovado_recusado', 'em_manutencao', 'nao_liberado', 'liberado_saida'].includes(pedido.status)
         ? '\n\nIsso fecha o romaneio e cria a nota fiscal no Zen.' : '';
     // Card criado aqui: avisa os campos obrigatórios da fase atual ainda vazios (como no Pipefy)
     let avisoCampos = '';
