@@ -22,6 +22,7 @@
 // ============================================================
 import { getToken } from './erpZen.js';
 import { pedidoLIBruto, lojaIntegradaConfigurada } from './lojaIntegrada.js';
+import { pagamentosDaPreferencia, mercadoPagoConfigurado } from './mercadoPago.js';
 
 const ZEN_BASE_URL = 'https://api.zenerp.app.br';
 const ZEN_TENANT   = 'boxer';
@@ -192,11 +193,22 @@ async function transacaoLojinha(numero, manual) {
   if (validos.length) return validos.join(',');
   const invalidos = ids.filter(Boolean);
   const forma = pagamentos.map(p => p?.forma_pagamento?.nome).filter(Boolean).join(', ');
+  // Checkout PRO: a Loja Integrada só tem o ID da preferência — busca o
+  // "ID no Meio de Pagamento" na API do Mercado Pago
+  const preferencias = invalidos.filter(t => /^\d+-[0-9a-f-]{20,}$/i.test(t));
+  let erroMP = '';
+  if (preferencias.length && mercadoPagoConfigurado()) {
+    try {
+      const doMP = [...new Set((await Promise.all(preferencias.map(pagamentosDaPreferencia))).flat())];
+      if (doMP.length) return doMP.join(',');
+      erroMP = ' O Mercado Pago não mostrou pagamento aprovado para esse checkout.';
+    } catch (e) { erroMP = ` Não consegui consultar o Mercado Pago (${e.message}).`; }
+  }
   if (invalidos.length) {
     throw new Error(`ID da transação inválido no pedido ${numero} da Loja Integrada: "${invalidos.join(', ')}"`
       + `${forma ? ` (pagamento: ${forma})` : ''}. O ID da transação é só números, como aparece no painel da Loja Integrada`
-      + `${invalidos.some(t => /^\d+-[0-9a-f-]{20,}$/i.test(t)) ? ' — esse é o código do checkout do Mercado Pago, não o da transação' : ''}; `
-      + 'por isso o pedido não foi criado no Zen. No painel da Loja Integrada, abra o pedido, clique no link do ID da transação '
+      + `${preferencias.length ? ' — esse é o código do checkout do Mercado Pago, não o da transação' : ''}.${erroMP} `
+      + 'O pedido não foi criado no Zen. No painel da Loja Integrada, abra o pedido, clique no link do ID da transação '
       + '(em "Pagamento via") e copie o "ID no Meio de Pagamento"; digite no campo abaixo e envie de novo.');
   }
   return ''; // pagamento sem ID de transação (ex.: depósito/boleto manual): segue sem tag
