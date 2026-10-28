@@ -177,10 +177,15 @@ function Coluna({ titulo, cor, badge, total, children }) {
 
 function StatusZen({ p, carregar }) {
   const [enviando, setEnviando] = useState(false);
+  // ID da transação à mão: quando a Loja Integrada não traz um ID válido
+  const pedeTransacao = /ID da transa[çc][ãa]o/i.test(p.zen_erro || '') || !!p.transacao_manual;
+  const [transacao, setTransacao] = useState(p.transacao_manual || '');
   async function tentar() {
+    const t = transacao.replace(/\s+/g, '');
+    if (pedeTransacao && t && !/^\d{6,}(,\d{6,})*$/.test(t)) { alert('O ID da transação é só números (ex.: 186216402648), como aparece no painel da Loja Integrada.'); return; }
     setEnviando(true);
     try {
-      const { data: r } = await lojinhaService.reenviarZen(p.id);
+      const { data: r } = await lojinhaService.reenviarZen(p.id, pedeTransacao ? t : undefined);
       if (!r.pedido.zen_ordem_separacao_id) alert(`O Zen ainda deu erro: ${r.pedido.zen_erro}`);
       carregar();
     } catch (e) { alert(e.response?.data?.erro || 'Erro ao enviar ao Zen.'); }
@@ -201,9 +206,17 @@ function StatusZen({ p, carregar }) {
     <div className="text-[11px] px-2 py-1.5 rounded-lg bg-red-500/10 text-red-400 space-y-1">
       <div className="flex items-start gap-1"><AlertTriangle size={12} className="shrink-0 mt-0.5" />
         <span>Zen: {p.zen_erro || 'pedido ainda não criado'}{p.zen_pedido_id && <> (<a href={linkZenPedido(p.zen_pedido_id)} target="_blank" rel="noreferrer" className="underline">pedido {p.zen_pedido_id} <ExternalLink size={10} className="inline -mt-0.5" /></a>)</>}</span></div>
-      <button onClick={tentar} disabled={enviando}
+      {pedeTransacao && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <label className="text-red-300 font-semibold">ID da transação:</label>
+          <input value={transacao} onChange={e => setTransacao(e.target.value)} inputMode="numeric" placeholder="ex.: 186216402648"
+            onKeyDown={e => e.key === 'Enter' && tentar()}
+            className="flex-1 min-w-[140px] bg-[var(--c-fundo)] border border-red-400/40 rounded-lg px-2 py-0.5 text-[var(--c-texto)] font-mono focus:outline-none focus:border-red-300" />
+        </div>
+      )}
+      <button onClick={tentar} disabled={enviando || (pedeTransacao && !transacao.trim())}
         className="px-2 py-0.5 rounded-lg border border-red-400/40 text-red-300 font-semibold disabled:opacity-50">
-        {enviando ? 'Enviando ao Zen…' : 'Tentar de novo'}
+        {enviando ? 'Enviando ao Zen…' : pedeTransacao ? 'Salvar ID e enviar ao Zen' : 'Tentar de novo'}
       </button>
     </div>
   );
