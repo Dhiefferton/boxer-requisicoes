@@ -6,6 +6,7 @@ import { pedidoLIBruto, buscarPedidoLI, tentativasLI, getLIBruto } from '../inte
 import { pagamentosDaPreferencia, getMPBruto, mercadoPagoConfigurado } from '../integrations/mercadoPago.js';
 import { fasesDosCards } from '../integrations/pipefyLojinha.js';
 import { query } from '../config/db.js';
+import { SQL_CATEGORIA_USO_CONSUMO } from '../controllers/mrpController.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
 import { sincronizarSaidas, garantirRelatorioSemanal, compararPlanilhaZen } from '../integrations/marketplaceSaidas.js';
 
@@ -97,6 +98,17 @@ router.get('/debug-mp', async (req, res) => {
       bruto: req.query.bruto ? await getMPBruto(`/merchant_orders/search?preference_id=${encodeURIComponent(pref)}`) : undefined,
     });
   } catch (e) { res.status(502).json({ erro: e.message }); }
+});
+
+// Ex: GET /api/erp/debug-categorias?secret=... — categorias e quais entram no MRP (uso e consumo)
+router.get('/debug-categorias', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const r = await query(`SELECT c.id, c.nome, c.ativo, ${SQL_CATEGORIA_USO_CONSUMO('c')} AS no_mrp,
+                                  (SELECT COUNT(*) FROM materiais m WHERE m.categoria_id = c.id AND m.ativo) AS materiais
+                             FROM categorias c ORDER BY c.nome`);
+    res.json({ categorias: r.rows });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
 // Força sincronização manual (GET, testável no navegador, mesmo secret do cron)
