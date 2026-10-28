@@ -15,7 +15,7 @@
 import { query } from '../config/db.js';
 import { buscarClienteZen, excluirPedidoVendaZen } from '../integrations/zenPedidoVenda.js';
 import { criarPedidoLojinhaZen, listarVendedorasZen } from '../integrations/zenLojinha.js';
-import { criarCardsLojinha, excluirCardLojinha, fasesDosCards } from '../integrations/pipefyLojinha.js';
+import { criarCardsLojinha, excluirCardLojinha, fasesDosCards, cardsDoPedidoLojinha } from '../integrations/pipefyLojinha.js';
 import { buscarPedidoLI } from '../integrations/lojaIntegrada.js';
 
 const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
@@ -296,13 +296,32 @@ let ultimaSync = 0;
 async function sincronizarFasesPipefy() {
   if (Date.now() - ultimaSync < 30000) return;
   ultimaSync = Date.now();
-  const r = await query(`SELECT id, status, pipefy_cards FROM lojinha_boxer_pedidos
+  const r = await query(`SELECT id, status, pipefy_cards, numero_pedido FROM lojinha_boxer_pedidos
                           WHERE status IN ('separacao', 'conferencia', 'teste_placas', 'preparacao')`);
   if (!r.rows.length) return;
   const ids = r.rows.flatMap(p => (p.pipefy_cards || []).map(c => c?.id).filter(Boolean));
   const fases = await fasesDosCards(ids);
   for (const p of r.rows) {
-    const cards = (p.pipefy_cards || []).map(c => (c?.id && fases[c.id] ? { ...c, fase: fases[c.id].fase, fase_id: fases[c.id].faseId } : c));
+    // Card que o Pipefy não devolve mais (excluído / sem acesso): procura no pipe
+    // o card com o mesmo "Nº Pedido Lojinha" e religa (ex.: alguém excluiu o card
+    // criado pelo sistema e seguiu com outro feito à mão).
+    let origem = p.pipefy_cards || [];
+    const sumidos = origem.filter(c => c?.id && !fases[c.id]);
+    if (sumidos.length && p.numero_pedido) {
+      try {
+        const ja = new Set(origem.map(c => String(c?.id)));
+        const achados = (await cardsDoPedidoLojinha(p.numero_pedido)).filter(c => !ja.has(c.id));
+        if (achados.length) {
+          origem = origem.map(c => {
+            if (!c?.id || fases[c.id] || !achados.length) return c;
+            const n = achados.shift();
+            fases[n.id] = { faseId: n.faseId, fase: n.fase };
+            return { ...c, id: n.id, url: n.url || c.url, card_anterior: c.id };
+          });
+        }
+      } catch (e) { console.error('[Lojinha] religar card:', e.message); }
+    }
+    const cards = origem.map(c => (c?.id && fases[c.id] ? { ...c, fase: fases[c.id].fase, fase_id: fases[c.id].faseId } : c));
     const st = cards.filter(c => c?.id && fases[c.id]).map(c => STATUS_POR_FASE[fases[c.id].faseId]).filter(Boolean);
     if (!st.length) continue;
     const novo = st.reduce((a, b) => (ORDEM_STATUS.indexOf(b) < ORDEM_STATUS.indexOf(a) ? b : a));
