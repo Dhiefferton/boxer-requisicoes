@@ -32,7 +32,7 @@ const TIPOS = {
   finalizado:                { label: 'Finalizado',              cor: 'bg-green-500/15 text-green-400' },
   cancelado:                 { label: 'Cancelado',               cor: 'bg-red-500/15 text-red-400' },
   erro_zen:                  { label: 'Erro no Zen',             cor: 'bg-red-500/15 text-red-400' },
-  sincronizacao:             { label: 'Atualizar (sincronização)', cor: 'bg-[var(--c-borda)] text-[var(--c-suave)]' },
+  sincronizacao:             { label: 'Sincronização automática', cor: 'bg-[var(--c-borda)] text-[var(--c-suave)]' },
   campos_editados:           { label: 'Campos editados',         cor: 'bg-amber-500/15 text-amber-400' },
   fase_pipefy:               { label: 'Fase do Pipefy',          cor: 'bg-[var(--c-destaque)]/15 text-[var(--c-destaque)]' },
 };
@@ -318,7 +318,7 @@ export default function PainelMovimentacao({ onFechar, pedidoInicial = null }) {
             </select>
             <label className="flex items-center gap-1.5 text-xs text-[var(--c-suave)] cursor-pointer select-none">
               <input type="checkbox" checked={mostrarSync} onChange={e => setMostrarSync(e.target.checked)} className="accent-[var(--c-destaque)]" />
-              Mostrar cliques em "Atualizar"
+              Mostrar sincronizações automáticas
             </label>
           </div>
           {filtrosAtivos && (
