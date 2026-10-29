@@ -189,9 +189,38 @@ async function enviarParaSeparacaoAuto(id, usuario) {
     return registrarErro('Card sem peças com código e quantidade. Lance as peças no card do Pipefy — o sistema tenta de novo sozinho.');
   }
   try {
+    // Card que já tinha pedido no Zen e voltou para Requisitar Peças (ex.: revertido para
+    // incluir peça): reverte o pedido no Zen, acerta as peças com as do card e gera nova
+    // ordem de separação. Sem diferença nas peças, segue com o pedido como está.
+    if (pedido.zen_pedido_id) {
+      let r = null;
+      try { r = await atualizarItensPedidoZen(pedido); }
+      catch (err) { if (!/404/.test(err.message)) throw err; }
+      if (r && !r.semAlteracao) {
+        await query(
+          `UPDATE pedidos_orcamento
+              SET zen_ordem_separacao_id = $1, zen_romaneio_id = NULL, zen_nota_id = NULL, zen_erro = NULL,
+                  itens_alterados_em = NULL, aprovacao = NULL, pecas_recusadas = NULL,
+                  status = 'separando', atualizado_em = NOW()
+            WHERE id = $2`,
+          [r.ordemSeparacaoId, id]
+        );
+        const partes = [];
+        if (r.adicionados?.length) partes.push(`incluídas ${r.adicionados.join(', ')}`);
+        if (r.alterados?.length)   partes.push(`quantidade corrigida ${r.alterados.join(', ')}`);
+        if (r.removidos?.length)   partes.push(`retiradas ${r.removidos.join(', ')}`);
+        await registrarMovimento(id, 'pecas_atualizadas_zen', {
+          de: pedido.status, para: 'separando', usuario, origem: 'sincronizacao',
+          descricao: `Card voltou para "Requisitar Peças" no Pipefy — pedido #${pedido.zen_pedido_id} revertido e peças atualizadas no Zen (${partes.join('; ')}); nova ordem de separação #${r.ordemSeparacaoId}`,
+          detalhes: { adicionados: r.adicionados, alterados: r.alterados, removidos: r.removidos,
+                      ordem_anterior: pedido.zen_ordem_separacao_id, ordem_nova: r.ordemSeparacaoId },
+        });
+        return r;
+      }
+    }
     const zen = await criarPedidoVendaZen(pedido);
     await query(
-      `UPDATE pedidos_orcamento SET zen_pedido_id = $1, zen_ordem_separacao_id = $2, zen_erro = NULL,
+      `UPDATE pedidos_orcamento SET zen_pedido_id = $1, zen_ordem_separacao_id = $2, zen_erro = NULL, itens_alterados_em = NULL,
               zen_enviado_em = NOW(), status = 'separando', atualizado_em = NOW() WHERE id = $3`,
       [zen.zenPedidoId, zen.ordemSeparacaoId, id]
     );
