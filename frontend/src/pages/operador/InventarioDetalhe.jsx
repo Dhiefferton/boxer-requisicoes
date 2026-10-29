@@ -140,11 +140,13 @@ export default function InventarioDetalhe() {
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-500/15 text-purple-300 disabled:opacity-40">
               <RotateCcw size={14} /> Pedir recontagem ({contagem.divergente})
             </button>
+            {(usuario?.perfil === 'admin' || podeRecontar(usuario)) && (
             <button disabled={ocupado} onClick={() => acao(() => inventarioService.finalizar(inv.id),
               contagem.pendente ? `Ainda há ${contagem.pendente} itens pendentes. Finalizar mesmo assim?` : 'Finalizar o inventário?')}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
               <Check size={14} /> Finalizar inventário
             </button>
+            )}
             {usuario?.perfil === 'admin' && (
               <button disabled={ocupado} onClick={() => acao(() => inventarioService.cancelar(inv.id), 'Cancelar este inventário? As contagens ficam guardadas, mas ele sai dos indicadores.')}
                 className="p-2 rounded-xl text-red-400 hover:bg-red-500/10" title="Cancelar inventário"><Ban size={15} /></button>
