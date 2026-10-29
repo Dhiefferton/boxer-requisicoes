@@ -154,6 +154,7 @@ export const fornecedoresService = {
   criar:   (d) => api.post('/fornecedores', d),
   editar:  (id, d) => api.patch('/fornecedores/'+id, d),
   excluir: (id) => api.delete('/fornecedores/'+id),
+  zen:     (documento) => api.get('/fornecedores/zen', { params: { documento }, timeout: 30000 }),
 };
 
 export const comprasService = {
