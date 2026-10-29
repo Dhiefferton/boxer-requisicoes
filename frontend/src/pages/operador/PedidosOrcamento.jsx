@@ -458,7 +458,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
           <select value="" disabled={movendoPara} onChange={e => moverPara(e.target.value)}
             className="flex-1 min-w-0 bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-1.5 py-1 text-[11px] text-[var(--c-texto)] disabled:opacity-40">
             <option value="">{movendoPara ? 'Movendo…' : 'Mover para… (admin)'}</option>
-            {COLUNAS.filter(c => c.status !== pedido.status).map(c => <option key={c.status} value={c.status}>{c.titulo}</option>)}
+            {COLUNAS.filter(c => c.status !== pedido.status && !(pedido.pipefy_card_id && c.status === 'solicitacao')).map(c => <option key={c.status} value={c.status}>{c.titulo}</option>)}
           </select>
         </label>
       )}
