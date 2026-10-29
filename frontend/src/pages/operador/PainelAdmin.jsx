@@ -5,6 +5,13 @@ import { useState, useEffect, useRef } from 'react';
 import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Trash2, Search, Building2, Activity } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api, { adminService, materiaisService, fornecedoresService, materialFornecedoresService } from '../../services/api';
+
+// CNPJ (14 dígitos) ou CPF (11) com máscara enquanto digita
+function mascaraDocumento(v) {
+  const d = String(v || '').replace(/\D/g, '').slice(0, 14);
+  if (d.length <= 11) return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
+}
 import { Button, Spinner } from '../../components/ui';
 
 // ── Aba Usuários ─────────────────────────────────────────────
@@ -791,10 +798,31 @@ function AbaFornecedores() {
   const [loading, setLoading] = useState(true);
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState(null);
-  const [form, setForm] = useState({ empresa: '', representante: '', telefone: '', email: '', observacoes: '' });
+  const [form, setForm] = useState({ documento: '', empresa: '', representante: '', telefone: '', email: '', observacoes: '' });
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [buscandoZen, setBuscandoZen] = useState(false);
+  const [zen, setZen] = useState(null); // { ok, texto } resultado da busca no Zen
   const inputClass = "w-full bg-[var(--c-fundo-2)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[var(--c-destaque)]";
+  const dados = criando ? form : (editando || {});
+  const setCampo = (k, v) => (criando ? setForm(f => ({ ...f, [k]: v })) : setEditando(f => ({ ...f, [k]: v })));
+
+  // Digita o CNPJ/CPF e o resto (empresa, telefone, e-mail) vem do cadastro no Zen
+  async function buscarNoZen(doc = dados.documento) {
+    const d = String(doc || '').replace(/\D/g, '');
+    if (d.length !== 11 && d.length !== 14) { setZen({ ok: false, texto: 'Digite um CPF (11 dígitos) ou CNPJ (14 dígitos).' }); return; }
+    setBuscandoZen(true); setZen(null);
+    try {
+      const { data } = await fornecedoresService.zen(d);
+      const z = data.fornecedor;
+      const preencher = { documento: mascaraDocumento(z.documento || d), empresa: z.fantasia || z.nome,
+        ...(z.telefone ? { telefone: z.telefone } : {}), ...(z.email ? { email: z.email } : {}) };
+      if (criando) setForm(f => ({ ...f, ...preencher })); else setEditando(f => ({ ...f, ...preencher }));
+      setZen({ ok: true, texto: `${z.nome}${z.fantasia && z.fantasia !== z.nome ? ` (${z.fantasia})` : ''}${z.cidade ? ` · ${z.cidade}` : ''}` });
+    } catch (err) {
+      setZen({ ok: false, texto: err.response?.data?.erro || 'Erro ao buscar no Zen.' });
+    } finally { setBuscandoZen(false); }
+  }
 
   async function carregar() {
     setLoading(true);
@@ -811,7 +839,8 @@ function AbaFornecedores() {
     try {
       await fornecedoresService.criar(form);
       setCriando(false);
-      setForm({ empresa: '', representante: '', telefone: '', email: '', observacoes: '' });
+      setForm({ documento: '', empresa: '', representante: '', telefone: '', email: '', observacoes: '' });
+      setZen(null);
       carregar();
     } catch (err) {
       setErro(err.response?.data?.erro || 'Erro ao criar fornecedor.');
@@ -840,7 +869,7 @@ function AbaFornecedores() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-[var(--c-texto)]">Fornecedores ({fornecedores.length})</h2>
-        <button onClick={() => { setCriando(true); setEditando(null); }} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25">
+        <button onClick={() => { setCriando(true); setEditando(null); setZen(null); }} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25">
           <Plus size={13} /> Novo Fornecedor
         </button>
       </div>
@@ -849,6 +878,23 @@ function AbaFornecedores() {
         <div className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-4 space-y-3">
           <h3 className="font-semibold text-[var(--c-texto)] text-sm">{criando ? 'Novo Fornecedor' : 'Editar Fornecedor'}</h3>
           <form onSubmit={criando ? handleCriar : handleEditar} className="space-y-3">
+            <div><label className="text-xs text-[var(--c-suave)] mb-1 block">CNPJ / CPF</label>
+              <div className="flex gap-2">
+                <input value={dados.documento || ''} inputMode="numeric" placeholder="Digite o documento — os dados vêm do Zen"
+                  onChange={e => {
+                    const v = mascaraDocumento(e.target.value); setCampo('documento', v); setZen(null);
+                    const n = v.replace(/\D/g, '').length;
+                    if (n === 14) buscarNoZen(v); // CNPJ completo busca sozinho; CPF: Enter ou botão
+                  }}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); buscarNoZen(); } }}
+                  className={inputClass} autoFocus={criando} />
+                <button type="button" onClick={() => buscarNoZen()} disabled={buscandoZen}
+                  className="flex items-center gap-1.5 px-3 rounded-xl text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40 whitespace-nowrap">
+                  {buscandoZen ? <Spinner size={12} /> : <Search size={12} />} Buscar no Zen
+                </button>
+              </div>
+              {zen && <p className={`text-xs mt-1 ${zen.ok ? 'text-green-400' : 'text-red-400'}`}>{zen.ok ? `Zen: ${zen.texto}` : zen.texto}</p>}
+            </div>
             <div><label className="text-xs text-[var(--c-suave)] mb-1 block">Empresa *</label>
               <input value={criando ? form.empresa : editando.empresa} onChange={e => criando ? setForm(f => ({...f, empresa: e.target.value})) : setEditando(f => ({...f, empresa: e.target.value}))} className={inputClass} required /></div>
             <div><label className="text-xs text-[var(--c-suave)] mb-1 block">Representante</label>
@@ -875,6 +921,7 @@ function AbaFornecedores() {
               <div key={f.id} className="bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-4 py-3 flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[var(--c-texto)] break-words">{f.empresa}</p>
+                  {f.documento && <p className="text-xs text-[var(--c-suave)] mt-0.5 font-mono">{f.documento}</p>}
                   {f.representante && <p className="text-xs text-[var(--c-suave)] mt-0.5 break-words">Rep: {f.representante}</p>}
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 min-w-0">
                     {f.telefone && <span className="text-xs text-[var(--c-suave)]">{f.telefone}</span>}
@@ -883,7 +930,7 @@ function AbaFornecedores() {
                   {f.observacoes && <p className="text-xs text-[var(--c-suave)] mt-1 italic break-words">{f.observacoes}</p>}
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <button onClick={() => { setEditando({...f}); setCriando(false); }} className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/10"><Pencil size={13} /></button>
+                  <button onClick={() => { setEditando({...f}); setCriando(false); setZen(null); }} className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/10"><Pencil size={13} /></button>
                   <button onClick={() => handleExcluir(f.id)} className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-red-400 hover:bg-red-400/10"><Trash2 size={13} /></button>
                 </div>
               </div>
