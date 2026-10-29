@@ -122,6 +122,24 @@ router.get('/debug-mov-orcamento', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// Ex: GET /api/erp/debug-corrigir-orcamento?secret=...&id=796&status=orcando
+// Ajuste pontual: coloca o card na coluna informada e limpa o erro do Zen (registra no histórico)
+router.get('/debug-corrigir-orcamento', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const id = parseInt(req.query.id) || 0;
+    const status = String(req.query.status || '');
+    if (!/^[a-z_]{3,30}$/.test(status)) return res.status(400).json({ erro: 'status inválido' });
+    const antes = (await query(`SELECT status FROM pedidos_orcamento WHERE id = $1`, [id])).rows[0];
+    if (!antes) return res.status(404).json({ erro: 'não encontrado' });
+    await query(`UPDATE pedidos_orcamento SET status = $2, zen_erro = NULL, atualizado_em = NOW() WHERE id = $1`, [id, status]);
+    await query(`INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, de_status, para_status, descricao, usuario_nome, origem)
+                 VALUES ($1, 'movido', $2, $3, 'Voltou para a mesma fase do Pipefy (ajuste pelo suporte)', 'Sistema', 'sistema')`,
+      [id, antes.status, status]);
+    res.json({ ok: true, de: antes.status, para: status });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // Força sincronização manual (GET, testável no navegador, mesmo secret do cron)
 router.get('/sync-manual', async (req, res, next) => {
   try {
