@@ -593,6 +593,11 @@ export async function historicoItem(req, res, next) {
 export async function finalizarInventario(req, res, next) {
   try {
     await garantirEstrutura();
+    // Finalizar é decisão de quem acerta as divergências (admin / Alexsander), não do contador.
+    // Acabar a contagem não finaliza: o inventário fica em andamento até alguém autorizado finalizar.
+    if (req.usuario?.perfil !== 'admin' && !podeRecontar(req.usuario)) {
+      return res.status(403).json({ erro: 'Só o administrador (ou o Alexsander) finaliza o inventário, depois de acertar as divergências.' });
+    }
     const r = await query(
       `UPDATE inventarios SET status = 'finalizado', finalizado_em = NOW(), finalizado_por_nome = $2
         WHERE id = $1 AND status = 'andamento' RETURNING *`, [parseInt(req.params.id), req.usuario.nome]);
