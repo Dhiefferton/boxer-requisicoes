@@ -165,6 +165,48 @@ const precisaFinalizarZen = (p, destino) => STATUS_FINALIZA_ZEN.includes(destino
   && p.status !== 'finalizado' && !!p.zen_ordem_separacao_id && !p.zen_nota_id;
 const parcialSemRetirar = p => /parcial/i.test(String(p.aprovacao || '')) && !p.recusadas_retiradas_em;
 
+// Card chegou em "Requisitar Peças" no Pipefy: cria o pedido de venda + ordem de separação
+// no Zen e manda direto para Em Separação. Sem peças ou com erro do Zen, o card fica na fase
+// atual com o erro (registrado só quando muda) e tenta de novo na próxima sincronização.
+const ANTES_DE_REQUISITAR = ['entrada', 'divergencia_entrada', 'liberado_orcar', 'orcando', 'solicitacao'];
+async function enviarParaSeparacaoAuto(id, usuario) {
+  const pedido = (await query(`SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`, [id])).rows[0];
+  if (!pedido) return null;
+  const registrarErro = async (msg, zenPedidoId = null) => {
+    const texto = String(msg).slice(0, 1000);
+    await query(`UPDATE pedidos_orcamento SET zen_pedido_id = COALESCE($1, zen_pedido_id), zen_erro = $2, atualizado_em = NOW() WHERE id = $3`,
+      [zenPedidoId, texto, id]);
+    if ((pedido.zen_erro || '') !== texto) {
+      await registrarMovimento(id, 'erro_zen', {
+        de: pedido.status, para: 'separando', usuario, origem: 'sincronizacao',
+        descricao: `Card em "Requisitar Peças" no Pipefy, mas não foi para Em Separação: ${texto.slice(0, 500)}`,
+        detalhes: { acao: 'criar_pedido', zen_pedido_id: zenPedidoId },
+      });
+    }
+    return null;
+  };
+  if (!(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)) {
+    return registrarErro('Card sem peças com código e quantidade. Lance as peças no card do Pipefy — o sistema tenta de novo sozinho.');
+  }
+  try {
+    const zen = await criarPedidoVendaZen(pedido);
+    await query(
+      `UPDATE pedidos_orcamento SET zen_pedido_id = $1, zen_ordem_separacao_id = $2, zen_erro = NULL,
+              zen_enviado_em = NOW(), status = 'separando', atualizado_em = NOW() WHERE id = $3`,
+      [zen.zenPedidoId, zen.ordemSeparacaoId, id]
+    );
+    await registrarMovimento(id, 'zen_pedido_criado', {
+      de: pedido.status, para: 'separando', usuario, origem: 'sincronizacao',
+      descricao: `Card chegou em "Requisitar Peças" no Pipefy — pedido de venda #${zen.zenPedidoId} ${zen.criadoAgora ? 'criado' : 'completado'} no Zen (ordem de separação #${zen.ordemSeparacaoId}) e card enviado para Em Separação`,
+      detalhes: { zen_pedido_id: zen.zenPedidoId, ordem_separacao: zen.ordemSeparacaoId, itens_incluidos: zen.itensIncluidos },
+    });
+    return zen;
+  } catch (err) {
+    console.error(`❌ ZenERP pedido orçamento #${id} (automático):`, err.message);
+    return registrarErro(`Erro no Zen: ${err.message}`, err.zenPedidoId || null);
+  }
+}
+
 // Fecha o romaneio e cria a nota no Zen. Em caso de erro grava zen_erro + movimento e relança.
 async function finalizarNoZen(pedido, destino, usuario, origem) {
   try {
@@ -909,6 +951,11 @@ async function executarSincronizacao(req, res, next) {
           if (precisaFinalizarZen(p, alvo)) {
             try { fimZen = await finalizarNoZen(p, alvo, req.usuario, 'sincronizacao'); }
             catch { continue; }
+          }
+
+          if (alvo === 'solicitacao' && ANTES_DE_REQUISITAR.includes(p.status)) {
+            if (await enviarParaSeparacaoAuto(p.id, req.usuario)) movidosPipefy++;
+            continue;
           }
 
           if (alvo === 'aprovado_recusado') {
