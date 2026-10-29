@@ -82,7 +82,7 @@ export default function PedidosOrcamento() {
   // tela visível e ao voltar para a aba. Quem só visualiza recarrega a lista.
   const ultimaSyncRef = useRef(0);
   const syncRodandoRef = useRef(false);
-  const [ultimaSync, setUltimaSync] = useState(null);
+  const falhasSyncRef = useRef(0);
   async function sincronizarPipefy() {
     if (syncRodandoRef.current) return;
     syncRodandoRef.current = true;
@@ -94,9 +94,11 @@ export default function PedidosOrcamento() {
       }
       await carregar();
       ultimaSyncRef.current = Date.now();
-      setUltimaSync(new Date());
+      falhasSyncRef.current = 0;
     } catch (err) {
-      setMsgSync(err.response?.data?.erro || 'Erro ao sincronizar com o Pipefy — tentando de novo em 30s.');
+      // Falha isolada (rede/lentidão) é silenciosa; só avisa se falhar 3 vezes seguidas
+      falhasSyncRef.current += 1;
+      if (falhasSyncRef.current >= 3) setMsgSync(err.response?.data?.erro || 'Não está conseguindo sincronizar com o Pipefy — tentando de novo a cada 30s.');
       await carregar();
     } finally {
       syncRodandoRef.current = false;
@@ -145,11 +147,6 @@ export default function PedidosOrcamento() {
               <Activity size={13} /> Movimentação
             </button>
           )}
-          <span title="Sincroniza sozinho com o Pipefy e o Zen a cada 30 segundos"
-            className="flex items-center gap-1.5 px-2 py-2 text-[11px] text-[var(--c-suave)]">
-            <RefreshCw size={12} className={sincronizando ? 'animate-spin text-[var(--c-destaque)]' : ''} />
-            {sincronizando ? 'Sincronizando…' : ultimaSync ? `Atualizado ${ultimaSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Automático'}
-          </span>
           <button onClick={alternarVazias} title={ocultarVazias ? 'Mostrar colunas vazias' : 'Esconder colunas vazias'}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]">
             {ocultarVazias ? <Eye size={13} /> : <EyeOff size={13} />} {ocultarVazias ? 'Mostrar vazias' : 'Esconder vazias'}
