@@ -181,7 +181,7 @@ async function finalizarNoZen(pedido, destino, usuario, origem) {
     console.error(`❌ ZenERP finalizar pedido orçamento #${pedido.id}:`, err.message);
     await query(`UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`,
       [err.message.slice(0, 1000), pedido.id]);
-    // Na sincronização o mesmo erro se repete a cada Atualizar: registra só quando muda
+    // Na sincronização o mesmo erro se repete a cada sincronização: registra só quando muda
     if (origem !== 'sincronizacao' || pedido.zen_erro !== err.message.slice(0, 1000)) await registrarMovimento(pedido.id, 'erro_zen', {
       de: pedido.status, para: destino, usuario, origem,
       descricao: `Falha ao fechar o romaneio / criar a nota no Zen: ${err.message.slice(0, 500)}`,
@@ -287,14 +287,14 @@ export async function moverPedido(req, res, next) {
 
     // Card do Pipefy só entra em Requisitar Peças quando o card for movido no Pipefy (sincronização)
     if (status === 'solicitacao' && pedido.status !== 'solicitacao' && pedido.pipefy_card_id) {
-      return res.status(400).json({ erro: 'Este card só vai para Requisitar Peças quando for movido no Pipefy. Mova o card lá e clique em Atualizar.' });
+      return res.status(400).json({ erro: 'Este card só vai para Requisitar Peças quando for movido no Pipefy. Mova o card lá e aguarde a atualização automática (até 30s).' });
     }
 
     // Trava: sem peças (código + quantidade) não vai para Em Separação — nem tenta o Zen
     if (status === 'separando' && pedido.status !== 'separando'
         && !(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)) {
       return res.status(400).json({ erro: pedido.pipefy_card_id
-        ? 'Este card não tem peças. Lance as peças no Pipefy (fase "Requisitar Peças") e clique em Atualizar antes de mandar para Em Separação.'
+        ? 'Este card não tem peças. Lance as peças no Pipefy (fase "Requisitar Peças") e aguarde a atualização automática (até 30s) antes de mandar para Em Separação.'
         : 'Este card não tem peças. Preencha as peças nos campos do card antes de mandar para Em Separação.' });
     }
 
@@ -609,11 +609,33 @@ export async function listarPipesPipefy(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// POST /pedidos-orcamento/sincronizar-pipefy — botão "Atualizar do Pipefy"
+// POST /pedidos-orcamento/sincronizar-pipefy — chamado automaticamente pela tela (ver sincronizarPipefy abaixo)
 // Puxa os cards da fase "Requisitar Peças" do pipe "Orçamento BOXER SOLDAS".
 // Card novo entra em 'solicitacao'; card já existente só tem título/campos
 // atualizados (status no app não é alterado).
+// A tela chama a sincronização sozinha a cada ~30s. Várias telas abertas ao mesmo
+// tempo compartilham a mesma execução, e um resultado recente (< 20s) é reaproveitado.
+let syncEmAndamento = null;
+let ultimaSync = { em: 0, resultado: null };
 export async function sincronizarPipefy(req, res, next) {
+  if (!syncEmAndamento && ultimaSync.resultado && Date.now() - ultimaSync.em < 20000) {
+    return res.json({ ...ultimaSync.resultado, reaproveitado: true });
+  }
+  if (!syncEmAndamento) {
+    syncEmAndamento = new Promise((resolve, reject) => {
+      const resFalso = {
+        json: d => resolve(d),
+        status: c => ({ json: d => reject(Object.assign(new Error(d?.erro || 'Erro na sincronização'), { status: c, corpo: d })) }),
+      };
+      executarSincronizacao(req, resFalso, reject).catch(reject);
+    }).then(d => { ultimaSync = { em: Date.now(), resultado: d }; return d; })
+      .finally(() => { syncEmAndamento = null; });
+  }
+  try { res.json(await syncEmAndamento); }
+  catch (err) { if (err.corpo) return res.status(err.status).json(err.corpo); next(err); }
+}
+
+async function executarSincronizacao(req, res, next) {
   try {
     await garantirColunas();
     const cards = await listarCardsDaFase();
@@ -882,7 +904,7 @@ export async function sincronizarPipefy(req, res, next) {
           if (p.status === 'separado' && alvo === 'solicitacao') continue;
           if (alvo === 'nao_liberado' && p.nao_liberado_ignorado_em) continue;
           // Chegou em Concluído - Não Liberado (ou Expedição) no Pipefy: fecha o romaneio e cria a nota no Zen.
-          // Se o Zen falhar, o card fica onde está com o erro e tenta de novo no próximo Atualizar.
+          // Se o Zen falhar, o card fica onde está com o erro e tenta de novo na próxima sincronização.
           let fimZen = null;
           if (precisaFinalizarZen(p, alvo)) {
             try { fimZen = await finalizarNoZen(p, alvo, req.usuario, 'sincronizacao'); }
@@ -937,9 +959,10 @@ export async function sincronizarPipefy(req, res, next) {
       }
     }
 
-    await registrarMovimento(null, 'sincronizacao', {
+    // Sincronização automática (a cada ~30s): só registra no relatório quando algo mudou
+    if (novos + reativados + alterados + separados + aprovadosRecusados + naoLiberados + movidosPipefy > 0) await registrarMovimento(null, 'sincronizacao', {
       usuario: req.usuario, origem: 'sincronizacao',
-      descricao: `Atualizar (Pipefy/Zen): ${cards.length} card(s) em "Requisitar Peças" — ${novos} novo(s), ${reativados} reaberto(s), ${alterados} com peças alteradas, ${separados} separado(s), ${aprovadosRecusados} em Aprovado/Recusado, ${naoLiberados} não liberado(s), ${movidosPipefy} movido(s) conforme o Pipefy`,
+      descricao: `Sincronização (Pipefy/Zen): ${cards.length} card(s) em "Requisitar Peças" — ${novos} novo(s), ${reativados} reaberto(s), ${alterados} com peças alteradas, ${separados} separado(s), ${aprovadosRecusados} em Aprovado/Recusado, ${naoLiberados} não liberado(s), ${movidosPipefy} movido(s) conforme o Pipefy`,
       detalhes: { total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados, naoLiberados, movidosPipefy },
     });
     res.json({ total: cards.length, novos, atualizados, reativados, alterados, separados, aprovadosRecusados, naoLiberados, movidosPipefy });
