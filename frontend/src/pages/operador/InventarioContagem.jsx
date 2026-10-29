@@ -117,6 +117,15 @@ export default function InventarioContagem({ modo }) {
     catch (e) { setErro(e.response?.data?.erro || 'Erro ao carregar o inventário.'); }
   }
   useEffect(() => { carregar(); }, [id]);
+  // Atualiza a fila a cada 20 s (itens contados por outros contadores saem da lista),
+  // só quando não há item aberto nem envio em andamento
+  useEffect(() => {
+    const t = setInterval(() => {
+      const st = estado.current;
+      if (document.visibilityState === 'visible' && !st.item && !st.buscando && !st.salvando) carregar();
+    }, 20000);
+    return () => clearInterval(t);
+  }, [id]);
   useEffect(() => { const t = setInterval(() => setAgora(Date.now()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { if (item) setTimeout(() => inputQtd.current?.focus(), 50); }, [item]);
   // No modo coletor, deixa o campo de código sempre pronto para a próxima leitura

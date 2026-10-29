@@ -32,8 +32,9 @@ export default function Inventario() {
   const [erro, setErro] = useState('');
   const [novo, setNovo] = useState(false);
 
-  async function carregar() {
-    setCarregando(true); setErro('');
+  async function carregar(silencioso = false) {
+    if (!silencioso) setCarregando(true);
+    setErro('');
     try {
       const { data } = await inventarioService.listar(local);
       setLista(data.inventarios); setSaldoMax(data.saldo_maximo);
@@ -41,6 +42,11 @@ export default function Inventario() {
     finally { setCarregando(false); }
   }
   useEffect(() => { setLista([]); carregar(); }, [local]);
+  // Atualiza sozinho a cada 20 s (progresso da contagem de todos os contadores)
+  useEffect(() => {
+    const t = setInterval(() => { if (document.visibilityState === 'visible') carregar(true); }, 20000);
+    return () => clearInterval(t);
+  }, [local]);
 
   const andamento = lista.find(i => i.status === 'andamento');
   const finalizados = lista.filter(i => i.status === 'finalizado');
