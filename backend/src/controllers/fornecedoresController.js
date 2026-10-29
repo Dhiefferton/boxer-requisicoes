@@ -1,4 +1,5 @@
 ﻿import { query } from '../config/db.js';
+import { buscarClienteZen } from '../integrations/zenPedidoVenda.js';
 
 // Coluna do CNPJ/CPF do fornecedor (criada na primeira chamada)
 let colunaOk = null;
@@ -96,5 +97,25 @@ export async function desvincularFornecedor(req, res, next) {
     await query(`DELETE FROM material_fornecedores WHERE material_id = $1 AND fornecedor_id = $2`,
       [parseInt(id), parseInt(fornecedor_id)]);
     res.json({ sucesso: true });
+  } catch (err) { next(err); }
+}
+
+// GET /fornecedores/zen?documento= — cadastro da pessoa no Zen pelo CNPJ/CPF
+// (só os dados usados no cadastro do fornecedor)
+export async function fornecedorZen(req, res, next) {
+  try {
+    const doc = String(req.query.documento || '').replace(/\D/g, '');
+    if (doc.length !== 11 && doc.length !== 14) return res.status(400).json({ erro: 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos).' });
+    let p;
+    try { p = await buscarClienteZen(doc); }
+    catch (e) {
+      if (/não está cadastrado|inválido/i.test(e.message)) return res.status(404).json({ erro: `CNPJ/CPF não encontrado no Zen. Confira o número ou preencha os dados à mão.` });
+      throw e;
+    }
+    const uf = p.city?.state?.code || '';
+    res.json({ fornecedor: {
+      zen_id: p.id, nome: p.name || '', fantasia: p.fantasyName || '', documento: p.documentNumber || doc,
+      cidade: p.city?.name ? `${p.city.name}${uf ? ` / ${uf}` : ''}` : '', telefone: p.phone || '', email: p.email || '',
+    } });
   } catch (err) { next(err); }
 }
