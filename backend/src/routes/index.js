@@ -45,7 +45,7 @@ import {
 import {
   listarNotas as listarNotasRecImp, detalharNota as detalharNotaRecImp, verFoto as verFotoRecImp,
   fotoCatalogo as fotoCatalogoRecImp, enviarFoto as enviarFotoRecImp, excluirFoto as excluirFotoRecImp,
-  marcarItem as marcarItemRecImp,
+  marcarItem as marcarItemRecImp, substituirFoto as substituirFotoRecImp,
 } from '../controllers/recebimentoImportacaoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { relatorioUsoPipefy } from '../integrations/usoPipefy.js';
@@ -227,6 +227,7 @@ router.get('/recebimento-importacao/notas',                 ...recImp, listarNot
 router.get('/recebimento-importacao/notas/:id',             ...recImp, detalharNotaRecImp);
 router.get('/recebimento-importacao/fotos/:id',             ...recImp, verFotoRecImp);
 router.delete('/recebimento-importacao/fotos/:id',          ...recImp, excluirFotoRecImp);
+router.patch('/recebimento-importacao/fotos/:id',           ...recImp, substituirFotoRecImp);
 router.get('/recebimento-importacao/catalogo/:sku/foto',    ...recImp, fotoCatalogoRecImp);
 router.post('/recebimento-importacao/itens/:itemId/fotos',  ...recImp, enviarFotoRecImp);
 router.patch('/recebimento-importacao/itens/:itemId',       ...recImp, marcarItemRecImp);
