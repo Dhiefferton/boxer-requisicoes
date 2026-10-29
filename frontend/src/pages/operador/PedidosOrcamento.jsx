@@ -18,8 +18,8 @@ import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN } from '../../utils/fases
 
 // Colunas: fases do Pipefy + Em Separação / Separado (utils/fasesOrcamento.js).
 // Colunas novas só o admin move; o fluxo de sempre continua igual:
-// Requisitar Peças -> Em Separação (cria no Zen), Aprovado/Recusado -> Expedição (nota no Zen).
-const PROXIMA = { solicitacao: 'separando', aprovado_recusado: 'nao_liberado' };
+// Requisitar Peças -> Em Separação (cria no Zen). Concluído - Não Liberado (nota no Zen) segue o Pipefy.
+const PROXIMA = { solicitacao: 'separando' };
 
 const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
 
@@ -234,7 +234,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
     if (!status || status === pedido.status) return;
     const destino = COLUNAS.find(c => c.status === status);
     const avisoZen = status === 'separando' && pedido.status === 'solicitacao' ? '\n\nIsso cria o pedido de venda e a ordem de separação no Zen.'
-      : status === 'finalizado' && pedido.zen_ordem_separacao_id && !pedido.zen_nota_id && ['aprovado_recusado', 'em_manutencao', 'nao_liberado', 'liberado_saida'].includes(pedido.status)
+      : ['nao_liberado', 'finalizado'].includes(status) && pedido.zen_ordem_separacao_id && !pedido.zen_nota_id
         ? '\n\nIsso fecha o romaneio e cria a nota fiscal no Zen.' : '';
     // Card criado aqui: avisa os campos obrigatórios da fase atual ainda vazios (como no Pipefy)
     let avisoCampos = '';
@@ -355,8 +355,8 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
         <span className="inline-block text-[10px] font-semibold text-[var(--c-destaque)] bg-[var(--c-destaque)]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
       )}
       {faseDiferente && (
-        <span title={pedido.status === 'separando' || pedido.status === 'separado' ? 'Etapa do Zen — segue o Pipefy quando a separação terminar'
-          : pedido.zen_ordem_separacao_id && !pedido.zen_nota_id && semAcento(faseDiferente) === 'expedicao' ? 'Mova para Expedição aqui para fechar o romaneio e criar a nota no Zen' : undefined}
+        <span title={pedido.zen_erro ? 'Não seguiu o Pipefy por causa do erro do Zen — corrija e clique em Atualizar'
+          : pedido.status === 'separando' ? 'Etapa do Zen — segue o Pipefy quando a separação terminar' : undefined}
           className="inline-block ml-1 text-[10px] font-semibold text-amber-300 bg-amber-500/15 rounded px-1.5 py-0.5">No Pipefy: {faseDiferente}</span>
       )}
       {pedido.zen_pedido_id && (
