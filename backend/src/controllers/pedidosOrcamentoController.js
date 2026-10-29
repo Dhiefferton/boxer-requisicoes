@@ -258,6 +258,14 @@ export async function moverPedido(req, res, next) {
     }
     const detalhesMov = {};
 
+    // Trava: sem peças (código + quantidade) não vai para Em Separação — nem tenta o Zen
+    if (status === 'separando' && pedido.status !== 'separando'
+        && !(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)) {
+      return res.status(400).json({ erro: pedido.pipefy_card_id
+        ? 'Este card não tem peças. Lance as peças no Pipefy (fase "Requisitar Peças") e clique em Atualizar antes de mandar para Em Separação.'
+        : 'Este card não tem peças. Preencha as peças nos campos do card antes de mandar para Em Separação.' });
+    }
+
     // Solicitação -> Separando: cria o pedido de venda no ZenERP antes de mover.
     // Se o Zen falhar, o card fica onde está e o erro aparece na tela.
     let zen = null;
