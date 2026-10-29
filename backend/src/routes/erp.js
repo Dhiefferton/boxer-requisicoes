@@ -175,6 +175,19 @@ router.get('/debug-mkt', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// DIAGNÓSTICO — inventário: status dos itens e contagens. Ex: ?secret=...&id=5
+router.get('/debug-inventario', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const id = parseInt(req.query.id);
+    const inv = (await query(`SELECT id, status, local, criado_em, filtros FROM inventarios WHERE id = $1`, [id])).rows[0];
+    const status = (await query(`SELECT status, COUNT(*)::int n FROM inventario_itens WHERE inventario_id = $1 GROUP BY status`, [id])).rows;
+    const amostra = (await query(`SELECT id, codigo, status, endereco, categoria FROM inventario_itens WHERE inventario_id = $1 ORDER BY id LIMIT 10`, [id])).rows;
+    const contagens = (await query(`SELECT COUNT(*)::int n FROM inventario_contagens WHERE inventario_id = $1`, [id])).rows[0];
+    res.json({ inv, status, amostra, contagens });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // Volta um orçamento "Não liberado" para Em Separação (cria pedido/ordem no Zen se faltar).
 // Ex: GET /api/erp/debug-voltar-separacao?secret=...&id=614
 router.get('/debug-voltar-separacao', async (req, res) => {
