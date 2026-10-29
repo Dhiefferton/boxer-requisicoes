@@ -258,6 +258,11 @@ export async function moverPedido(req, res, next) {
     }
     const detalhesMov = {};
 
+    // Card do Pipefy só entra em Requisitar Peças quando o card for movido no Pipefy (sincronização)
+    if (status === 'solicitacao' && pedido.status !== 'solicitacao' && pedido.pipefy_card_id) {
+      return res.status(400).json({ erro: 'Este card só vai para Requisitar Peças quando for movido no Pipefy. Mova o card lá e clique em Atualizar.' });
+    }
+
     // Trava: sem peças (código + quantidade) não vai para Em Separação — nem tenta o Zen
     if (status === 'separando' && pedido.status !== 'separando'
         && !(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)) {
