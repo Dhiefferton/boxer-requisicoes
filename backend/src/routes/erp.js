@@ -180,7 +180,13 @@ router.get('/debug-inventario', async (req, res) => {
   if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
   try {
     const id = parseInt(req.query.id);
-    const inv = (await query(`SELECT id, status, local, criado_em, filtros FROM inventarios WHERE id = $1`, [id])).rows[0];
+    // ?acao=reabrir → volta um inventário finalizado para "em andamento"
+    if (req.query.acao === 'reabrir') {
+      const r = await query(`UPDATE inventarios SET status = 'andamento', finalizado_em = NULL, finalizado_por_nome = NULL
+                               WHERE id = $1 AND status = 'finalizado' RETURNING id, status`, [id]);
+      return res.json({ reaberto: r.rows[0] || null });
+    }
+    const inv = (await query(`SELECT * FROM inventarios WHERE id = $1`, [id])).rows[0];
     const status = (await query(`SELECT status, COUNT(*)::int n FROM inventario_itens WHERE inventario_id = $1 GROUP BY status`, [id])).rows;
     const amostra = (await query(`SELECT id, codigo, status, endereco, categoria FROM inventario_itens WHERE inventario_id = $1 ORDER BY id LIMIT 10`, [id])).rows;
     const contagens = (await query(`SELECT COUNT(*)::int n FROM inventario_contagens WHERE inventario_id = $1`, [id])).rows[0];
