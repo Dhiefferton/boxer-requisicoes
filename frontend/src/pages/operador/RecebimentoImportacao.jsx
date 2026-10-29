@@ -7,7 +7,7 @@
 // No celular: "Fotografar em sequência" passa item por item.
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, RefreshCw, Search, Check, X, AlertTriangle, ImageOff, ChevronLeft, ChevronRight, Trash2, SkipForward, Package, FileText } from 'lucide-react';
+import { Camera, RefreshCw, Search, Check, X, AlertTriangle, ImageOff, ChevronLeft, ChevronRight, Trash2, SkipForward, Package, FileText, RotateCcw, RotateCw, Save } from 'lucide-react';
 import { recebimentoImportacaoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 
@@ -41,7 +41,12 @@ function ImagemAuth({ url, alt = '', className = '', vazio = null, onFalha, onCl
 }
 
 const urlCatalogo = (sku, tam) => `/recebimento-importacao/catalogo/${encodeURIComponent(sku)}/foto${tam ? `?tam=${tam}` : ''}`;
-const urlFoto = (id, tam) => `/recebimento-importacao/fotos/${id}${tam ? `?tam=${tam}` : ''}`;
+// v = versão da foto (muda quando a foto é girada, para não usar a imagem antiga do cache)
+const versaoFoto = new Map(); // fotoId -> versão (cada vez que é girada)
+const urlFoto = (id, tam, v = versaoFoto.get(id)) => {
+  const q = [tam ? `tam=${tam}` : '', v ? `v=${v}` : ''].filter(Boolean).join('&');
+  return `/recebimento-importacao/fotos/${id}${q ? `?${q}` : ''}`;
+};
 
 function SemFotoCatalogo({ className = '' }) {
   return (
@@ -69,6 +74,20 @@ function redimensionar(img, max, qualidade) {
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', qualidade);
 }
+// Gira a imagem (múltiplos de 90°) e devolve um Blob JPEG
+function girarImagem(img, graus) {
+  const g = ((graus % 360) + 360) % 360;
+  const deitada = g === 90 || g === 270;
+  const c = document.createElement('canvas');
+  c.width = deitada ? img.naturalHeight : img.naturalWidth;
+  c.height = deitada ? img.naturalWidth : img.naturalHeight;
+  const ctx = c.getContext('2d');
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate((g * Math.PI) / 180);
+  ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+  return new Promise((ok, falha) => c.toBlob(b => (b ? ok(b) : falha(new Error('Não consegui girar a foto.'))), 'image/jpeg', 0.92));
+}
+
 async function prepararFoto(arquivo) {
   const img = await lerImagem(arquivo);
   return { imagem: redimensionar(img, 1280, 0.78), miniatura: redimensionar(img, 320, 0.7) };
@@ -97,7 +116,23 @@ function ModalItem({ nota, item, posicao, total, sequencia, onFechar, onSalvo, o
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState('');
   const [erro, setErro] = useState('');
-  const [ampliada, setAmpliada] = useState(null); // url da foto aberta em tela cheia
+  const [ampliada, setAmpliada] = useState(null); // { url, fotoId? } da foto aberta em tela cheia
+  const [versao, setVersao] = useState({}); // fotoId -> nº de vezes que foi girada (recarrega a imagem)
+
+  // Grava a foto do recebimento girada (substitui a foto e a miniatura)
+  async function salvarGiro(fotoId, graus) {
+    const { data } = await recebimentoImportacaoService.imagem(urlFoto(fotoId, undefined, versao[fotoId]));
+    const original = await lerImagem(data);
+    const girada = await lerImagem(await girarImagem(original, graus));
+    await recebimentoImportacaoService.substituirFoto(fotoId, {
+      imagem: redimensionar(girada, 1280, 0.85), miniatura: redimensionar(girada, 320, 0.7),
+    });
+    const nova = (versaoFoto.get(fotoId) || 0) + 1;
+    versaoFoto.set(fotoId, nova);
+    setVersao(v => ({ ...v, [fotoId]: nova }));
+    onSalvo({ ...item, fotos }); // atualiza a miniatura na lista da nota
+    setAmpliada(a => (a && a.fotoId === fotoId ? { ...a, url: urlFoto(fotoId, undefined, nova) } : a));
+  }
 
   useEffect(() => {
     setFotos(item.fotos); setObs(item.observacao || ''); setUsarNoCatalogo(false);
@@ -182,13 +217,13 @@ function ModalItem({ nota, item, posicao, total, sequencia, onFechar, onSalvo, o
               <div className="text-[10px] font-semibold text-[var(--c-suave)] mb-1">CATÁLOGO (PMD)</div>
               {semCatalogo
                 ? <SemFotoCatalogo className="w-full aspect-square" />
-                : <ImagemAuth url={urlCatalogo(item.sku)} alt="Catálogo" onClick={() => setAmpliada(urlCatalogo(item.sku))} className="w-full aspect-square rounded-xl border border-[var(--c-borda)] bg-white"
+                : <ImagemAuth url={urlCatalogo(item.sku)} alt="Catálogo" onClick={() => setAmpliada({ url: urlCatalogo(item.sku) })} className="w-full aspect-square rounded-xl border border-[var(--c-borda)] bg-white"
                               vazio={<SemFotoCatalogo className="w-full aspect-square" />} onFalha={() => setSemCatalogo(true)} />}
             </div>
             <div>
               <div className="text-[10px] font-semibold text-[var(--c-suave)] mb-1">FOTO DO RECEBIMENTO</div>
               {fotos.length
-                ? <ImagemAuth url={urlFoto(fotos[fotos.length - 1])} alt="Recebimento" onClick={() => setAmpliada(urlFoto(fotos[fotos.length - 1]))} className="w-full aspect-square rounded-xl border border-[var(--c-borda)] bg-black" />
+                ? <ImagemAuth url={urlFoto(fotos[fotos.length - 1], undefined, versao[fotos[fotos.length - 1]])} alt="Recebimento" onClick={() => setAmpliada({ url: urlFoto(fotos[fotos.length - 1], undefined, versao[fotos[fotos.length - 1]]), fotoId: fotos[fotos.length - 1] })} className="w-full aspect-square rounded-xl border border-[var(--c-borda)] bg-black" />
                 : (
                   <button onClick={() => inputRef.current?.click()} disabled={enviando}
                           className="w-full aspect-square rounded-xl border-2 border-dashed border-[var(--c-destaque)] bg-[var(--c-destaque)]/5 text-[var(--c-destaque-claro)] flex flex-col items-center justify-center gap-2 font-semibold text-sm">
@@ -204,7 +239,7 @@ function ModalItem({ nota, item, posicao, total, sequencia, onFechar, onSalvo, o
             <div className="flex gap-2 flex-wrap">
               {fotos.map(id => (
                 <div key={id} className="relative">
-                  <ImagemAuth url={urlFoto(id, 'mini')} onClick={() => setAmpliada(urlFoto(id))} className="w-16 h-16 rounded-lg border border-[var(--c-borda)] bg-black" />
+                  <ImagemAuth url={urlFoto(id, 'mini', versao[id])} onClick={() => setAmpliada({ url: urlFoto(id, undefined, versao[id]), fotoId: id })} className="w-16 h-16 rounded-lg border border-[var(--c-borda)] bg-black" />
                   <button onClick={() => excluir(id)} title="Excluir foto"
                           className="absolute -top-1.5 -right-1.5 bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-full p-1 text-red-400 hover:bg-red-500/20">
                     <Trash2 size={10} />
@@ -256,12 +291,55 @@ function ModalItem({ nota, item, posicao, total, sequencia, onFechar, onSalvo, o
         </div>
 
         <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={aoEscolherFoto} />
-        {ampliada && (
-          <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-3" onClick={() => setAmpliada(null)}>
-            <button onClick={() => setAmpliada(null)} className="absolute top-3 right-3 p-2 rounded-full bg-white/10 text-white hover:bg-white/20"><X size={18} /></button>
-            <ImagemAuth url={ampliada} alt="Foto ampliada" className="max-w-full max-h-[92dvh] rounded-lg" />
-          </div>
+        {ampliada && <FotoAmpliada key={`${ampliada.url}-${versao[ampliada.fotoId] || 0}`} url={ampliada.url} onFechar={() => setAmpliada(null)}
+                                   onSalvarGiro={ampliada.fotoId ? (g) => salvarGiro(ampliada.fotoId, g) : null} />}
+      </div>
+    </div>
+  );
+}
+
+// Foto em tela cheia, com botões para girar (90° para cada lado).
+// Foto do recebimento: "Salvar" grava a foto girada (vale para todos).
+function FotoAmpliada({ url, onFechar, onSalvarGiro }) {
+  const [graus, setGraus] = useState(0);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  const deitada = Math.abs(graus / 90) % 2 === 1;
+  const girado = ((graus % 360) + 360) % 360 !== 0;
+  const girar = (e, d) => { e.stopPropagation(); setErro(''); setGraus(g => g + d); };
+  useEffect(() => {
+    const tecla = (e) => {
+      if (e.key === 'Escape') onFechar();
+      else if (e.key === 'ArrowLeft') setGraus(g => g - 90);
+      else if (e.key === 'ArrowRight') setGraus(g => g + 90);
+    };
+    window.addEventListener('keydown', tecla);
+    return () => window.removeEventListener('keydown', tecla);
+  }, [onFechar]);
+  async function salvar(e) {
+    e.stopPropagation();
+    setSalvando(true); setErro('');
+    try { await onSalvarGiro(graus); }
+    catch (err) { setErro(err.response?.data?.erro || err.message || 'Erro ao salvar a foto girada.'); setSalvando(false); }
+  }
+  const btn = 'p-2 rounded-full bg-white/10 text-white hover:bg-white/20';
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-3 overflow-hidden" onClick={onFechar}>
+      <div className="absolute top-3 right-3 flex items-center gap-2 z-10">
+        <button title="Girar para a esquerda" onClick={e => girar(e, -90)} className={btn}><RotateCcw size={18} /></button>
+        <button title="Girar para a direita" onClick={e => girar(e, 90)} className={btn}><RotateCw size={18} /></button>
+        {onSalvarGiro && girado && (
+          <button title="Salvar a foto girada" onClick={salvar} disabled={salvando}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-[var(--c-destaque)] text-white text-xs font-semibold disabled:opacity-50">
+            {salvando ? <Spinner size={14} /> : <Save size={14} />} Salvar
+          </button>
         )}
+        <button title="Fechar" onClick={e => { e.stopPropagation(); onFechar(); }} className={btn}><X size={18} /></button>
+      </div>
+      {erro && <div className="absolute top-16 right-3 z-10 text-xs text-red-300 bg-black/70 rounded-lg px-3 py-2 max-w-xs" onClick={e => e.stopPropagation()}>{erro}</div>}
+      <div onClick={e => e.stopPropagation()} style={{ transform: `rotate(${graus}deg)`, transition: 'transform .2s' }}>
+        <ImagemAuth url={url} alt="Foto ampliada"
+          className={`rounded-lg ${deitada ? 'max-w-[88dvh] max-h-[92vw]' : 'max-w-[calc(100vw-24px)] max-h-[92dvh]'}`} />
       </div>
     </div>
   );
