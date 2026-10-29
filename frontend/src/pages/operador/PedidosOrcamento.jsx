@@ -5,7 +5,7 @@
 // Finalizado). Ainda sem puxar dados do Pipefy nem gerar pedido no
 // ZenERP — vem nos próximos passos.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity, History, Search, X, ListTree, MoveRight, EyeOff, Eye, Plus } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
@@ -78,23 +78,41 @@ export default function PedidosOrcamento() {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { carregar(); }, []);
-
-  const ativos = pedidos.filter(p => !['finalizado', 'cancelado', 'sucata'].includes(p.status)).length;
-
+  // Sincronização automática com o Pipefy/Zen: ao abrir a tela, a cada 30s com a
+  // tela visível e ao voltar para a aba. Quem só visualiza recarrega a lista.
+  const ultimaSyncRef = useRef(0);
+  const syncRodandoRef = useRef(false);
+  const [ultimaSync, setUltimaSync] = useState(null);
   async function sincronizarPipefy() {
+    if (syncRodandoRef.current) return;
+    syncRodandoRef.current = true;
     setSincronizando(true);
-    setMsgSync('');
     try {
-      const { data } = await pedidosOrcamentoService.sincronizarPipefy();
-      setMsgSync(`Pipefy: ${data.total} card(s) em "Requisitar Peças" — ${data.novos} novo(s), ${data.atualizados} atualizado(s)${data.reativados ? `, ${data.reativados} reaberto(s)` : ''}${data.alterados ? `, ${data.alterados} com peças alteradas` : ''}. Zen: ${data.separados || 0} separado(s). Aprovado/Recusado: ${data.aprovadosRecusados || 0}${data.naoLiberados ? `, não liberado(s): ${data.naoLiberados}` : ''}. Movidos conforme o Pipefy: ${data.movidosPipefy || 0}.`);
+      if (podeEditar) {
+        await pedidosOrcamentoService.sincronizarPipefy();
+        setMsgSync('');
+      }
       await carregar();
+      ultimaSyncRef.current = Date.now();
+      setUltimaSync(new Date());
     } catch (err) {
-      setMsgSync(err.response?.data?.erro || 'Erro ao sincronizar com o Pipefy.');
+      setMsgSync(err.response?.data?.erro || 'Erro ao sincronizar com o Pipefy — tentando de novo em 30s.');
+      await carregar();
     } finally {
+      syncRodandoRef.current = false;
       setSincronizando(false);
     }
   }
+  useEffect(() => {
+    carregar();
+    sincronizarPipefy();
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') sincronizarPipefy(); }, 30000);
+    const aoVoltar = () => { if (document.visibilityState === 'visible' && Date.now() - ultimaSyncRef.current > 15000) sincronizarPipefy(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', aoVoltar); };
+  }, []);
+
+  const ativos = pedidos.filter(p => !['finalizado', 'cancelado', 'sucata'].includes(p.status)).length;
 
   return (
     // Tela grande (5 colunas): tela travada na altura da janela e cada coluna rola sozinha
@@ -127,15 +145,11 @@ export default function PedidosOrcamento() {
               <Activity size={13} /> Movimentação
             </button>
           )}
-          {podeEditar && (
-          <button onClick={sincronizarPipefy} disabled={sincronizando}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
-              bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 transition-colors
-              disabled:opacity-40 disabled:cursor-not-allowed">
-            <DownloadCloud size={13} className={sincronizando ? 'animate-pulse' : ''} />
-            {sincronizando ? 'Atualizando...' : 'Atualizar'}
-          </button>
-          )}
+          <span title="Sincroniza sozinho com o Pipefy e o Zen a cada 30 segundos"
+            className="flex items-center gap-1.5 px-2 py-2 text-[11px] text-[var(--c-suave)]">
+            <RefreshCw size={12} className={sincronizando ? 'animate-spin text-[var(--c-destaque)]' : ''} />
+            {sincronizando ? 'Sincronizando…' : ultimaSync ? `Atualizado ${ultimaSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Automático'}
+          </span>
           <button onClick={alternarVazias} title={ocultarVazias ? 'Mostrar colunas vazias' : 'Esconder colunas vazias'}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]">
             {ocultarVazias ? <Eye size={13} /> : <EyeOff size={13} />} {ocultarVazias ? 'Mostrar vazias' : 'Esconder vazias'}
@@ -150,7 +164,7 @@ export default function PedidosOrcamento() {
       {verMovimentacao && usuario?.perfil === 'admin' && <PainelMovimentacao onFechar={() => setVerMovimentacao(false)} />}
       {novoCard && usuario?.perfil === 'admin' && <NovoCardOrcamento onFechar={() => setNovoCard(false)} onCriado={() => { setNovoCard(false); carregar(); }} />}
 
-      {msgSync && <p className="text-xs text-[var(--c-suave)] bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-3 py-2">{msgSync}</p>}
+      {msgSync && <p className="text-xs text-amber-400 bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-3 py-2">{msgSync}</p>}
 
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
@@ -213,7 +227,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
   const [mudando, setMudando] = useState(false);
   const itens = pedido.itens || [];
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
-  // Automáticos (via "Atualizar"): Separando -> Separado (reserva finalizada no Zen)
+  // Automáticos (sincronização a cada 30s): Separando -> Separado (reserva finalizada no Zen)
   // e -> Aprovado/Recusado (fase do card no Pipefy)
   const aprovacao = String(pedido.aprovacao || '').toLowerCase();
   // Aprovado Parcial: as peças do campo "Peças Recusadas" saem do pedido no Zen
@@ -355,7 +369,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
         <span className="inline-block text-[10px] font-semibold text-[var(--c-destaque)] bg-[var(--c-destaque)]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
       )}
       {faseDiferente && (
-        <span title={pedido.zen_erro ? 'Não seguiu o Pipefy por causa do erro do Zen — corrija e clique em Atualizar'
+        <span title={pedido.zen_erro ? 'Não seguiu o Pipefy por causa do erro do Zen — corrija que ele segue na próxima sincronização (até 30s)'
           : pedido.status === 'separando' ? 'Etapa do Zen — segue o Pipefy quando a separação terminar' : undefined}
           className="inline-block ml-1 text-[10px] font-semibold text-amber-300 bg-amber-500/15 rounded px-1.5 py-0.5">No Pipefy: {faseDiferente}</span>
       )}
@@ -481,7 +495,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
         )}
         {proxima && !(STATUS_SO_ADMIN.includes(pedido.status) && !ehAdmin) && (
           proxima.status === 'separando' && !(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)
-          ? <span title={pedido.pipefy_card_id ? 'Lance as peças no Pipefy (Requisitar Peças) e clique em Atualizar' : 'Preencha as peças nos campos do card'}
+          ? <span title={pedido.pipefy_card_id ? 'Lance as peças no Pipefy (Requisitar Peças) — a tela atualiza sozinha em até 30s' : 'Preencha as peças nos campos do card'}
               className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[var(--c-borda)] text-[var(--c-suave)] cursor-not-allowed">
               Sem peças — não vai para Em Separação
             </span>
