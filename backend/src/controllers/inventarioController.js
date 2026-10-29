@@ -477,9 +477,15 @@ export async function buscarItemInventario(req, res, next) {
           : `Código "${texto}" não encontrado.`,
       });
     }
-    // Endereço atualizado do Zen (sem mostrar saldo — contagem às cegas)
-    try {
-      const z = await saldoZenAgora(item.codigo, item.categoria, inv.rows[0].local);
+    // Endereço atualizado do Zen (sem mostrar saldo — contagem às cegas).
+    // Marketplace: o endereço é sempre o depósito MKT_PLACE e o saldo é lido na hora de
+    // registrar — não consulta o Zen aqui (bipagem rápida não espera nem sobrecarrega o Zen).
+    // Almoxarifado: no máximo 5 s; se o Zen demorar, segue com o endereço que já tem.
+    if (inv.rows[0].local !== 'marketplace') try {
+      const z = await Promise.race([
+        saldoZenAgora(item.codigo, item.categoria, inv.rows[0].local),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Zen demorou mais de 5 s')), 5000)),
+      ]);
       if ((z.endereco || null) !== (item.endereco || null)) {
         await query(`UPDATE inventario_itens SET endereco = $1 WHERE id = $2`, [z.endereco || null, item.id]);
         item.endereco = z.endereco || null;
