@@ -159,8 +159,37 @@ const STATUS_ADMIN = ['entrada', 'divergencia_entrada', 'liberado_orcar', 'orcan
   'aguardando_aprovacao', 'em_manutencao', 'nao_liberado', 'liberado_saida', 'sucata'];
 // Até aqui a sincronização com o Pipefy ainda pode levar o card para Aprovado/Recusado
 const STATUS_ANTES_APROVACAO = ['solicitacao', 'separando', 'separado', 'envio_orcamento', 'aguardando_aprovacao', 'aprovado_recusado'];
-// Saindo destas para Expedição, fecha o romaneio e cria a nota no Zen
-const STATUS_FINALIZA_ZEN = ['aprovado_recusado', 'em_manutencao', 'nao_liberado', 'liberado_saida'];
+// Chegando em "Concluído - Não Liberado" (ou Expedição, se pulou essa fase), fecha o romaneio e cria a nota no Zen
+const STATUS_FINALIZA_ZEN = ['nao_liberado', 'finalizado'];
+const precisaFinalizarZen = (p, destino) => STATUS_FINALIZA_ZEN.includes(destino) && p.status !== destino
+  && p.status !== 'finalizado' && !!p.zen_ordem_separacao_id && !p.zen_nota_id;
+const parcialSemRetirar = p => /parcial/i.test(String(p.aprovacao || '')) && !p.recusadas_retiradas_em;
+
+// Fecha o romaneio e cria a nota no Zen. Em caso de erro grava zen_erro + movimento e relança.
+async function finalizarNoZen(pedido, destino, usuario, origem) {
+  try {
+    if (parcialSemRetirar(pedido)) {
+      throw new Error('Aprovado Parcial: retire as peças recusadas no Zen (botão do card) antes de concluir — a nota não foi criada.');
+    }
+    const fim = await finalizarRomaneioZen(pedido);
+    await query(
+      `UPDATE pedidos_orcamento SET zen_romaneio_id = $1, zen_nota_id = $2, zen_erro = NULL WHERE id = $3`,
+      [fim.romaneioId, fim.notaId, pedido.id]
+    );
+    return fim;
+  } catch (err) {
+    console.error(`❌ ZenERP finalizar pedido orçamento #${pedido.id}:`, err.message);
+    await query(`UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`,
+      [err.message.slice(0, 1000), pedido.id]);
+    // Na sincronização o mesmo erro se repete a cada Atualizar: registra só quando muda
+    if (origem !== 'sincronizacao' || pedido.zen_erro !== err.message.slice(0, 1000)) await registrarMovimento(pedido.id, 'erro_zen', {
+      de: pedido.status, para: destino, usuario, origem,
+      descricao: `Falha ao fechar o romaneio / criar a nota no Zen: ${err.message.slice(0, 500)}`,
+      detalhes: { acao: 'finalizar' },
+    });
+    throw err;
+  }
+}
 // Cards criados no Pipefy a partir daqui entram em qualquer fase (27/10/2026 00:00 de Brasília)
 const CARDS_NOVOS_DESDE = '2026-10-27T03:00:00Z';
 // Fase do Pipefy (pipe Orçamento BOXER SOLDAS) -> coluna aqui
@@ -251,9 +280,7 @@ export async function moverPedido(req, res, next) {
     );
     const pedido = atual.rows[0];
     if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    // Aprovado/Recusado -> Concluído - Não Liberado é o passo seguinte do fluxo (botão do card): liberado para todos
-    const passoDoFluxo = pedido.status === 'aprovado_recusado' && status === 'nao_liberado';
-    if (req.usuario?.perfil !== 'admin' && !passoDoFluxo && (STATUS_ADMIN.includes(status) || STATUS_ADMIN.includes(pedido.status))) {
+    if (req.usuario?.perfil !== 'admin' && (STATUS_ADMIN.includes(status) || STATUS_ADMIN.includes(pedido.status))) {
       return res.status(403).json({ erro: 'Só o administrador move cards nessa coluna.' });
     }
     const detalhesMov = {};
@@ -303,28 +330,13 @@ export async function moverPedido(req, res, next) {
       }
     }
 
-    // Aprovado/Recusado -> Finalizado: finaliza o romaneio e cria a nota no Zen
-    if (STATUS_FINALIZA_ZEN.includes(pedido.status) && status === 'finalizado' && pedido.zen_ordem_separacao_id
-        && (pedido.status === 'aprovado_recusado' || !pedido.zen_nota_id)) {
+    // -> Concluído - Não Liberado (ou Expedição): fecha o romaneio e cria a nota no Zen
+    if (precisaFinalizarZen(pedido, status)) {
       try {
-        const fim = await finalizarRomaneioZen(pedido);
-        await query(
-          `UPDATE pedidos_orcamento SET zen_romaneio_id = $1, zen_nota_id = $2, zen_erro = NULL WHERE id = $3`,
-          [fim.romaneioId, fim.notaId, pedido.id]
-        );
+        const fim = await finalizarNoZen(pedido, status, req.usuario);
         detalhesMov.romaneio = fim.romaneioId;
         detalhesMov.nota = fim.notaId;
       } catch (err) {
-        console.error(`❌ ZenERP finalizar pedido orçamento #${pedido.id}:`, err.message);
-        await query(
-          `UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`,
-          [err.message.slice(0, 1000), pedido.id]
-        );
-        await registrarMovimento(pedido.id, 'erro_zen', {
-          de: pedido.status, para: status, usuario: req.usuario,
-          descricao: `Falha ao finalizar no Zen: ${err.message.slice(0, 500)}`,
-          detalhes: { acao: 'finalizar' },
-        });
         return res.status(502).json({ erro: `Não foi possível finalizar no ZenERP: ${err.message}` });
       }
     }
@@ -336,8 +348,8 @@ export async function moverPedido(req, res, next) {
     await registrarMovimento(pedido.id, status === 'finalizado' ? 'finalizado' : 'movido', {
       de: pedido.status, para: status, usuario: req.usuario,
       detalhes: Object.keys(detalhesMov).length ? detalhesMov : null,
-      descricao: status === 'finalizado' && detalhesMov.nota
-        ? `Finalizado — romaneio #${detalhesMov.romaneio} fechado e nota fiscal #${detalhesMov.nota} criada no Zen`
+      descricao: detalhesMov.nota
+        ? `${NOME_STATUS[status]} — romaneio #${detalhesMov.romaneio} fechado e nota fiscal #${detalhesMov.nota} criada no Zen`
         : `Movido de ${NOME_STATUS[pedido.status] || pedido.status} para ${NOME_STATUS[status] || status}`,
     });
     res.json({
@@ -809,7 +821,7 @@ export async function sincronizarPipefy(req, res, next) {
     let aprovadosRecusados = 0, naoLiberados = 0, movidosPipefy = 0;
     const acompanhados = await query(
       `SELECT id, pipefy_card_id, status, aprovacao, nao_liberado_ignorado_em, pipefy_campos,
-              recusadas_retiradas_em, zen_ordem_separacao_id, zen_nota_id, pipefy_fase, pecas_recusadas
+              recusadas_retiradas_em, zen_ordem_separacao_id, zen_nota_id, pipefy_fase, pecas_recusadas, zen_pedido_id, zen_erro
          FROM pedidos_orcamento
         WHERE pipefy_card_id IS NOT NULL
           AND status NOT IN ('finalizado', 'cancelado', 'sucata')`
@@ -864,11 +876,18 @@ export async function sincronizarPipefy(req, res, next) {
 
           const alvo = FASE_PARA_STATUS[s.faseId];
           if (!alvo) continue;
-          const antesDaAprovacao = ['solicitacao', 'envio_orcamento', 'aguardando_aprovacao'].includes(alvo);
-          if (p.status === 'separando' && (antesDaAprovacao || p.recusadas_retiradas_em)) continue;
+          // Em Separação segue o Pipefy, menos de volta para Requisitar Peças (o Pipefy fica lá
+          // durante a separação) e logo depois de retirar as recusadas (espera separar de novo)
+          if (p.status === 'separando' && (alvo === 'solicitacao' || p.recusadas_retiradas_em)) continue;
           if (p.status === 'separado' && alvo === 'solicitacao') continue;
           if (alvo === 'nao_liberado' && p.nao_liberado_ignorado_em) continue;
-          if (alvo === 'finalizado' && p.zen_ordem_separacao_id && !p.zen_nota_id) continue;
+          // Chegou em Concluído - Não Liberado (ou Expedição) no Pipefy: fecha o romaneio e cria a nota no Zen.
+          // Se o Zen falhar, o card fica onde está com o erro e tenta de novo no próximo Atualizar.
+          let fimZen = null;
+          if (precisaFinalizarZen(p, alvo)) {
+            try { fimZen = await finalizarNoZen(p, alvo, req.usuario, 'sincronizacao'); }
+            catch { continue; }
+          }
 
           if (alvo === 'aprovado_recusado') {
             // Aprovação (Aprovado / Aprovado Parcial / Recusado) e "Peças Recusadas"
@@ -908,7 +927,9 @@ export async function sincronizarPipefy(req, res, next) {
           movidosPipefy++;
           await registrarMovimento(p.id, 'fase_pipefy', {
             de: p.status, para: alvo, origem: 'sincronizacao', usuario: req.usuario,
-            descricao: `Card movido no Pipefy para "${s.faseNome || NOME_STATUS[alvo]}"`,
+            descricao: `Card movido no Pipefy para "${s.faseNome || NOME_STATUS[alvo]}"`
+              + (fimZen ? ` — romaneio #${fimZen.romaneioId} fechado e nota fiscal #${fimZen.notaId} criada no Zen` : ''),
+            detalhes: fimZen ? { romaneio: fimZen.romaneioId, nota: fimZen.notaId } : null,
           });
         }
       } catch (err) {
