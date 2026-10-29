@@ -848,21 +848,26 @@ async function executarSincronizacao(req, res, next) {
     // Separando -> Separado: quando a reserva da ordem de separação é finalizada no Zen
     let separados = 0;
     const emSeparacao = await query(
-      `SELECT id, zen_ordem_separacao_id FROM pedidos_orcamento
+      `SELECT id, zen_ordem_separacao_id, recusadas_retiradas_em FROM pedidos_orcamento
         WHERE status = 'separando' AND zen_ordem_separacao_id IS NOT NULL`
     );
     for (const p of emSeparacao.rows) {
       try {
         const situacao = await consultarOrdemSeparacao(p.zen_ordem_separacao_id);
         if (situacao.separado) {
+          // Aprovado Parcial: depois de retirar as recusadas o card volta para separação só
+          // para refazer a reserva — terminou, volta direto para Aprovado/Recusado (não
+          // passa de novo por Separado / Envio de orçamento / Aguardando aprovação)
+          const destino = p.recusadas_retiradas_em ? 'aprovado_recusado' : 'separado';
           const up = await query(
-            `UPDATE pedidos_orcamento SET status = 'separado', atualizado_em = NOW() WHERE id = $1 AND status = 'separando' RETURNING id`,
-            [p.id]
+            `UPDATE pedidos_orcamento SET status = $2, atualizado_em = NOW() WHERE id = $1 AND status = 'separando' RETURNING id`,
+            [p.id, destino]
           );
           if (up.rowCount) {
             await registrarMovimento(p.id, 'separado_automatico', {
-              de: 'separando', para: 'separado', origem: 'sistema',
-              descricao: `Separação concluída no Zen (ordem #${p.zen_ordem_separacao_id}, reserva finalizada)`,
+              de: 'separando', para: destino, origem: 'sistema',
+              descricao: `Separação concluída no Zen (ordem #${p.zen_ordem_separacao_id}, reserva finalizada)`
+                + (destino === 'aprovado_recusado' ? ' — Aprovado Parcial: voltou para Aprovado/Recusado' : ''),
               detalhes: { ordem_separacao: p.zen_ordem_separacao_id },
             });
           }
