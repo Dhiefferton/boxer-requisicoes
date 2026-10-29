@@ -480,7 +480,12 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
           </button>
         )}
         {proxima && !(STATUS_SO_ADMIN.includes(pedido.status) && !ehAdmin) && (
-          <button onClick={avancar} disabled={mudando}
+          proxima.status === 'separando' && !(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)
+          ? <span title={pedido.pipefy_card_id ? 'Lance as peças no Pipefy (Requisitar Peças) e clique em Atualizar' : 'Preencha as peças nos campos do card'}
+              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[var(--c-borda)] text-[var(--c-suave)] cursor-not-allowed">
+              Sem peças — não vai para Em Separação
+            </span>
+          : <button onClick={avancar} disabled={mudando}
             className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 disabled:opacity-40">
             {mudando ? (proxima.status === 'separando' ? 'Criando pedido no Zen...' : proxima.status === 'finalizado' ? 'Finalizando no Zen...' : 'Movendo...') : <>Mover p/ {proxima.titulo} <ArrowRight size={13} /></>}
           </button>
