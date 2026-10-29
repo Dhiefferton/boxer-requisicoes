@@ -876,9 +876,9 @@ export async function sincronizarPipefy(req, res, next) {
 
           const alvo = FASE_PARA_STATUS[s.faseId];
           if (!alvo) continue;
-          // Em Separação segue o Pipefy, menos de volta para Requisitar Peças (o Pipefy fica lá
-          // durante a separação) e logo depois de retirar as recusadas (espera separar de novo)
-          if (p.status === 'separando' && (alvo === 'solicitacao' || p.recusadas_retiradas_em)) continue;
+          // Em Separação nunca segue o Pipefy: espera a separação terminar no Zen (vira Separado)
+          // e só então acompanha a fase do Pipefy (ex.: Envio de orçamento)
+          if (p.status === 'separando') continue;
           if (p.status === 'separado' && alvo === 'solicitacao') continue;
           if (alvo === 'nao_liberado' && p.nao_liberado_ignorado_em) continue;
           // Chegou em Concluído - Não Liberado (ou Expedição) no Pipefy: fecha o romaneio e cria a nota no Zen.
