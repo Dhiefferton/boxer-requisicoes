@@ -110,6 +110,7 @@ export const recebimentoImportacaoService = {
   imagem:     (url)            => api.get(url, { responseType: 'blob', timeout: 30000 }),
   enviarFoto: (itemId, dados)  => api.post(`/recebimento-importacao/itens/${itemId}/fotos`, dados, { timeout: 60000 }),
   excluirFoto: (id)            => api.delete(`/recebimento-importacao/fotos/${id}`),
+  substituirFoto: (id, dados)  => api.patch(`/recebimento-importacao/fotos/${id}`, dados, { timeout: 60000 }),
   marcarItem: (itemId, dados)  => api.patch(`/recebimento-importacao/itens/${itemId}`, dados),
 };
 
