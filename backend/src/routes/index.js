@@ -1,4 +1,4 @@
-﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor } from '../controllers/fornecedoresController.js';
+﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor, fornecedorZen } from '../controllers/fornecedoresController.js';
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { login, me, trocarSenha, alterarSenha, esqueciSenha, validarTokenSenha, redefinirSenha } from '../controllers/authController.js';
@@ -115,6 +115,7 @@ router.get('/gerar-hash/:senha', async (req, res) => {
 
 
 router.get('/fornecedores',      autenticar, exigirPerfil('admin'), listarFornecedores);
+router.get('/fornecedores/zen',  autenticar, exigirPerfil('admin'), fornecedorZen);
 router.post('/fornecedores',     autenticar, exigirPerfil('admin'), criarFornecedor);
 router.patch('/fornecedores/:id',autenticar, exigirPerfil('admin'), editarFornecedor);
 router.delete('/fornecedores/:id',autenticar, exigirPerfil('admin'), excluirFornecedor);
