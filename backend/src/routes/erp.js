@@ -111,6 +111,17 @@ router.get('/debug-categorias', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// Ex: GET /api/erp/debug-mov-orcamento?secret=...&id=796 — histórico de movimentações de um card de orçamento
+router.get('/debug-mov-orcamento', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const id = parseInt(req.query.id) || 0;
+    const p = (await query(`SELECT id, status, pipefy_card_id, pipefy_fase, pipefy_sincronizado_em, zen_erro, created_at FROM pedidos_orcamento WHERE id = $1`, [id])).rows[0];
+    const m = (await query(`SELECT tipo, de_status, para_status, descricao, usuario_nome, origem, criado_em FROM pedidos_orcamento_movimentos WHERE pedido_id = $1 ORDER BY criado_em`, [id])).rows;
+    res.json({ pedido: p, movimentos: m });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // Força sincronização manual (GET, testável no navegador, mesmo secret do cron)
 router.get('/sync-manual', async (req, res, next) => {
   try {
