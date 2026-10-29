@@ -271,9 +271,9 @@ function decodificarDataUrl(dataUrl) {
   return buf.length ? { mime: m[1], buf } : null;
 }
 
-function enviarImagem(res, mime, buf) {
+function enviarImagem(res, mime, buf, cache = 'private, max-age=86400') {
   res.set('Content-Type', mime || 'image/jpeg');
-  res.set('Cache-Control', 'private, max-age=86400');
+  res.set('Cache-Control', cache);
   res.send(buf);
 }
 
@@ -284,7 +284,8 @@ export async function verFoto(req, res, next) {
     const r = await query(`SELECT imagem, miniatura, mime FROM rec_imp_fotos WHERE id = $1`, [Number(req.params.id) || 0]);
     const f = r.rows[0];
     if (!f) return res.status(404).json({ erro: 'Foto não encontrada.' });
-    enviarImagem(res, f.mime, req.query.tam === 'mini' && f.miniatura ? f.miniatura : f.imagem);
+    // Sem cache longo: a foto pode ser girada/substituída depois
+    enviarImagem(res, f.mime, req.query.tam === 'mini' && f.miniatura ? f.miniatura : f.imagem, 'private, no-cache');
   } catch (err) { next(err); }
 }
 
@@ -415,6 +416,22 @@ export async function excluirFoto(req, res, next) {
   try {
     await garantirEstrutura();
     const r = await query(`DELETE FROM rec_imp_fotos WHERE id = $1 RETURNING id`, [Number(req.params.id) || 0]);
+    if (!r.rowCount) return res.status(404).json({ erro: 'Foto não encontrada.' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+}
+
+// PATCH /recebimento-importacao/fotos/:id  { imagem, miniatura } — substitui a foto (ex.: girada)
+export async function substituirFoto(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const img = decodificarDataUrl(req.body?.imagem);
+    const mini = decodificarDataUrl(req.body?.miniatura);
+    if (!img) return res.status(400).json({ erro: 'Foto inválida.' });
+    if (img.buf.length > 900 * 1024) return res.status(413).json({ erro: 'Foto muito grande.' });
+    const r = await query(
+      `UPDATE rec_imp_fotos SET imagem = $2, miniatura = COALESCE($3, miniatura), mime = $4 WHERE id = $1 RETURNING id`,
+      [Number(req.params.id) || 0, img.buf, mini?.buf || null, img.mime]);
     if (!r.rowCount) return res.status(404).json({ erro: 'Foto não encontrada.' });
     res.json({ ok: true });
   } catch (err) { next(err); }
