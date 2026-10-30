@@ -16,6 +16,7 @@ import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
   retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen, atualizarItensPedidoZen, buscarClienteZen,
 } from '../integrations/zenPedidoVenda.js';
+import { lerConfigOrcamento } from './configOrcamentoController.js';
 
 const BASE_SELECT = `
   SELECT
@@ -357,9 +358,14 @@ export async function moverPedido(req, res, next) {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    if (!STATUS_VALIDOS.includes(status)) {
-      return res.status(400).json({ erro: `Status inválido. Use: ${STATUS_VALIDOS.join(', ')}` });
+    // Colunas da configuração (inclui as criadas no B-Requisições)
+    const cfg = await lerConfigOrcamento().catch(() => null);
+    const colCfg = new Map((cfg?.colunas || []).map(c => [c.chave, c]));
+    if (!STATUS_VALIDOS.includes(status) && !colCfg.has(status)) {
+      return res.status(400).json({ erro: 'Coluna inválida.' });
     }
+    const nomeCol = (k) => colCfg.get(k)?.nome || NOME_STATUS[k] || k;
+    const soAdmin = (k) => (colCfg.has(k) ? colCfg.get(k).so_admin : STATUS_ADMIN.includes(k));
     await garantirColunas();
     const atual = await query(
       `SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`,
@@ -367,10 +373,20 @@ export async function moverPedido(req, res, next) {
     );
     const pedido = atual.rows[0];
     if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    if (req.usuario?.perfil !== 'admin' && (STATUS_ADMIN.includes(status) || STATUS_ADMIN.includes(pedido.status))) {
+    if (req.usuario?.perfil !== 'admin' && (soAdmin(status) || soAdmin(pedido.status))) {
       return res.status(403).json({ erro: 'Só o administrador move cards nessa coluna.' });
     }
     const detalhesMov = {};
+
+    // Card criado no B-Requisições: campos obrigatórios da coluna atual (configuração) antes de sair dela
+    if (!pedido.pipefy_card_id && status !== pedido.status) {
+      const valores = Object.fromEntries((Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).filter(c => c?.id).map(c => [c.id, c.valor]));
+      const faltando = (cfg?.campos || []).filter(c => c.coluna === pedido.status && c.obrigatorio && c.tipo !== 'anexo'
+        && !String(valores[`bx_${c.id}`] ?? '').replace(/[\[\]"]/g, '').trim());
+      if (faltando.length) {
+        return res.status(400).json({ erro: `Preencha antes de sair de "${nomeCol(pedido.status)}": ${faltando.map(c => c.rotulo).join(', ')}.` });
+      }
+    }
 
     // Card do Pipefy só entra em Requisitar Peças quando o card for movido no Pipefy (sincronização)
     if (status === 'solicitacao' && pedido.status !== 'solicitacao' && pedido.pipefy_card_id) {
@@ -437,7 +453,7 @@ export async function moverPedido(req, res, next) {
       detalhes: Object.keys(detalhesMov).length ? detalhesMov : null,
       descricao: detalhesMov.nota
         ? `${NOME_STATUS[status]} — romaneio #${detalhesMov.romaneio} fechado e nota fiscal #${detalhesMov.nota} criada no Zen`
-        : `Movido de ${NOME_STATUS[pedido.status] || pedido.status} para ${NOME_STATUS[status] || status}`,
+        : `Movido de ${nomeCol(pedido.status)} para ${nomeCol(status)}`,
     });
     res.json({
       sucesso: true,
@@ -578,6 +594,8 @@ export async function editarCampos(req, res, next) {
 async function salvarCamposNativos(pedido, novos) {
   const estrutura = await estruturaPipeOrcamento();
   const rotulos = new Map(estrutura.flatMap(f => f.campos.map(c => [c.id, c.rotulo])));
+  const cfg = await lerConfigOrcamento().catch(() => null);
+  for (const c of cfg?.campos || []) rotulos.set(`bx_${c.id}`, c.rotulo);
   const lista = (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).filter(c => c?.id);
   const porId = new Map(lista.map(c => [c.id, c]));
   for (const [k, v] of Object.entries(novos || {})) {
@@ -629,8 +647,11 @@ export async function criarCardBoxer(req, res, next) {
   try {
     await garantirColunas();
     const campos = req.body?.campos || {};
-    const estrutura = await estruturaPipeOrcamento();
-    const inicio = estrutura.find(f => f.faseId === 'inicio')?.campos || [];
+    const cfg = await lerConfigOrcamento().catch(() => null);
+    const inicioCfg = (cfg?.campos || []).filter(c => c.coluna === 'inicio');
+    const inicio = inicioCfg.length
+      ? inicioCfg.map(c => ({ id: `bx_${c.id}`, rotulo: c.rotulo, obrigatorio: c.obrigatorio && c.tipo !== 'anexo', tipo: c.tipo }))
+      : ((await estruturaPipeOrcamento()).find(f => f.faseId === 'inicio')?.campos || []);
     const faltando = inicio.filter(c => c.obrigatorio && c.tipo !== 'id' && !String(campos[c.id] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha: ${faltando.map(c => c.rotulo).join(', ')}.` });
     const ins = await query(
@@ -933,6 +954,7 @@ async function executarSincronizacao(req, res, next) {
     //    (a nota é criada ao mover pra Expedição aqui) — fica marcado "No Pipefy: Expedição";
     //  • card que voltou de "Não liberado" para Em Separação ignora essa fase.
     let aprovadosRecusados = 0, naoLiberados = 0, movidosPipefy = 0;
+    const colunasDoBReq = new Set(((await lerConfigOrcamento().catch(() => null))?.colunas || []).filter(c => !c.sistema).map(c => c.chave));
     const acompanhados = await query(
       `SELECT id, pipefy_card_id, status, aprovacao, nao_liberado_ignorado_em, pipefy_campos,
               recusadas_retiradas_em, zen_ordem_separacao_id, zen_nota_id, pipefy_fase, pecas_recusadas, zen_pedido_id, zen_erro
@@ -990,6 +1012,8 @@ async function executarSincronizacao(req, res, next) {
 
           const alvo = FASE_PARA_STATUS[s.faseId];
           if (!alvo) continue;
+          // Card numa coluna criada no B-Requisições: só sai dela quando a fase mudar no Pipefy
+          if (colunasDoBReq.has(p.status) && (s.faseNome || null) === (p.pipefy_fase || null)) continue;
           // Em Separação nunca segue o Pipefy: espera a separação terminar no Zen (vira Separado)
           // e só então acompanha a fase do Pipefy (ex.: Envio de orçamento)
           if (p.status === 'separando') continue;
