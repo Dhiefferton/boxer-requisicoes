@@ -944,7 +944,7 @@ function AbaFornecedores() {
 
 // ── Chamadas do Pipefy de um dia, uma a uma ───────────────────
 function ChamadasPipefyDia({ dia, onFechar }) {
-  const [filtros, setFiltros] = useState({ origem: '', tipo: '', operacao: '', erros: false });
+  const [filtros, setFiltros] = useState({ origem: '', tipo: '', nome: '', erros: false });
   const [dados, setDados] = useState(null);
   const [lista, setLista] = useState([]);
   const [carregando, setCarregando] = useState(false);
@@ -952,7 +952,7 @@ function ChamadasPipefyDia({ dia, onFechar }) {
   const [aberta, setAberta] = useState(null);
   const fmt = (n) => Number(n || 0).toLocaleString('pt-BR');
   const params = (antes) => ({ dia, origem: filtros.origem || undefined, tipo: filtros.tipo || undefined,
-    operacao: filtros.operacao || undefined, erros: filtros.erros ? '1' : undefined, antes });
+    nome: filtros.nome || undefined, erros: filtros.erros ? '1' : undefined, antes });
   async function carregar(maisAntigas = false) {
     setCarregando(true); setErro('');
     try {
@@ -963,13 +963,13 @@ function ChamadasPipefyDia({ dia, onFechar }) {
     } catch (e) { setErro(e.response?.data?.erro || 'Erro ao carregar as chamadas.'); }
     finally { setCarregando(false); }
   }
-  useEffect(() => { setAberta(null); carregar(false); }, [dia, filtros.origem, filtros.tipo, filtros.operacao, filtros.erros]);
+  useEffect(() => { setAberta(null); carregar(false); }, [dia, filtros.origem, filtros.tipo, filtros.nome, filtros.erros]);
   const filtrar = (campo, valor) => setFiltros(f => ({ ...f, [campo]: f[campo] === valor ? '' : valor }));
   const origens = [...new Set((dados?.resumo || []).map(r => r.origem))];
   return (
     <div className="bg-[var(--c-superficie)] border border-[var(--c-destaque)]/40 rounded-xl p-3 space-y-3">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <p className="text-sm font-semibold text-[var(--c-texto)]">Chamadas de {dia.split('-').reverse().join('/')} {dados && <span className="text-xs font-normal text-[var(--c-suave)]">— {fmt(dados.total)} com detalhe{filtros.origem || filtros.tipo || filtros.operacao || filtros.erros ? ' (filtradas)' : ''}</span>}</p>
+        <p className="text-sm font-semibold text-[var(--c-texto)]">Chamadas de {dia.split('-').reverse().join('/')} {dados && <span className="text-xs font-normal text-[var(--c-suave)]">— {fmt(dados.total)} com detalhe{filtros.origem || filtros.tipo || filtros.nome || filtros.erros ? ' (filtradas)' : ''}</span>}</p>
         <div className="flex items-center gap-2 flex-wrap">
           <select value={filtros.origem} onChange={e => setFiltros(f => ({ ...f, origem: e.target.value }))}
             className="bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs text-[var(--c-texto)]">
@@ -994,22 +994,33 @@ function ChamadasPipefyDia({ dia, onFechar }) {
       )}
       {dados?.resumo?.length > 0 && (
         <div>
-          <p className="text-[11px] text-[var(--c-suave)] mb-1">O que mais chamou o Pipefy (clique para filtrar)</p>
-          <div className="flex flex-wrap gap-1.5">
-            {dados.resumo.slice(0, 16).map(r => (
-              <button key={`${r.origem}|${r.operacao}|${r.tipo}`} onClick={() => filtrar('operacao', r.operacao || '')}
-                className={`text-[11px] px-2 py-1 rounded-lg border ${filtros.operacao && filtros.operacao === r.operacao ? 'border-[var(--c-destaque)] text-[var(--c-texto)]' : 'border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
-                <b className="text-[var(--c-texto)]">{fmt(r.chamadas)}</b> · {r.origem} · {r.operacao || '?'}{r.tipo === 'alteração' ? ' (alteração)' : ''}{r.erros ? <span className="text-red-400"> · {r.erros} erro(s)</span> : ''}{r.media_ms != null ? ` · ${fmt(r.media_ms)} ms` : ''}
-              </button>
-            ))}
-          </div>
+          <p className="text-[11px] text-[var(--c-suave)] mb-1">Consultas do dia, da que mais chamou para a que menos chamou (clique para filtrar)</p>
+          <table className="w-full text-xs">
+            <thead><tr className="text-left text-[11px] text-[var(--c-suave)]">
+              <th className="py-1 px-2">Consulta</th><th className="px-2">Tela</th><th className="px-2">Tipo</th>
+              <th className="px-2 text-right">Chamadas</th><th className="px-2 text-right">Erros</th><th className="px-2 text-right">Tempo médio</th>
+            </tr></thead>
+            <tbody>
+              {dados.resumo.map(r => (
+                <tr key={`${r.origem}|${r.nome}|${r.tipo}`} onClick={() => filtrar('nome', r.nome)}
+                  className={`border-t border-[var(--c-borda)] cursor-pointer hover:bg-[var(--c-borda)]/40 ${filtros.nome === r.nome ? 'bg-[var(--c-destaque)]/10' : ''}`}>
+                  <td className="py-1 px-2 text-[var(--c-texto)]">{r.nome}</td>
+                  <td className="px-2 text-[var(--c-suave)] whitespace-nowrap">{r.origem}</td>
+                  <td className={`px-2 whitespace-nowrap ${r.tipo === 'alteração' ? 'text-amber-400' : 'text-[var(--c-suave)]'}`}>{r.tipo}</td>
+                  <td className="px-2 text-right font-semibold text-[var(--c-texto)]">{fmt(r.chamadas)}</td>
+                  <td className={`px-2 text-right ${r.erros ? 'text-red-400' : 'text-[var(--c-suave)]'}`}>{fmt(r.erros)}</td>
+                  <td className="px-2 text-right text-[var(--c-suave)] whitespace-nowrap">{r.media_ms != null ? `${fmt(r.media_ms)} ms` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
       {lista.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead><tr className="text-left text-[11px] text-[var(--c-suave)]">
-              <th className="py-1.5 px-2">Hora</th><th className="px-2">Origem</th><th className="px-2">Operação</th><th className="px-2">Alvo</th>
+              <th className="py-1.5 px-2">Hora</th><th className="px-2">Origem</th><th className="px-2">Consulta</th><th className="px-2">Alvo</th>
               <th className="px-2">Usuário</th><th className="px-2 text-right">Tempo</th><th className="px-2">Resultado</th>
             </tr></thead>
             <tbody>
@@ -1018,7 +1029,7 @@ function ChamadasPipefyDia({ dia, onFechar }) {
                   <tr onClick={() => setAberta(a => (a === c.id ? null : c.id))} className="border-t border-[var(--c-borda)] text-[var(--c-texto)] cursor-pointer hover:bg-[var(--c-borda)]/40">
                     <td className="py-1.5 px-2 font-mono whitespace-nowrap">{c.hora}</td>
                     <td className="px-2 whitespace-nowrap">{c.origem}</td>
-                    <td className="px-2 whitespace-nowrap"><span className="font-mono">{c.operacao || '—'}</span>{c.tipo === 'alteração' && <span className="ml-1 text-[10px] text-amber-400">alteração</span>}</td>
+                    <td className="px-2">{c.nome || c.operacao || '—'}{c.nome && c.operacao && <span className="ml-1 font-mono text-[10px] text-[var(--c-suave)]">{c.operacao}</span>}{c.tipo === 'alteração' && <span className="ml-1 text-[10px] text-amber-400">alteração</span>}</td>
                     <td className="px-2 text-[var(--c-suave)]">{c.alvo || '—'}</td>
                     <td className="px-2 text-[var(--c-suave)] whitespace-nowrap">{c.usuario || 'automático'}</td>
                     <td className="px-2 text-right text-[var(--c-suave)] whitespace-nowrap">{c.duracao_ms != null ? `${fmt(c.duracao_ms)} ms` : '—'}</td>
