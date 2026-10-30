@@ -141,6 +141,7 @@ export const adminService = {
   excluirUsuario:   (id)     => api.delete(`/admin/usuarios/${id}`),
   departamentos:    ()       => api.get('/admin/departamentos'),
   pipefyUso:        ()       => api.get('/admin/pipefy-uso'),
+  pipefyChamadas:   (params) => api.get('/admin/pipefy-uso/chamadas', { params, timeout: 30000 }),
 };
 
 export const materialFornecedoresService = {
