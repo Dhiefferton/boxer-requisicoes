@@ -28,7 +28,9 @@ const BASE_SELECT = `
     p.pecas_recusadas, p.recusadas_retiradas_em, p.itens_recusados, p.itens_alterados_em,
     p.campos_editados, p.pipefy_fase,
     p.created_at, p.atualizado_em,
-    u.nome AS criado_por_nome
+    u.nome AS criado_por_nome,
+    (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id) ORDER BY f.id), '[]'::json)
+       FROM orc_fotos f WHERE f.pedido_id = p.id) AS fotos_locais
   FROM pedidos_orcamento p
   LEFT JOIN usuarios u ON u.id = p.criado_por
 `;
@@ -58,6 +60,20 @@ function garantirColunas() {
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
       await garantirTabelaMovimentos();
+      // Fotos anexadas no B-Requisições (ficam só aqui, não vão para o Pipefy)
+      await query(`
+        CREATE TABLE IF NOT EXISTS orc_fotos (
+          id           SERIAL PRIMARY KEY,
+          pedido_id    INTEGER NOT NULL,
+          campo_id     VARCHAR(120) NOT NULL,
+          imagem       BYTEA NOT NULL,
+          miniatura    BYTEA,
+          mime         VARCHAR(40) NOT NULL DEFAULT 'image/jpeg',
+          usuario_id   INTEGER,
+          usuario_nome VARCHAR(120),
+          created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_orc_fotos_pedido ON orc_fotos (pedido_id);`);
       // "Concluído - Não Liberado" é a fase depois da manutenção (conserto
       // pronto, aguardando liberação) — não é recusa. Cards que tiveram a
       // aprovação trocada por "Não liberado" voltam para a aprovação do Pipefy.
@@ -1253,5 +1269,68 @@ export async function cancelarPedido(req, res, next) {
       detalhes: pedido.zen_pedido_id ? { zen_pedido_id: pedido.zen_pedido_id, excluido_no_zen: zenExcluido } : null,
     });
     res.json({ sucesso: true, zen_excluido: zenExcluido, zen_pedido_id: pedido.zen_pedido_id || null });
+  } catch (err) { next(err); }
+}
+
+// ── Fotos do card (só no B-Requisições) ─────────────────────
+function dataUrlParaBuffer(dataUrl) {
+  const m = String(dataUrl || '').match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+  if (!m) return null;
+  const buf = Buffer.from(m[2], 'base64');
+  return buf.length ? { mime: m[1], buf } : null;
+}
+
+// POST /pedidos-orcamento/:id/fotos  { campo_id, imagem, miniatura } (data URLs já reduzidas no aparelho)
+export async function enviarFotoOrcamento(req, res, next) {
+  try {
+    await garantirColunas();
+    const id = parseInt(req.params.id);
+    const campo = String(req.body?.campo_id || '').trim().slice(0, 120);
+    const img = dataUrlParaBuffer(req.body?.imagem);
+    const mini = dataUrlParaBuffer(req.body?.miniatura);
+    if (!campo) return res.status(400).json({ erro: 'Campo da foto não informado.' });
+    if (!img) return res.status(400).json({ erro: 'Foto inválida.' });
+    if (img.buf.length > 1200 * 1024) return res.status(413).json({ erro: 'Foto muito grande.' });
+    const p = await query(`SELECT id FROM pedidos_orcamento WHERE id = $1`, [id]);
+    if (!p.rows[0]) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    const r = await query(
+      `INSERT INTO orc_fotos (pedido_id, campo_id, imagem, miniatura, mime, usuario_id, usuario_nome)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [id, campo, img.buf, mini?.buf || null, img.mime, req.usuario?.id || null, req.usuario?.nome || null]);
+    await registrarMovimento(id, 'foto_adicionada', {
+      usuario: req.usuario, descricao: `Foto adicionada no B-Requisições (${campo})`, detalhes: { foto_id: r.rows[0].id, campo },
+    });
+    res.status(201).json({ id: r.rows[0].id });
+  } catch (err) { next(err); }
+}
+
+// GET /pedidos-orcamento/fotos/:fotoId?tam=mini
+export async function verFotoOrcamento(req, res, next) {
+  try {
+    await garantirColunas();
+    const r = await query(`SELECT imagem, miniatura, mime FROM orc_fotos WHERE id = $1`, [parseInt(req.params.fotoId) || 0]);
+    const f = r.rows[0];
+    if (!f) return res.status(404).json({ erro: 'Foto não encontrada.' });
+    res.set('Content-Type', f.mime || 'image/jpeg');
+    res.set('Cache-Control', 'private, max-age=86400');
+    res.send(req.query.tam === 'mini' && f.miniatura ? f.miniatura : f.imagem);
+  } catch (err) { next(err); }
+}
+
+// DELETE /pedidos-orcamento/fotos/:fotoId — admin ou quem enviou
+export async function excluirFotoOrcamento(req, res, next) {
+  try {
+    await garantirColunas();
+    const r = await query(`SELECT id, pedido_id, campo_id, usuario_id FROM orc_fotos WHERE id = $1`, [parseInt(req.params.fotoId) || 0]);
+    const f = r.rows[0];
+    if (!f) return res.status(404).json({ erro: 'Foto não encontrada.' });
+    if (req.usuario?.perfil !== 'admin' && f.usuario_id !== req.usuario?.id) {
+      return res.status(403).json({ erro: 'Só o administrador ou quem enviou a foto pode excluir.' });
+    }
+    await query(`DELETE FROM orc_fotos WHERE id = $1`, [f.id]);
+    await registrarMovimento(f.pedido_id, 'foto_excluida', {
+      usuario: req.usuario, descricao: `Foto excluída no B-Requisições (${f.campo_id})`, detalhes: { foto_id: f.id, campo: f.campo_id },
+    });
+    res.json({ ok: true });
   } catch (err) { next(err); }
 }
