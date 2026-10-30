@@ -48,7 +48,7 @@ import {
   marcarItem as marcarItemRecImp, substituirFoto as substituirFotoRecImp,
 } from '../controllers/recebimentoImportacaoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
-import { relatorioUsoPipefy } from '../integrations/usoPipefy.js';
+import { relatorioUsoPipefy, chamadasPipefy } from '../integrations/usoPipefy.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
 import { saidasMarketplace, reposicaoMarketplace, relatoriosMarketplace, relatorioMarketplace, gerarRelatorioMarketplace, sincronizarMarketplace } from '../controllers/marketplaceController.js';
 
@@ -93,6 +93,15 @@ router.delete('/entradas/:id', autenticar, exigirPerfil('admin'), excluirEntrada
 // ── Admin — Usuários
 router.get('/admin/pipefy-uso', autenticar, exigirPerfil('admin'), async (req, res, next) => {
   try { res.json(await relatorioUsoPipefy()); } catch (err) { next(err); }
+});
+// Chamadas uma a uma de um dia: ?dia=AAAA-MM-DD&origem=&tipo=&operacao=&erros=1&antes=<id>
+router.get('/admin/pipefy-uso/chamadas', autenticar, exigirPerfil('admin'), async (req, res, next) => {
+  try {
+    const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.dia || '')) ? req.query.dia
+      : new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    res.json(await chamadasPipefy({ dia, origem: req.query.origem || null, tipo: req.query.tipo || null,
+      operacao: req.query.operacao || null, erros: req.query.erros === '1', antes: req.query.antes || null }));
+  } catch (err) { next(err); }
 });
 router.get('/admin/usuarios',        autenticar, exigirPerfil('admin'), listarUsuarios);
 router.post('/admin/usuarios',       autenticar, exigirPerfil('admin'), criarUsuario);
