@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { X, Pencil, Save, Paperclip, RotateCcw } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
+import { FotosCampo } from './FotosOrcamento';
 
 let estruturaCache = null;
 export async function carregarEstrutura() {
@@ -85,7 +86,7 @@ export function Editor({ campo, valor, onChange }) {
   return <input value={texto} onChange={e => onChange(e.target.value)} className={cls} />;
 }
 
-export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo, faseAtualId }) {
+export default function CamposCardOrcamento({ pedido, ehAdmin, podeEditar = ehAdmin, onFechar, onSalvo, faseAtualId }) {
   const [fases, setFases] = useState(null);
   const [erro, setErro] = useState('');
   const [editando, setEditando] = useState(false);
@@ -159,9 +160,11 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo
             </div>
           )}
           {!fases && !erro && <div className="flex justify-center py-10"><Spinner className="text-[var(--c-destaque)]" /></div>}
-          {editando && <p className="text-[11px] text-amber-400">{nativo ? 'Card do B-Requisições: os campos ficam gravados aqui.' : 'A edição é gravada também no card do Pipefy. Conexões (Cliente, Peça, Técnico…) e anexos ficam só no B-Requisições.'} Anexos não são editáveis por aqui. * = obrigatório no Pipefy.</p>}
+          {editando && <p className="text-[11px] text-amber-400">{nativo ? 'Card do B-Requisições: os campos ficam gravados aqui.' : 'A edição é gravada também no card do Pipefy. Conexões (Cliente, Peça, Técnico…) e anexos ficam só no B-Requisições.'} Anexos do Pipefy não são editáveis por aqui; fotos adicionadas aqui ficam só no B-Requisições. * = obrigatório no Pipefy.</p>}
           {grupos.map(g => {
-            const lista = editando ? g.campos.filter(c => !SO_LEITURA.includes(c.tipo) || temValor(c.id)) : g.campos.filter(c => temValor(c.id));
+            // Campos de foto (anexo com "foto" no nome) aparecem sempre, para adicionar fotos aqui
+            const temFoto = (c) => c.tipo === 'attachment' && (/foto/i.test(c.rotulo || '') || (pedido.fotos_locais || []).some(f => f.campo === c.id));
+            const lista = editando ? g.campos.filter(c => !SO_LEITURA.includes(c.tipo) || temValor(c.id) || temFoto(c)) : g.campos.filter(c => temValor(c.id) || temFoto(c));
             if (!lista.length) return null;
             return (
               <div key={g.faseId}>
@@ -180,7 +183,9 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo
                         )}
                       </dt>
                       <dd className="text-[var(--c-texto)] mt-0.5">
-                        {editando && !SO_LEITURA.includes(c.tipo)
+                        {c.tipo === 'attachment'
+                          ? <FotosCampo pedido={pedido} campo={c} valor={valorDe(c.id)} podeEnviar={podeEditar} onMudou={onSalvo} />
+                          : editando && !SO_LEITURA.includes(c.tipo)
                           ? <Editor campo={c} valor={valorDe(c.id)} onChange={v => setRascunho(r => ({ ...r, [c.id]: v }))} />
                           : <Valor campo={c} valor={valorDe(c.id)} />}
                       </dd>
@@ -190,7 +195,7 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, onFechar, onSalvo
               </div>
             );
           })}
-          {fases && !editando && !grupos.some(g => g.campos.some(c => temValor(c.id))) && (
+          {fases && !editando && !grupos.some(g => g.campos.some(c => temValor(c.id) || (c.tipo === 'attachment' && /foto/i.test(c.rotulo || '')))) && (
             <p className="text-xs text-[var(--c-suave)] text-center py-6">Nenhum campo preenchido neste card.</p>
           )}
         </div>
