@@ -55,7 +55,7 @@ function Previa({ campo }) {
   return <div className="h-8 rounded-lg bg-[var(--c-fundo)] border border-[var(--c-borda)]" />;
 }
 
-export default function ConfigOrcamento({ onFechar, onSalvo }) {
+export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = null }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -71,7 +71,10 @@ export default function ConfigOrcamento({ onFechar, onSalvo }) {
   function carregarDe(data) {
     setColunas(data.colunas.map(c => ({ ...c })));
     setCampos(data.campos.map(c => ({ ...c, uid: `id_${c.id}`, opcoes: Array.isArray(c.opcoes) ? c.opcoes : [] })));
-    setColSel(s => (s && data.colunas.some(c => c.chave === s) ? s : data.colunas[0]?.chave || null));
+    setColSel(s => {
+      const ok = k => k && data.colunas.some(c => c.chave === k);
+      return ok(s) ? s : ok(colunaInicial) ? colunaInicial : data.colunas[0]?.chave || null;
+    });
   }
   useEffect(() => {
     pedidosOrcamentoService.config()
