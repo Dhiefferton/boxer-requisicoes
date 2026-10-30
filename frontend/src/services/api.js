@@ -63,6 +63,9 @@ export const necessidadesPecasService = {
 };
 
 export const pedidosOrcamentoService = {
+  imagem:      (url)               => api.get(url, { responseType: 'blob', timeout: 30000 }),
+  enviarFoto:  (id, dados)         => api.post(`/pedidos-orcamento/${id}/fotos`, dados, { timeout: 60000 }),
+  excluirFoto: (fotoId)            => api.delete(`/pedidos-orcamento/fotos/${fotoId}`),
   listar:   ()                  => api.get('/pedidos-orcamento'),
   criar:    (referencia, observacoes) => api.post('/pedidos-orcamento', { referencia, observacoes }),
   mover:    (id, status)         => api.patch(`/pedidos-orcamento/${id}/mover`, { status }),
