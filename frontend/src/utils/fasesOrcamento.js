@@ -38,3 +38,29 @@ export const COR_STATUS_ORCAMENTO = {
 };
 
 export const STATUS_SO_ADMIN = COLUNAS_ORCAMENTO.filter(c => c.admin).map(c => c.status);
+
+// ── Configuração do admin (Configurações da tela de Orçamentos) ──
+// Troca o conteúdo das listas acima pelas colunas configuradas (nome, cor,
+// ordem, colunas novas). As listas são alteradas no lugar, para todas as
+// telas que as importam verem a mesma configuração.
+export function aplicarConfigColunas(colunasCfg) {
+  if (!Array.isArray(colunasCfg) || !colunasCfg.length) return;
+  const padrao = new Map(COLUNAS_ORCAMENTO.map(c => [c.status, c]));
+  const novas = colunasCfg.map(c => ({
+    ...(padrao.get(c.chave) || {}),
+    status: c.chave, titulo: c.nome, admin: !!c.so_admin, arquivada: !!c.arquivada,
+    faseId: c.fase_pipefy || padrao.get(c.chave)?.faseId, hex: c.cor, sistema: !!c.sistema, zen: c.zen || null,
+  }));
+  COLUNAS_ORCAMENTO.splice(0, COLUNAS_ORCAMENTO.length, ...novas);
+  for (const c of novas) NOME_STATUS_ORCAMENTO[c.status] = c.titulo;
+  STATUS_SO_ADMIN.splice(0, STATUS_SO_ADMIN.length, ...novas.filter(c => c.admin).map(c => c.status));
+}
+
+// Campos configurados pelo admin (orc_campos), lidos junto com as colunas
+export const CONFIG_ORCAMENTO = { campos: [], carregada: false };
+export function aplicarConfigOrcamento(cfg) {
+  if (!cfg) return;
+  aplicarConfigColunas(cfg.colunas);
+  CONFIG_ORCAMENTO.campos = Array.isArray(cfg.campos) ? cfg.campos : [];
+  CONFIG_ORCAMENTO.carregada = true;
+}
