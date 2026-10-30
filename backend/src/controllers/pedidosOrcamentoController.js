@@ -1337,8 +1337,8 @@ export async function excluirFotoOrcamento(req, res, next) {
 
 // ── Modelos de máquina (campo "Modelo máquina" do Novo card) ─────
 // Lista própria do B-Requisições, começando do zero: cada modelo é criado
-// aqui ("Criar registro"). Nada é lido do Pipefy. (Linhas com origem diferente
-// de 'b-req', de uma versão anterior, ficam escondidas.)
+// aqui ("Criar registro"). Nada é consultado no Pipefy; o que já está gravado
+// no banco (inclusive de uma versão anterior) aparece na lista.
 let modelosOk = null;
 function garantirModelos() {
   if (!modelosOk) {
@@ -1360,7 +1360,7 @@ function garantirModelos() {
 export async function listarModelos(req, res, next) {
   try {
     await garantirModelos();
-    const r = await query(`SELECT id, nome, origem, criado_em FROM orc_modelos WHERE origem = 'b-req' ORDER BY UPPER(nome)`);
+    const r = await query(`SELECT id, nome, origem, criado_em FROM orc_modelos ORDER BY UPPER(nome)`);
     res.json({ modelos: r.rows });
   } catch (err) { next(err); }
 }
