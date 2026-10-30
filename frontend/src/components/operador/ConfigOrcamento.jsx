@@ -34,6 +34,13 @@ const COM_OPCOES = ['lista', 'unica', 'checkbox', 'etiquetas'];
 const CORES = ['#64748b', '#f43f5e', '#0ea5e9', '#6366f1', '#3b82f6', '#f59e0b', '#a855f7', '#14b8a6',
   '#eab308', '#06b6d4', '#f97316', '#ef4444', '#84cc16', '#22c55e', '#71717a', '#ec4899'];
 const LISTAS = ['Modelos de máquina'];
+// Tipo de campo do Pipefy → tipo daqui (para trazer os campos que já existem nas fases)
+const TIPO_DO_PIPEFY = {
+  short_text: 'texto', long_text: 'longo', attachment: 'anexo', checklist_vertical: 'checkbox', checklist_horizontal: 'checkbox',
+  assignee_select: 'responsavel', date: 'data', datetime: 'datahora', due_date: 'vencimento', label_select: 'etiquetas',
+  email: 'email', phone: 'telefone', select: 'lista', radio_vertical: 'unica', radio_horizontal: 'unica', number: 'numero',
+  currency: 'moeda', cpf: 'documento', cnpj: 'documento', connector: 'conexao', time: 'texto',
+};
 
 let seq = 0;
 const tempId = () => `novo_${Date.now().toString(36)}_${++seq}`;
@@ -51,6 +58,7 @@ function Previa({ campo }) {
   if (campo.tipo === 'lista' || campo.tipo === 'unica') return <div className="h-8 rounded-lg bg-[var(--c-fundo)] border border-[var(--c-borda)] flex items-center justify-between px-2.5 text-[11px] text-[var(--c-suave)]"><span className="truncate">{ops}</span><span>▾</span></div>;
   if (campo.tipo === 'anexo') return <div className="h-12 rounded-lg border-2 border-dashed border-[var(--c-borda-forte)] flex items-center justify-center text-[11px] text-[var(--c-suave)]">Adicionar foto ou arquivo</div>;
   if (campo.tipo === 'checkbox' || campo.tipo === 'etiquetas') return <div className="flex items-center gap-2 text-[11px] text-[var(--c-suave)]"><span className="w-3.5 h-3.5 rounded border border-[var(--c-borda-forte)]" />{ops}</div>;
+  if (campo.tipo === 'conexao' && campo.pipefy_campo) return <div className="text-xs font-semibold text-sky-400">Conexão do Pipefy</div>;
   if (campo.tipo === 'conexao') return <div className="text-xs font-semibold text-[var(--c-destaque-claro)]">+ Selecionar em “{campo.lista || LISTAS[0]}”</div>;
   return <div className="h-8 rounded-lg bg-[var(--c-fundo)] border border-[var(--c-borda)]" />;
 }
@@ -67,18 +75,40 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
   const [novaOpcao, setNovaOpcao] = useState('');
   const [nova, setNova] = useState(null);       // formulário "Incluir coluna nova"
   const [alterado, setAlterado] = useState(false);
+  const [avisoImport, setAvisoImport] = useState('');
 
-  function carregarDe(data) {
-    setColunas(data.colunas.map(c => ({ ...c })));
-    setCampos(data.campos.map(c => ({ ...c, uid: `id_${c.id}`, opcoes: Array.isArray(c.opcoes) ? c.opcoes : [] })));
+  // fases = estrutura do pipe (leitura): as colunas que ainda não trouxeram os campos
+  // da sua fase do Pipefy recebem esses campos aqui, para editar (grava no Salvar)
+  function carregarDe(data, fases = null) {
+    const cols = data.colunas.map(c => ({ ...c }));
+    const lista = data.campos.map(c => ({ ...c, uid: `id_${c.id}`, opcoes: Array.isArray(c.opcoes) ? c.opcoes : [] }));
+    const trazidas = [];
+    if (Array.isArray(fases)) {
+      for (const col of cols) {
+        if (col.campos_importados || !col.fase_pipefy) continue;
+        const fase = fases.find(f => String(f.faseId) === String(col.fase_pipefy));
+        if (!fase) continue;
+        const ja = new Set(lista.filter(c => c.coluna === col.chave).map(c => c.pipefy_campo).filter(Boolean));
+        const novos = (fase.campos || []).filter(f => !f.boxer && TIPO_DO_PIPEFY[f.tipo] && !ja.has(f.id)).map(f => ({
+          uid: tempId(), coluna: col.chave, tipo: TIPO_DO_PIPEFY[f.tipo], rotulo: f.rotulo || 'Campo', descricao: '',
+          obrigatorio: !!f.obrigatorio, opcoes: Array.isArray(f.opcoes) ? f.opcoes.map(String) : [], lista: null, pipefy_campo: f.id,
+        }));
+        col.campos_importados = true;
+        lista.push(...novos);
+        if (novos.length) trazidas.push(col.nome);
+      }
+    }
+    setColunas(cols);
+    setCampos(lista);
+    if (trazidas.length) { setAlterado(true); setAvisoImport(`Campos das fases do Pipefy carregados em: ${trazidas.join(', ')}. Clique em Salvar configuração para gravar.`); }
     setColSel(s => {
       const ok = k => k && data.colunas.some(c => c.chave === k);
       return ok(s) ? s : ok(colunaInicial) ? colunaInicial : data.colunas[0]?.chave || null;
     });
   }
   useEffect(() => {
-    pedidosOrcamentoService.config()
-      .then(({ data }) => carregarDe(data))
+    Promise.all([pedidosOrcamentoService.config(), pedidosOrcamentoService.estrutura().then(r => r.data.fases).catch(() => null)])
+      .then(([{ data }, fases]) => carregarDe(data, fases))
       .catch(e => setErro(e.response?.data?.erro || 'Não consegui carregar a configuração.'))
       .finally(() => setCarregando(false));
   }, []);
@@ -144,14 +174,14 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
     setSalvando(true); setErro('');
     try {
       const { data } = await pedidosOrcamentoService.salvarConfig({
-        colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada })),
-        campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista })),
+        colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados })),
+        campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null })),
       });
       // as colunas novas ganharam chave: mantém a seleção pela posição
       const pos = colunas.findIndex(c => keyCol(c) === colSel);
       carregarDe(data);
       if (pos >= 0 && data.colunas[pos]) setColSel(data.colunas[pos].chave);
-      setCampoSel(null); setAlterado(false);
+      setCampoSel(null); setAlterado(false); setAvisoImport('');
       onSalvo?.(data);
     } catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar a configuração.'); }
     finally { setSalvando(false); }
@@ -285,7 +315,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                     <div className="flex items-start gap-2">
                       <Sigla tipo={c.tipo} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-[var(--c-texto)]">{c.obrigatorio && <span className="text-red-400">* </span>}{c.rotulo}</p>
+                        <p className="text-sm font-semibold text-[var(--c-texto)]">{c.obrigatorio && <span className="text-red-400">* </span>}{c.rotulo}
+                          {c.pipefy_campo && <span title="Campo que já existia na fase do Pipefy (o valor do card vem de lá)" className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-sky-400 bg-sky-500/10 rounded px-1 py-0.5">Pipefy</span>}</p>
                         {c.descricao && <p className="text-[11px] text-[var(--c-suave)]">{c.descricao}</p>}
                       </div>
                       <button onClick={e => { e.stopPropagation(); moverCampo(c.uid, -1); }} aria-label="Subir" className="p-1 rounded text-[var(--c-suave)] hover:text-[var(--c-texto)]"><ChevronUp size={14} /></button>
@@ -333,7 +364,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       </div>
                     </div>
                   )}
-                  {campoAtual.tipo === 'conexao' && (
+                  {campoAtual.pipefy_campo && <p className="text-[11px] text-sky-400">Campo que já existia na fase do Pipefy: o valor do card continua o mesmo. Nome, descrição, obrigatório, ordem e opções mudam só aqui no B-Requisições.</p>}
+                  {campoAtual.tipo === 'conexao' && !campoAtual.pipefy_campo && (
                     <label className="block text-[11px] text-[var(--c-suave)] space-y-1">Lista do B-Requisições
                       <select value={campoAtual.lista || LISTAS[0]} onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, lista: e.target.value }))} className={inp}>
                         {LISTAS.map(l => <option key={l} value={l}>{l}</option>)}
@@ -390,7 +422,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
 
         {/* Rodapé */}
         <div className="flex items-center gap-3 px-5 py-3 border-t border-[var(--c-borda)] bg-[var(--c-superficie)]">
-          {erro ? <p className="flex-1 text-xs text-red-400">{erro}</p> : <p className="flex-1 text-[11px] text-[var(--c-suave)]">{alterado ? 'Alterações não salvas.' : 'Tudo salvo.'}</p>}
+          {erro ? <p className="flex-1 text-xs text-red-400">{erro}</p> : <p className={`flex-1 text-[11px] ${avisoImport ? 'text-sky-400' : 'text-[var(--c-suave)]'}`}>{avisoImport || (alterado ? 'Alterações não salvas.' : 'Tudo salvo.')}</p>}
           <button onClick={fechar} className="px-4 py-2 rounded-lg text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">Fechar</button>
           <button onClick={salvar} disabled={salvando || !alterado}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
@@ -409,6 +441,6 @@ const TIPO_EDITOR = {
   lista: 'select', unica: 'radio_vertical', numero: 'number', moeda: 'currency', documento: 'short_text', conexao: 'connector',
 };
 export function campoDaConfig(c) {
-  return { id: `bx_${c.id}`, rotulo: c.rotulo, tipo: TIPO_EDITOR[c.tipo] || 'short_text', opcoes: Array.isArray(c.opcoes) ? c.opcoes : [],
-    obrigatorio: !!c.obrigatorio, lista: c.lista || null, descricao: c.descricao || '', boxer: true };
+  return { id: c.pipefy_campo || `bx_${c.id}`, pipefy_campo: c.pipefy_campo || null, rotulo: c.rotulo, tipo: TIPO_EDITOR[c.tipo] || 'short_text', opcoes: Array.isArray(c.opcoes) ? c.opcoes : [],
+    obrigatorio: !!c.obrigatorio, lista: c.pipefy_campo ? null : c.lista || null, descricao: c.descricao || '', boxer: !c.pipefy_campo };
 }

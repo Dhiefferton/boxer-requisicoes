@@ -206,14 +206,17 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, podeEditar = ehAd
   const outros = (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [])
     .filter(c => c?.id && !conhecidos.has(c.id)).map(c => ({ id: c.id, rotulo: c.nome, tipo: 'short_text', opcoes: [] }));
   // A fase atual do card vem primeiro (são os campos a preencher agora)
-  const ordenadas = fases ? [...fases.filter(f => f.faseId === faseAtualId), ...fases.filter(f => f.faseId !== faseAtualId)] : [];
+  // Fases cujos campos já foram trazidos para a configuração: aparecem pelo grupo configurado
+  const importadas = new Set(COLUNAS_ORCAMENTO.filter(c => c.importados && c.faseId).map(c => String(c.faseId)));
+  const visiveis = (fases || []).filter(f => !importadas.has(String(f.faseId)));
+  const ordenadas = fases ? [...visiveis.filter(f => f.faseId === faseAtualId), ...visiveis.filter(f => f.faseId !== faseAtualId)] : [];
   // Campos configurados no B-Requisições (Configurar): um grupo por coluna, a coluna atual primeiro
   const cfgCampos = CONFIG_ORCAMENTO.campos || [];
   const ordemCols = ['inicio', ...COLUNAS_ORCAMENTO.map(c => c.status)];
   const nomeCol = (k) => (k === 'inicio' ? 'Abertura do card' : COLUNAS_ORCAMENTO.find(c => c.status === k)?.titulo || k);
   const gruposCfg = [...new Set(cfgCampos.map(c => c.coluna))]
     .sort((a, b) => (a === statusAtual ? -1 : b === statusAtual ? 1 : ordemCols.indexOf(a) - ordemCols.indexOf(b)))
-    .map(k => ({ faseId: `bx-${k}`, nome: `${nomeCol(k)} · B-Requisições`, atual: k === statusAtual, campos: cfgCampos.filter(c => c.coluna === k).map(campoDaConfig) }));
+    .map(k => ({ faseId: `bx-${k}`, nome: COLUNAS_ORCAMENTO.find(c => c.status === k)?.importados ? nomeCol(k) : `${nomeCol(k)} · B-Requisições`, atual: k === statusAtual, campos: cfgCampos.filter(c => c.coluna === k).map(campoDaConfig) }));
   const grupos = fases ? [...gruposCfg, ...ordenadas, ...(outros.length ? [{ faseId: 'outros', nome: 'Outros campos', campos: outros }] : [])] : [];
   const nativo = !pedido.pipefy_card_id;
 
