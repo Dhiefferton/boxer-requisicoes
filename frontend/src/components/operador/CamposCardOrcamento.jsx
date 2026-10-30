@@ -8,7 +8,7 @@
 // Os demais só visualizam.
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { X, Pencil, Save, Paperclip, RotateCcw } from 'lucide-react';
+import { X, Pencil, Save, Paperclip, RotateCcw, Search, Plus, Check } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 import { FotosCampo } from './FotosOrcamento';
@@ -53,7 +53,82 @@ function Valor({ campo, valor }) {
   return <span className="whitespace-pre-wrap break-words">{lista.join(', ')}</span>;
 }
 
+// ── Modelo máquina: lista do B-Requisições, com busca e "Criar registro" ──
+let modelosCache = null;
+function carregarModelos(forcar = false) {
+  if (!modelosCache || forcar) {
+    modelosCache = pedidosOrcamentoService.modelos().then(r => r.data.modelos.map(m => m.nome))
+      .catch(e => { modelosCache = null; throw e; });
+  }
+  return modelosCache;
+}
+function SeletorModelo({ valor, onChange }) {
+  const atual = valorLista(valor)[0] || '';
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState('');
+  const [modelos, setModelos] = useState(null);
+  const [erro, setErro] = useState('');
+  const [criando, setCriando] = useState(false);
+  useEffect(() => {
+    if (!aberto || modelos) return;
+    carregarModelos().then(setModelos).catch(e => setErro(e.response?.data?.erro || 'Não consegui carregar os modelos.'));
+  }, [aberto, modelos]);
+  const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const filtrados = (modelos || []).filter(m => norm(m).includes(norm(busca))).slice(0, 200);
+  const exato = (modelos || []).some(m => norm(m) === norm(busca.trim()));
+  const escolher = (m) => { onChange(m ? JSON.stringify([m]) : ''); setAberto(false); setBusca(''); };
+  async function criar() {
+    const nome = busca.replace(/\s+/g, ' ').trim();
+    if (nome.length < 2) return;
+    setCriando(true); setErro('');
+    try {
+      const { data } = await pedidosOrcamentoService.criarModelo(nome);
+      const lista = await carregarModelos(true);
+      setModelos(lista);
+      escolher(data.modelo.nome);
+    } catch (e) { setErro(e.response?.data?.erro || 'Erro ao criar o modelo.'); }
+    finally { setCriando(false); }
+  }
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setAberto(a => !a)}
+        className="w-full text-left bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1.5 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]">
+        {atual || <span className="text-[var(--c-suave)]">Selecione o modelo…</span>}
+      </button>
+      {aberto && (
+        <div className="absolute z-20 mt-1 w-full bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl shadow-xl p-2 space-y-2">
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
+            <input autoFocus value={busca} onChange={e => setBusca(e.target.value)} placeholder="Pesquisar modelo"
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (filtrados.length === 1) escolher(filtrados[0]); } if (e.key === 'Escape') setAberto(false); }}
+              className="w-full pl-7 pr-2 py-1.5 rounded-lg text-xs bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
+          </div>
+          {busca.trim().length >= 2 && !exato && modelos && (
+            <button type="button" onClick={criar} disabled={criando}
+              className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/10 disabled:opacity-50">
+              {criando ? <Spinner size={12} /> : <Plus size={12} />} Criar registro "{busca.trim()}"
+            </button>
+          )}
+          {erro && <p className="text-[11px] text-red-400">{erro}</p>}
+          <div className="max-h-56 overflow-y-auto space-y-0.5">
+            {!modelos && !erro && <div className="flex justify-center py-3"><Spinner size={14} /></div>}
+            {atual && <button type="button" onClick={() => escolher('')} className="w-full text-left px-2 py-1 rounded-lg text-[11px] text-[var(--c-suave)] hover:bg-[var(--c-borda)]/40">Limpar seleção</button>}
+            {filtrados.map(m => (
+              <button key={m} type="button" onClick={() => escolher(m)}
+                className={`w-full flex items-center gap-1.5 text-left px-2 py-1.5 rounded-lg text-xs hover:bg-[var(--c-borda)]/40 ${m === atual ? 'text-[var(--c-destaque)] font-semibold' : 'text-[var(--c-texto)]'}`}>
+                {m === atual && <Check size={12} />}{m}
+              </button>
+            ))}
+            {modelos && !filtrados.length && <p className="px-2 py-2 text-[11px] text-[var(--c-suave)]">Nenhum modelo encontrado.</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Editor({ campo, valor, onChange }) {
+  if (campo.id === 'modelo_m_quina') return <SeletorModelo valor={valor} onChange={onChange} />;
   const cls = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]';
   if (MULTI.includes(campo.tipo) && campo.opcoes?.length) {
     const sel = valorLista(valor);
