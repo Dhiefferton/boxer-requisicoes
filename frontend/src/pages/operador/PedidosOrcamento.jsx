@@ -119,7 +119,7 @@ export default function PedidosOrcamento() {
   const ativos = pedidos.filter(p => !['finalizado', 'cancelado', 'sucata'].includes(p.status)).length;
 
   // Configuração do admin: colunas (nome, cor, ordem, colunas novas) e campos
-  const [verConfig, setVerConfig] = useState(false);
+  const [verConfig, setVerConfig] = useState(false);   // false | true | chave da coluna
   const [, setVersaoConfig] = useState(0);
   useEffect(() => {
     pedidosOrcamentoService.config()
@@ -177,7 +177,7 @@ export default function PedidosOrcamento() {
       </div>
 
       {verConfig && usuario?.perfil === 'admin' && (
-        <ConfigOrcamento onFechar={() => setVerConfig(false)} onSalvo={(data) => { aplicarConfigOrcamento(data); setVersaoConfig(v => v + 1); }} />
+        <ConfigOrcamento colunaInicial={typeof verConfig === 'string' ? verConfig : null} onFechar={() => setVerConfig(false)} onSalvo={(data) => { aplicarConfigOrcamento(data); setVersaoConfig(v => v + 1); }} />
       )}
       {verMovimentacao && usuario?.perfil === 'admin' && <PainelMovimentacao onFechar={() => setVerMovimentacao(false)} />}
       {novoCard && usuario?.perfil === 'admin' && <NovoCardOrcamento onFechar={() => setNovoCard(false)} onCriado={() => { setNovoCard(false); carregar(); }} />}
@@ -194,7 +194,8 @@ export default function PedidosOrcamento() {
             // a coluna só aparece quando há card nela (card criado aqui ou parado por erro do Zen)
             if ((ocultarVazias || status === 'solicitacao') && !itens.length) return null;
             return (
-              <Coluna key={`${status}${busca ? '-busca' : ''}`} titulo={titulo} cor={cor} badge={badge} hex={hex} total={itens.length} arquivada={arquivada && !busca} soAdmin={admin}>
+              <Coluna key={`${status}${busca ? '-busca' : ''}`} titulo={titulo} cor={cor} badge={badge} hex={hex} total={itens.length} arquivada={arquivada && !busca} soAdmin={admin}
+                onConfigurar={usuario?.perfil === 'admin' ? () => setVerConfig(status) : undefined}>
                 {itens.length === 0 ? (
                   <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
                     <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem pedidos'}</p>
@@ -213,7 +214,7 @@ export default function PedidosOrcamento() {
   );
 }
 
-function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = false, children }) {
+function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = false, onConfigurar, children }) {
   // Finalizado: arquivado — lista fechada, abre na seta
   const [aberta, setAberta] = useState(!arquivada);
   // Cor configurada pelo admin (hex) ou a padrão (classes)
@@ -232,7 +233,15 @@ function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = f
         ) : (
           <div className="flex items-center gap-2" title={soAdmin ? 'Coluna do Pipefy — só o admin move cards aqui' : undefined}>{pilula}</div>
         )}
-        <span className="text-xs font-bold text-[var(--c-suave)]">{total}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-bold text-[var(--c-suave)]">{total}</span>
+          {onConfigurar && (
+            <button onClick={onConfigurar} title="Editar esta coluna (nome, cor, campos)"
+              className="p-1 rounded-lg text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:bg-[var(--c-borda)] transition-colors">
+              <Settings size={13} />
+            </button>
+          )}
+        </div>
       </div>
       {aberta ? (
         <div className="space-y-2 xl:flex-1 xl:min-h-0 xl:overflow-y-auto xl:pr-1 xl:-mr-1 xl:pb-2">{children}</div>
