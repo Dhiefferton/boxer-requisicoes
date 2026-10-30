@@ -94,9 +94,12 @@ export default function NovoCardOrcamento({ onFechar, onCriado }) {
             <div className="rounded-xl border border-[var(--c-destaque)]/40 bg-[var(--c-destaque)]/5 p-3 space-y-2">
               <label className="block text-xs font-semibold text-[var(--c-texto)]">CPF / CNPJ do cliente<span className="text-red-400">*</span></label>
               <div className="flex gap-2">
-                <input value={doc} onChange={e => setDoc(e.target.value)} onKeyDown={e => e.key === 'Enter' && buscarCliente()} autoFocus
-                  placeholder="Digite o documento e busque no Zen"
-                  className="flex-1 bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1.5 text-sm text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
+                <div className="relative flex-1">
+                  <input value={doc} onChange={e => setDoc(e.target.value)} onKeyDown={e => e.key === 'Enter' && buscarCliente()} autoFocus
+                    placeholder="Digite o documento e busque no Zen"
+                    className="w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg pl-2 pr-8 py-1.5 text-sm text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
+                  {doc && <button type="button" onClick={() => setDoc('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={13} /></button>}
+                </div>
                 <button onClick={buscarCliente} disabled={buscando}
                   className="flex items-center gap-1.5 px-3 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
                   {buscando ? <Spinner size={12} /> : <Search size={12} />} Buscar no Zen

@@ -69,17 +69,17 @@ function SeletorModelo({ valor, onChange }) {
   const [modelos, setModelos] = useState(null);
   const [erro, setErro] = useState('');
   const [criando, setCriando] = useState(false);
+  const [novo, setNovo] = useState(null); // null = fechado; texto = nome do registro novo
   useEffect(() => {
     if (!aberto || modelos) return;
     carregarModelos().then(setModelos).catch(e => setErro(e.response?.data?.erro || 'Não consegui carregar os modelos.'));
   }, [aberto, modelos]);
   const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const filtrados = (modelos || []).filter(m => norm(m).includes(norm(busca))).slice(0, 200);
-  const exato = (modelos || []).some(m => norm(m) === norm(busca.trim()));
-  const escolher = (m) => { onChange(m ? JSON.stringify([m]) : ''); setAberto(false); setBusca(''); };
+  const escolher = (m) => { onChange(m ? JSON.stringify([m]) : ''); setAberto(false); setBusca(''); setNovo(null); };
   async function criar() {
-    const nome = busca.replace(/\s+/g, ' ').trim();
-    if (nome.length < 2) return;
+    const nome = String(novo || '').replace(/\s+/g, ' ').trim();
+    if (nome.length < 2) { setErro('Digite o nome do modelo.'); return; }
     setCriando(true); setErro('');
     try {
       const { data } = await pedidosOrcamentoService.criarModelo(nome);
@@ -97,18 +97,37 @@ function SeletorModelo({ valor, onChange }) {
       </button>
       {aberto && (
         <div className="absolute z-20 mt-1 w-full bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl shadow-xl p-2 space-y-2">
+          {/* Criar registro: campo próprio, separado da pesquisa */}
+          {novo === null ? (
+            <button type="button" onClick={() => { setNovo(''); setErro(''); }}
+              className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/10">
+              <Plus size={12} /> Criar registro
+            </button>
+          ) : (
+            <div className="rounded-lg border border-[var(--c-destaque)]/40 bg-[var(--c-destaque)]/5 p-2 space-y-1.5">
+              <p className="text-[11px] font-semibold text-[var(--c-texto)]">Novo modelo</p>
+              <div className="relative">
+                <input autoFocus value={novo} onChange={e => setNovo(e.target.value)} placeholder="Nome do modelo"
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); criar(); } if (e.key === 'Escape') setNovo(null); }}
+                  className="w-full pl-2 pr-7 py-1.5 rounded-lg text-xs bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
+                {novo && <button type="button" onClick={() => setNovo('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
+              </div>
+              <div className="flex justify-end gap-1.5">
+                <button type="button" onClick={() => setNovo(null)} className="px-2 py-1 rounded-lg text-[11px] text-[var(--c-suave)] hover:text-[var(--c-texto)]">Cancelar</button>
+                <button type="button" onClick={criar} disabled={criando || String(novo).trim().length < 2}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
+                  {criando ? <Spinner size={11} /> : <Check size={11} />} Salvar modelo
+                </button>
+              </div>
+            </div>
+          )}
           <div className="relative">
             <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
-            <input autoFocus value={busca} onChange={e => setBusca(e.target.value)} placeholder="Pesquisar modelo"
+            <input autoFocus={novo === null} value={busca} onChange={e => setBusca(e.target.value)} placeholder="Pesquisar modelo"
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (filtrados.length === 1) escolher(filtrados[0]); } if (e.key === 'Escape') setAberto(false); }}
-              className="w-full pl-7 pr-2 py-1.5 rounded-lg text-xs bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
+              className="w-full pl-7 pr-7 py-1.5 rounded-lg text-xs bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
+            {busca && <button type="button" onClick={() => setBusca('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
           </div>
-          {busca.trim().length >= 2 && !exato && modelos && (
-            <button type="button" onClick={criar} disabled={criando}
-              className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/10 disabled:opacity-50">
-              {criando ? <Spinner size={12} /> : <Plus size={12} />} Criar registro "{busca.trim()}"
-            </button>
-          )}
           {erro && <p className="text-[11px] text-red-400">{erro}</p>}
           <div className="max-h-56 overflow-y-auto space-y-0.5">
             {!modelos && !erro && <div className="flex justify-center py-3"><Spinner size={14} /></div>}

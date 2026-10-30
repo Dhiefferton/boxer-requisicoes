@@ -302,7 +302,8 @@ export default function PainelMovimentacao({ onFechar, pedidoInicial = null }) {
             <div className="relative flex-1 min-w-[12rem]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
               <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar cliente, NS, pedido Zen, peça, usuário..."
-                className="w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl pl-9 pr-3 py-2 text-xs placeholder:text-[var(--c-suave)] focus:outline-none focus:border-[var(--c-destaque)]" />
+                className="w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl pl-9 pr-8 py-2 text-xs placeholder:text-[var(--c-suave)] focus:outline-none focus:border-[var(--c-destaque)]" />
+              {busca && <button type="button" onClick={() => setBusca('')} title="Limpar" className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={13} /></button>}
             </div>
             <select value={tipo} onChange={e => setTipo(e.target.value)} className={selectCls}>
               <option value="">Todos os movimentos</option>
