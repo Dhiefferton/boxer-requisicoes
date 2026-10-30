@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
-import { FileDown, RefreshCw, Search, CalendarClock, Zap } from 'lucide-react';
+import { FileDown, RefreshCw, Search, CalendarClock, Zap, X } from 'lucide-react';
 import { marketplaceService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Spinner } from '../ui';
@@ -157,6 +157,7 @@ export default function MarketplaceSaidas() {
                   <Search size={13} className="text-[var(--c-suave)]" />
                   <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Código ou descrição"
                     className="bg-transparent text-xs py-2 w-44 focus:outline-none text-[var(--c-texto)]" />
+                  {busca && <button type="button" onClick={() => setBusca('')} title="Limpar" className="text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={13} /></button>}
                 </label>
                 <button onClick={exportarProdutos} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20">
                   <FileDown size={14} /> Exportar Excel
@@ -307,6 +308,7 @@ function ReposicaoSemanal({ admin, canal }) {
               <Search size={13} className="text-[var(--c-suave)]" />
               <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar produto"
                 className="bg-transparent text-xs py-2 w-40 focus:outline-none text-[var(--c-texto)]" />
+              {busca && <button type="button" onClick={() => setBusca('')} title="Limpar" className="text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={13} /></button>}
             </label>
           </div>
           <div className="overflow-x-auto mt-2 max-h-[520px] overflow-y-auto">
