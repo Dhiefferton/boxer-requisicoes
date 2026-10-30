@@ -62,7 +62,8 @@ function garantirEstrutura() {
         consulta   TEXT,
         variaveis  TEXT
       );
-      CREATE INDEX IF NOT EXISTS pipefy_chamadas_dia_idx ON pipefy_chamadas (dia, id DESC);`).catch(e => { estrutura = null; throw e; });
+      CREATE INDEX IF NOT EXISTS pipefy_chamadas_dia_idx ON pipefy_chamadas (dia, id DESC);
+      ALTER TABLE pipefy_chamadas ADD COLUMN IF NOT EXISTS nome VARCHAR(120);`).catch(e => { estrutura = null; throw e; });
   }
   return estrutura;
 }
@@ -88,6 +89,42 @@ function alvoDaChamada(gql, variables) {
 }
 let gravacoes = 0;
 
+// Nome da consulta = função do sistema que chamou o Pipefy (lida da pilha de chamadas)
+const NOMES = {
+  buscarSituacaoCards:        'Orçamentos: fase e campos dos cards em andamento',
+  listarCardsNovosOrcamento:  'Orçamentos: cards novos ou alterados no pipe',
+  buscarCardsFase:            'Orçamentos: cards da fase Requisitar Peças',
+  buscarConectados:           'Orçamentos: cadastro do cliente ligado ao card',
+  estruturaPipeOrcamento:     'Orçamentos: fases e campos do pipe',
+  atualizarCamposCardPipefy:  'Editar campo do card',
+  criarCardPipefy:            'Criar card',
+  moverCardPipefy:            'Mover card de fase',
+  excluirCardPipefy:          'Excluir card',
+  fasesDosCards:              'Lojinha: fase dos cards',
+  faseDoCard:                 'Lojinha: fase de um card',
+  cardsDoPedidoLojinha:       'Lojinha: achar card pelo Nº do pedido',
+  criarCardsLojinha:          'Lojinha: criar card',
+  preencher:                  'Lojinha: preencher campo do card',
+  mover:                      'Lojinha: mover card de fase',
+  excluirCardLojinha:         'Lojinha: excluir card',
+  registrosDaTabela:          'Lojinha: ler a tabela Cadastro de clientes',
+  acharCliente:               'Lojinha: procurar cliente no Cadastro',
+  criarCliente:               'Lojinha: cadastrar cliente',
+  sincronizarTemposPipefy:    'Planilha de separação: tempos das fases',
+  listarPipesPipefy:          'Diagnóstico: listar pipes',
+};
+const IGNORAR = new Set(['pipefyMutation', 'pipefyQuery', 'registrarChamadaPipefy', 'nomeDaConsulta', 'async', 'Promise', 'new', 'Object', 'Array']);
+export function nomeDaConsulta() {
+  const pilha = String(new Error().stack || '').split('\n').slice(1);
+  for (const linha of pilha) {
+    const m = linha.match(/at (?:async )?(?:[\w$]+\.)?([\w$]+) \(/);
+    if (!m || IGNORAR.has(m[1])) continue;
+    if (/node_modules|node:internal/.test(linha)) continue;
+    return NOMES[m[1]] || m[1];
+  }
+  return null;
+}
+
 /** Conta uma chamada e guarda o detalhe. Nunca lança erro (não pode atrapalhar a integração). */
 export async function registrarChamadaPipefy(textoGql, ok, extra = {}) {
   try {
@@ -96,15 +133,16 @@ export async function registrarChamadaPipefy(textoGql, ok, extra = {}) {
     const ctx = contexto.getStore();
     const origem = ctx?.origem || 'Automático';
     const usuario = ctx?.req?.usuario?.nome || null;
+    const nome = extra.nome || nomeDaConsulta() || (/\/erp\/debug/.test(ctx?.rota || '') ? 'Diagnóstico (admin)' : null);
     await query(
-      `INSERT INTO pipefy_chamadas (dia, origem, tipo, operacao, alvo, rota, usuario, ok, erro, duracao_ms, consulta, variaveis)
-       VALUES ((NOW() AT TIME ZONE 'America/Sao_Paulo')::date, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      `INSERT INTO pipefy_chamadas (dia, origem, tipo, operacao, alvo, rota, usuario, ok, erro, duracao_ms, consulta, variaveis, nome)
+       VALUES ((NOW() AT TIME ZONE 'America/Sao_Paulo')::date, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [origem.slice(0, 80), tipo, (nomeOperacao(textoGql) || '').slice(0, 80) || null,
        (alvoDaChamada(textoGql, extra.variables) || '').slice(0, 200) || null, (ctx?.rota || '').slice(0, 200) || null,
        usuario ? usuario.slice(0, 120) : null, !!ok, extra.erro ? String(extra.erro).slice(0, 2000) : null,
        Number.isFinite(extra.duracaoMs) ? Math.round(extra.duracaoMs) : null,
        String(textoGql || '').replace(/\s+/g, ' ').trim().slice(0, 4000),
-       extra.variables ? JSON.stringify(extra.variables).slice(0, 2000) : null]
+       extra.variables ? JSON.stringify(extra.variables).slice(0, 2000) : null, nome ? String(nome).slice(0, 120) : null]
     ).catch(e => console.error('[usoPipefy detalhe]', e.message));
     // Guarda o detalhe por 30 dias (o total por dia continua em pipefy_uso)
     if (++gravacoes % 500 === 1) query(`DELETE FROM pipefy_chamadas WHERE dia < CURRENT_DATE - 30`).catch(() => {});
@@ -143,13 +181,14 @@ export async function relatorioUsoPipefy() {
 }
 
 /** Chamadas uma a uma de um dia (mais recentes primeiro) + resumo por origem/operação. */
-export async function chamadasPipefy({ dia, origem, tipo, erros, operacao, antes, limite = 200 }) {
+export async function chamadasPipefy({ dia, origem, tipo, erros, operacao, nome, antes, limite = 200 }) {
   await garantirEstrutura();
   const filtros = ['dia = $1'];
   const valores = [dia];
   if (origem)   { valores.push(origem);   filtros.push(`origem = $${valores.length}`); }
   if (tipo)     { valores.push(tipo);     filtros.push(`tipo = $${valores.length}`); }
   if (operacao) { valores.push(operacao); filtros.push(`operacao = $${valores.length}`); }
+  if (nome)     { valores.push(nome);     filtros.push(`COALESCE(nome, operacao, '?') = $${valores.length}`); }
   if (erros)    filtros.push('ok = false');
   const base = filtros.join(' AND ');
   const valoresLista = [...valores];
@@ -157,10 +196,10 @@ export async function chamadasPipefy({ dia, origem, tipo, erros, operacao, antes
   if (antes) { valoresLista.push(Number(antes)); filtroLista += ` AND id < $${valoresLista.length}`; }
   valoresLista.push(Math.min(Number(limite) || 200, 500));
   const [lista, resumo, total] = await Promise.all([
-    query(`SELECT id, to_char(criado_em AT TIME ZONE 'America/Sao_Paulo', 'HH24:MI:SS') AS hora, origem, tipo, operacao, alvo,
+    query(`SELECT id, to_char(criado_em AT TIME ZONE 'America/Sao_Paulo', 'HH24:MI:SS') AS hora, origem, tipo, operacao, alvo, nome,
                   rota, usuario, ok, erro, duracao_ms, consulta, variaveis
              FROM pipefy_chamadas WHERE ${filtroLista} ORDER BY id DESC LIMIT $${valoresLista.length}`, valoresLista),
-    query(`SELECT origem, operacao, tipo, COUNT(*)::int AS chamadas, COUNT(*) FILTER (WHERE NOT ok)::int AS erros,
+    query(`SELECT origem, COALESCE(nome, operacao, '?') AS nome, tipo, COUNT(*)::int AS chamadas, COUNT(*) FILTER (WHERE NOT ok)::int AS erros,
                   ROUND(AVG(duracao_ms))::int AS media_ms
              FROM pipefy_chamadas WHERE ${base} GROUP BY 1, 2, 3 ORDER BY 4 DESC LIMIT 50`, valores),
     query(`SELECT COUNT(*)::int AS n FROM pipefy_chamadas WHERE ${base}`, valores),

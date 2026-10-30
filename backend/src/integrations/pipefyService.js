@@ -2,7 +2,7 @@
 // integrations/pipefyService.js — Integração com Pipefy
 // ============================================================
 
-import { registrarChamadaPipefy } from './usoPipefy.js';
+import { registrarChamadaPipefy, nomeDaConsulta } from './usoPipefy.js';
 
 const PIPEFY_API = 'https://api.pipefy.com/graphql';
 // Integração das requisições (criar/mover/excluir card no pipe "Boxer
@@ -34,6 +34,7 @@ async function pipefyMutation(mutation, variables) {
 
   let response, text, data;
   const inicio = Date.now();
+  const nome = nomeDaConsulta(); // lido antes do primeiro await, com a pilha completa de quem chamou
   try {
     response = await fetch(PIPEFY_API, {
       method:  'POST',
@@ -46,11 +47,11 @@ async function pipefyMutation(mutation, variables) {
     text = await response.text();
     data = JSON.parse(text);
   } catch (e) {
-    await registrarChamadaPipefy(mutation, false, { variables, duracaoMs: Date.now() - inicio, erro: e.message });
+    await registrarChamadaPipefy(mutation, false, { variables, nome, duracaoMs: Date.now() - inicio, erro: e.message });
     throw e;
   }
   await registrarChamadaPipefy(mutation, response.ok && !data?.errors, {
-    variables, duracaoMs: Date.now() - inicio,
+    variables, nome, duracaoMs: Date.now() - inicio,
     erro: data?.errors ? data.errors.map(x => x?.message).filter(Boolean).join(' | ') : (!response.ok ? `HTTP ${response.status}` : null),
   });
 
