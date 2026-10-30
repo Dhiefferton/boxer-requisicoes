@@ -178,7 +178,8 @@ export default function InventarioDetalhe() {
           <div className="relative w-full sm:w-auto sm:ml-auto sm:min-w-[260px]">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
             <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Código, descrição, endereço…"
-              className="w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl pl-8 pr-3 py-1.5 text-xs" />
+              className="w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl pl-8 pr-8 py-1.5 text-xs" />
+            {busca && <button type="button" onClick={() => setBusca('')} title="Limpar" className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={13} /></button>}
           </div>
         </div>
 

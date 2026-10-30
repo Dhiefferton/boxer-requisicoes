@@ -460,7 +460,8 @@ export default function RecebimentoImportacao() {
           <div className="relative flex-1 sm:w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
             <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar NF ou fornecedor"
-                   className="w-full pl-8 pr-3 py-2 rounded-xl bg-[var(--c-superficie)] border border-[var(--c-borda)] text-sm text-[var(--c-texto)] outline-none focus:border-[var(--c-destaque)]" />
+                   className="w-full pl-8 pr-8 py-2 rounded-xl bg-[var(--c-superficie)] border border-[var(--c-borda)] text-sm text-[var(--c-texto)] outline-none focus:border-[var(--c-destaque)]" />
+            {busca && <button type="button" onClick={() => setBusca('')} title="Limpar" className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={13} /></button>}
           </div>
           <button onClick={() => { tentativas.current = 0; carregarNotas(); if (notaSel) abrirNota(notaSel); }}
                   className="flex items-center gap-1.5 text-sm font-medium rounded-xl px-3 py-2 bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:bg-[var(--c-borda)] whitespace-nowrap">

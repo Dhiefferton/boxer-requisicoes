@@ -153,9 +153,10 @@ export default function RegistroEntradas() {
               value={buscaProd}
               onChange={e => handleBuscaProd(e.target.value)}
               placeholder="Digite o código ou nome do produto..."
-              className={inputClass}
+              className={`${inputClass} pr-9`}
               autoComplete="off"
             />
+            {buscaProd && <button type="button" onClick={() => handleBuscaProd('')} title="Limpar" className="absolute right-3 top-[2.15rem] text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={14} /></button>}
             {sugestoes.length > 0 && (
               <div className="absolute z-10 w-full mt-1 bg-[var(--c-cartao)] border border-[var(--c-borda)] rounded-xl overflow-hidden shadow-xl max-h-64 overflow-y-auto">
                 {sugestoes.map(m => (
