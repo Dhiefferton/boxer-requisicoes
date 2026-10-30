@@ -1,7 +1,7 @@
 ﻿// ============================================================
 // pages/operador/PainelAdmin.jsx
 // ============================================================
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { UserPlus, RefreshCw, Check, X, Users, Package, Upload, FileDown, Plus, Pencil, Trash2, Search, Building2, Activity } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api, { adminService, materiaisService, fornecedoresService, materialFornecedoresService } from '../../services/api';
@@ -942,12 +942,121 @@ function AbaFornecedores() {
   );
 }
 
+// ── Chamadas do Pipefy de um dia, uma a uma ───────────────────
+function ChamadasPipefyDia({ dia, onFechar }) {
+  const [filtros, setFiltros] = useState({ origem: '', tipo: '', operacao: '', erros: false });
+  const [dados, setDados] = useState(null);
+  const [lista, setLista] = useState([]);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState('');
+  const [aberta, setAberta] = useState(null);
+  const fmt = (n) => Number(n || 0).toLocaleString('pt-BR');
+  const params = (antes) => ({ dia, origem: filtros.origem || undefined, tipo: filtros.tipo || undefined,
+    operacao: filtros.operacao || undefined, erros: filtros.erros ? '1' : undefined, antes });
+  async function carregar(maisAntigas = false) {
+    setCarregando(true); setErro('');
+    try {
+      const antes = maisAntigas && lista.length ? lista[lista.length - 1].id : undefined;
+      const { data } = await adminService.pipefyChamadas(params(antes));
+      setDados(data);
+      setLista(l => (maisAntigas ? [...l, ...data.chamadas] : data.chamadas));
+    } catch (e) { setErro(e.response?.data?.erro || 'Erro ao carregar as chamadas.'); }
+    finally { setCarregando(false); }
+  }
+  useEffect(() => { setAberta(null); carregar(false); }, [dia, filtros.origem, filtros.tipo, filtros.operacao, filtros.erros]);
+  const filtrar = (campo, valor) => setFiltros(f => ({ ...f, [campo]: f[campo] === valor ? '' : valor }));
+  const origens = [...new Set((dados?.resumo || []).map(r => r.origem))];
+  return (
+    <div className="bg-[var(--c-superficie)] border border-[var(--c-destaque)]/40 rounded-xl p-3 space-y-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-sm font-semibold text-[var(--c-texto)]">Chamadas de {dia.split('-').reverse().join('/')} {dados && <span className="text-xs font-normal text-[var(--c-suave)]">— {fmt(dados.total)} com detalhe{filtros.origem || filtros.tipo || filtros.operacao || filtros.erros ? ' (filtradas)' : ''}</span>}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select value={filtros.origem} onChange={e => setFiltros(f => ({ ...f, origem: e.target.value }))}
+            className="bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs text-[var(--c-texto)]">
+            <option value="">Todas as origens</option>
+            {origens.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <select value={filtros.tipo} onChange={e => setFiltros(f => ({ ...f, tipo: e.target.value }))}
+            className="bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs text-[var(--c-texto)]">
+            <option value="">Consultas e alterações</option>
+            <option value="consulta">Só consultas</option>
+            <option value="alteração">Só alterações</option>
+          </select>
+          <label className="flex items-center gap-1 text-xs text-[var(--c-suave)]">
+            <input type="checkbox" checked={filtros.erros} onChange={e => setFiltros(f => ({ ...f, erros: e.target.checked }))} /> Só erros
+          </label>
+          <button onClick={onFechar} className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-[var(--c-texto)]" title="Fechar"><X size={14} /></button>
+        </div>
+      </div>
+      {erro && <p className="text-xs text-red-400">{erro}</p>}
+      {dados && dados.total === 0 && !carregando && (
+        <p className="text-xs text-[var(--c-suave)]">Sem chamadas com detalhe neste dia. O detalhe uma a uma começou a ser gravado em 30/10/2026; dias anteriores têm só os totais.</p>
+      )}
+      {dados?.resumo?.length > 0 && (
+        <div>
+          <p className="text-[11px] text-[var(--c-suave)] mb-1">O que mais chamou o Pipefy (clique para filtrar)</p>
+          <div className="flex flex-wrap gap-1.5">
+            {dados.resumo.slice(0, 16).map(r => (
+              <button key={`${r.origem}|${r.operacao}|${r.tipo}`} onClick={() => filtrar('operacao', r.operacao || '')}
+                className={`text-[11px] px-2 py-1 rounded-lg border ${filtros.operacao && filtros.operacao === r.operacao ? 'border-[var(--c-destaque)] text-[var(--c-texto)]' : 'border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
+                <b className="text-[var(--c-texto)]">{fmt(r.chamadas)}</b> · {r.origem} · {r.operacao || '?'}{r.tipo === 'alteração' ? ' (alteração)' : ''}{r.erros ? <span className="text-red-400"> · {r.erros} erro(s)</span> : ''}{r.media_ms != null ? ` · ${fmt(r.media_ms)} ms` : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {lista.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead><tr className="text-left text-[11px] text-[var(--c-suave)]">
+              <th className="py-1.5 px-2">Hora</th><th className="px-2">Origem</th><th className="px-2">Operação</th><th className="px-2">Alvo</th>
+              <th className="px-2">Usuário</th><th className="px-2 text-right">Tempo</th><th className="px-2">Resultado</th>
+            </tr></thead>
+            <tbody>
+              {lista.map(c => (
+                <Fragment key={c.id}>
+                  <tr onClick={() => setAberta(a => (a === c.id ? null : c.id))} className="border-t border-[var(--c-borda)] text-[var(--c-texto)] cursor-pointer hover:bg-[var(--c-borda)]/40">
+                    <td className="py-1.5 px-2 font-mono whitespace-nowrap">{c.hora}</td>
+                    <td className="px-2 whitespace-nowrap">{c.origem}</td>
+                    <td className="px-2 whitespace-nowrap"><span className="font-mono">{c.operacao || '—'}</span>{c.tipo === 'alteração' && <span className="ml-1 text-[10px] text-amber-400">alteração</span>}</td>
+                    <td className="px-2 text-[var(--c-suave)]">{c.alvo || '—'}</td>
+                    <td className="px-2 text-[var(--c-suave)] whitespace-nowrap">{c.usuario || 'automático'}</td>
+                    <td className="px-2 text-right text-[var(--c-suave)] whitespace-nowrap">{c.duracao_ms != null ? `${fmt(c.duracao_ms)} ms` : '—'}</td>
+                    <td className={`px-2 whitespace-nowrap ${c.ok ? 'text-green-400' : 'text-red-400'}`}>{c.ok ? 'ok' : 'erro'}</td>
+                  </tr>
+                  {aberta === c.id && (
+                    <tr className="bg-[var(--c-fundo)]">
+                      <td colSpan={7} className="px-2 py-2 space-y-1.5">
+                        {c.rota && <p className="text-[11px] text-[var(--c-suave)]">Rota: <span className="font-mono">{c.rota}</span></p>}
+                        {c.erro && <p className="text-[11px] text-red-400 break-words">Erro: {c.erro}</p>}
+                        <pre className="text-[11px] font-mono text-[var(--c-texto)] whitespace-pre-wrap break-all">{c.consulta}</pre>
+                        {c.variaveis && <pre className="text-[11px] font-mono text-[var(--c-suave)] whitespace-pre-wrap break-all">Variáveis: {c.variaveis}</pre>}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {carregando && <div className="flex justify-center py-4"><Spinner /></div>}
+      {!carregando && dados && lista.length < dados.total && (
+        <button onClick={() => carregar(true)} className="w-full py-2 rounded-lg text-xs text-[var(--c-destaque)] hover:bg-[var(--c-borda)]/40">
+          Carregar mais antigas ({fmt(dados.total - lista.length)} restantes)
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── Aba Uso do Pipefy ────────────────────────────────────────
 // Quantas chamadas o Boxer Requisições faz à API do Pipefy (por dia, mês e ano).
 function AbaPipefy() {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
   const [visao, setVisao] = useState('dias');
+  const [diaAberto, setDiaAberto] = useState(null);
   async function carregar() {
     setErro('');
     try { const { data } = await adminService.pipefyUso(); setDados(data); }
@@ -973,7 +1082,7 @@ function AbaPipefy() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-xs text-[var(--c-suave)]">
-          Chamadas do Boxer Requisições à API do Pipefy{dados.desde ? ` — contando desde ${dados.desde.split('-').reverse().join('/')}` : ''}. Consulta = leitura; alteração = criar/mover/editar card.
+          Chamadas do Boxer Requisições à API do Pipefy{dados.desde ? ` — contando desde ${dados.desde.split('-').reverse().join('/')}` : ''}. Consulta = leitura; alteração = criar/mover/editar card. Clique em um dia para ver as chamadas uma a uma.
         </p>
         <button onClick={carregar} className="p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)]" title="Atualizar"><RefreshCw size={15} /></button>
       </div>
@@ -993,7 +1102,9 @@ function AbaPipefy() {
             <tbody>
               {linhas.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-xs text-[var(--c-suave)]">Ainda sem registros.</td></tr>}
               {linhas.map(l => (
-                <tr key={l.periodo} className="border-t border-[var(--c-borda)] text-[var(--c-texto)]">
+                <tr key={l.periodo} onClick={visao === 'dias' ? () => setDiaAberto(d => d === l.periodo ? null : l.periodo) : undefined}
+                  title={visao === 'dias' ? 'Ver as chamadas deste dia, uma a uma' : undefined}
+                  className={`border-t border-[var(--c-borda)] text-[var(--c-texto)] ${visao === 'dias' ? 'cursor-pointer hover:bg-[var(--c-borda)]/40' : ''} ${diaAberto === l.periodo && visao === 'dias' ? 'bg-[var(--c-destaque)]/10' : ''}`}>
                   <td className="py-1.5 px-2">{fmtPeriodo(l.periodo)}</td>
                   <td className="px-2 text-right font-semibold">{fmt(l.chamadas)}</td>
                   <td className="px-2 text-right">{fmt(l.consultas)}</td>
@@ -1019,6 +1130,7 @@ function AbaPipefy() {
           </table>
         </div>
       </div>
+      {diaAberto && visao === 'dias' && <ChamadasPipefyDia dia={diaAberto} onFechar={() => setDiaAberto(null)} />}
     </div>
   );
 }
