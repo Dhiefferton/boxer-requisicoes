@@ -13,6 +13,8 @@ import { X, Plus, Search, CheckCircle2 } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 import { carregarEstrutura, Editor, valorLista } from './CamposCardOrcamento';
+import { CONFIG_ORCAMENTO } from '../../utils/fasesOrcamento';
+import { campoDaConfig } from './ConfigOrcamento';
 
 export default function NovoCardOrcamento({ onFechar, onCriado }) {
   const [campos, setCampos] = useState(null);
@@ -61,6 +63,9 @@ export default function NovoCardOrcamento({ onFechar, onCriado }) {
   }
 
   useEffect(() => {
+    // Formulário configurado pelo admin (Configurar › Formulário inicial); sem campos lá, usa o de hoje
+    const cfg = (CONFIG_ORCAMENTO.campos || []).filter(c => c.coluna === 'inicio' && c.tipo !== 'anexo').map(campoDaConfig);
+    if (cfg.length) { setCampos(cfg); return; }
     carregarEstrutura()
       .then(f => setCampos((f.find(x => x.faseId === 'inicio')?.campos || []).filter(c => !['id', 'attachment'].includes(c.tipo))))
       .catch(e => setErro(e.response?.data?.erro || 'Não consegui ler o formulário do Pipefy.'));

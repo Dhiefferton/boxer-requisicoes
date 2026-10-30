@@ -12,6 +12,8 @@ import { X, Pencil, Save, Paperclip, RotateCcw, Search, Plus, Check } from 'luci
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 import { FotosCampo } from './FotosOrcamento';
+import { CONFIG_ORCAMENTO, COLUNAS_ORCAMENTO } from '../../utils/fasesOrcamento';
+import { campoDaConfig } from './ConfigOrcamento';
 
 let estruturaCache = null;
 export async function carregarEstrutura() {
@@ -147,7 +149,7 @@ function SeletorModelo({ valor, onChange }) {
 }
 
 export function Editor({ campo, valor, onChange }) {
-  if (campo.id === 'modelo_m_quina') return <SeletorModelo valor={valor} onChange={onChange} />;
+  if (campo.id === 'modelo_m_quina' || campo.lista === 'Modelos de máquina') return <SeletorModelo valor={valor} onChange={onChange} />;
   const cls = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]';
   if (MULTI.includes(campo.tipo) && campo.opcoes?.length) {
     const sel = valorLista(valor);
@@ -180,7 +182,7 @@ export function Editor({ campo, valor, onChange }) {
   return <input value={texto} onChange={e => onChange(e.target.value)} className={cls} />;
 }
 
-export default function CamposCardOrcamento({ pedido, ehAdmin, podeEditar = ehAdmin, onFechar, onSalvo, faseAtualId }) {
+export default function CamposCardOrcamento({ pedido, ehAdmin, podeEditar = ehAdmin, onFechar, onSalvo, faseAtualId, statusAtual }) {
   const [fases, setFases] = useState(null);
   const [erro, setErro] = useState('');
   const [editando, setEditando] = useState(false);
@@ -205,7 +207,14 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, podeEditar = ehAd
     .filter(c => c?.id && !conhecidos.has(c.id)).map(c => ({ id: c.id, rotulo: c.nome, tipo: 'short_text', opcoes: [] }));
   // A fase atual do card vem primeiro (são os campos a preencher agora)
   const ordenadas = fases ? [...fases.filter(f => f.faseId === faseAtualId), ...fases.filter(f => f.faseId !== faseAtualId)] : [];
-  const grupos = fases ? [...ordenadas, ...(outros.length ? [{ faseId: 'outros', nome: 'Outros campos', campos: outros }] : [])] : [];
+  // Campos configurados no B-Requisições (Configurar): um grupo por coluna, a coluna atual primeiro
+  const cfgCampos = CONFIG_ORCAMENTO.campos || [];
+  const ordemCols = ['inicio', ...COLUNAS_ORCAMENTO.map(c => c.status)];
+  const nomeCol = (k) => (k === 'inicio' ? 'Abertura do card' : COLUNAS_ORCAMENTO.find(c => c.status === k)?.titulo || k);
+  const gruposCfg = [...new Set(cfgCampos.map(c => c.coluna))]
+    .sort((a, b) => (a === statusAtual ? -1 : b === statusAtual ? 1 : ordemCols.indexOf(a) - ordemCols.indexOf(b)))
+    .map(k => ({ faseId: `bx-${k}`, nome: `${nomeCol(k)} · B-Requisições`, atual: k === statusAtual, campos: cfgCampos.filter(c => c.coluna === k).map(campoDaConfig) }));
+  const grupos = fases ? [...gruposCfg, ...ordenadas, ...(outros.length ? [{ faseId: 'outros', nome: 'Outros campos', campos: outros }] : [])] : [];
   const nativo = !pedido.pipefy_card_id;
 
   async function salvar() {
@@ -257,12 +266,12 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, podeEditar = ehAd
           {editando && <p className="text-[11px] text-amber-400">{nativo ? 'Card do B-Requisições: os campos ficam gravados aqui.' : 'A edição é gravada também no card do Pipefy. Conexões (Cliente, Peça, Técnico…) e anexos ficam só no B-Requisições.'} Anexos do Pipefy não são editáveis por aqui; fotos adicionadas aqui ficam só no B-Requisições. * = obrigatório no Pipefy.</p>}
           {grupos.map(g => {
             // Campos de foto (anexo com "foto" no nome) aparecem sempre, para adicionar fotos aqui
-            const temFoto = (c) => c.tipo === 'attachment' && (/foto/i.test(c.rotulo || '') || (pedido.fotos_locais || []).some(f => f.campo === c.id));
+            const temFoto = (c) => c.tipo === 'attachment' && (c.boxer || /foto/i.test(c.rotulo || '') || (pedido.fotos_locais || []).some(f => f.campo === c.id));
             const lista = editando ? g.campos.filter(c => !SO_LEITURA.includes(c.tipo) || temValor(c.id) || temFoto(c)) : g.campos.filter(c => temValor(c.id) || temFoto(c));
             if (!lista.length) return null;
             return (
               <div key={g.faseId}>
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--c-suave)] mb-1.5">{g.nome}{g.faseId === faseAtualId && <span className="ml-1.5 normal-case font-semibold text-[var(--c-destaque)]">· fase atual</span>}</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[var(--c-suave)] mb-1.5">{g.nome}{(g.faseId === faseAtualId || g.atual) && <span className="ml-1.5 normal-case font-semibold text-[var(--c-destaque)]">· fase atual</span>}</p>
                 <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-2 text-xs">
                   {lista.map(c => (
                     <div key={c.id} className={`min-w-0 ${c.tipo === 'long_text' || c.tipo === 'attachment' ? 'sm:col-span-2' : ''}`}>
