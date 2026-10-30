@@ -93,11 +93,12 @@ export default function Catalogo() {
           onChange={e => setBusca(e.target.value)}
           className="
             w-full bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl
-            pl-10 pr-4 py-3 placeholder:text-[var(--c-suave)] text-sm
+            pl-10 pr-10 py-3 placeholder:text-[var(--c-suave)] text-sm
             focus:outline-none focus:border-[var(--c-destaque)] focus:ring-1 focus:ring-[var(--c-destaque)]/30
             transition-colors
           "
         />
+        {busca && <button type="button" onClick={() => setBusca('')} title="Limpar" className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={15} /></button>}
         {busca && (
           <button
             onClick={() => setBusca('')}

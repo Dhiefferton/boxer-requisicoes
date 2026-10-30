@@ -3,7 +3,7 @@
 // ============================================================
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, Eye, EyeOff, Search } from 'lucide-react';
+import { Package, Eye, EyeOff, Search, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui';
 import api, { authService } from '../services/api';
@@ -140,11 +140,12 @@ export default function Login() {
                   autoComplete="off"
                   className="
                     w-full bg-[var(--c-borda)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl
-                    pl-9 pr-4 py-2.5 placeholder:text-[var(--c-suave)] text-sm
+                    pl-9 pr-9 py-2.5 placeholder:text-[var(--c-suave)] text-sm
                     focus:outline-none focus:border-[var(--c-destaque)] focus:ring-1 focus:ring-[var(--c-destaque)]/30
                     transition-colors
                   "
                 />
+                {buscaNome && <button type="button" onClick={() => { setBuscaNome(''); setEmail(''); setNomeExibido(''); }} title="Limpar" className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={14} /></button>}
                 {buscando && (
                   <div className="absolute right-3 top-1/2 -translate-y-1/2">
                     <div className="w-3 h-3 border-2 border-[var(--c-destaque)] border-t-transparent rounded-full animate-spin" />
