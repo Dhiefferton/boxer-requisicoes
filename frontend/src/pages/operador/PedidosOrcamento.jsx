@@ -14,6 +14,7 @@ import { podeEditarOrcamentos } from '../../utils/acessoOrcamentos';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import CamposCardOrcamento, { carregarEstrutura, valorLista } from '../../components/operador/CamposCardOrcamento';
 import NovoCardOrcamento from '../../components/operador/NovoCardOrcamento';
+import { FaixaFotosCard } from '../../components/operador/FotosOrcamento';
 import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN } from '../../utils/fasesOrcamento';
 
 // Colunas: fases do Pipefy + Em Separação / Separado (utils/fasesOrcamento.js).
@@ -351,7 +352,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
             className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
         )}
       </div>
-      {verCampos && <CamposCardOrcamento pedido={pedido} ehAdmin={ehAdmin} faseAtualId={colunaAtual?.faseId} onFechar={() => setVerCampos(false)} onSalvo={onAtualizar} />}
+      {verCampos && <CamposCardOrcamento pedido={pedido} ehAdmin={ehAdmin} podeEditar={podeEditar} faseAtualId={colunaAtual?.faseId} onFechar={() => setVerCampos(false)} onSalvo={onAtualizar} />}
       {ehAdmin && verHistorico && (
         <PainelMovimentacao pedidoInicial={{ id: pedido.id, nome: pedido.cliente_nome || pedido.referencia }}
           onFechar={() => setVerHistorico(false)} />
@@ -420,6 +421,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
       {!pedido.pipefy_card_id && (
         <span className="inline-block text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 rounded px-1.5 py-0.5">Criado no B-Requisições</span>
       )}
+      <FaixaFotosCard pedido={pedido} onVerTodas={() => setVerCampos(true)} />
       {(pedido.pipefy_card_id || pedido.cliente_cnpj || pedido.ns_entrada || pedido.tecnico) && (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <Info rotulo="CNPJ" valor={formatarDoc(pedido.cliente_cnpj)} />
