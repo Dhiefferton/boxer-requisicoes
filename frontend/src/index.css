@@ -119,3 +119,5 @@ textarea:autofill {
   color: var(--color-boxer-text);
   background-color: var(--color-boxer-border);
 }
+/* Campos de busca: o X de limpar é o do sistema; esconde o X nativo do navegador */
+input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
