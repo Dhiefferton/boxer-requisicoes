@@ -1336,50 +1336,22 @@ export async function excluirFotoOrcamento(req, res, next) {
 }
 
 // ── Modelos de máquina (campo "Modelo máquina" do Novo card) ─────
-// Lista própria do B-Requisições. Na primeira vez é preenchida com a tabela
-// "Modelo de Máquinas" do Pipefy (só leitura) e os modelos já usados nos cards;
-// os modelos criados aqui ficam só no B-Requisições.
-const TABELA_MODELOS_PIPEFY = 'OiY_G6CO';
+// Lista própria do B-Requisições, começando do zero: cada modelo é criado
+// aqui ("Criar registro"). Nada é lido do Pipefy. (Linhas com origem diferente
+// de 'b-req', de uma versão anterior, ficam escondidas.)
 let modelosOk = null;
 function garantirModelos() {
   if (!modelosOk) {
-    modelosOk = (async () => {
-      await query(`
-        CREATE TABLE IF NOT EXISTS orc_modelos (
-          id              SERIAL PRIMARY KEY,
-          nome            VARCHAR(200) NOT NULL,
-          origem          VARCHAR(20)  NOT NULL DEFAULT 'b-req',
-          criado_por_nome VARCHAR(120),
-          criado_em       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-        );
-        CREATE UNIQUE INDEX IF NOT EXISTS orc_modelos_nome_idx ON orc_modelos (UPPER(TRIM(nome)));`);
-      const n = (await query(`SELECT COUNT(*)::int AS n FROM orc_modelos`)).rows[0].n;
-      if (n > 0) return;
-      const nomes = new Map(); // UPPER -> nome
-      const juntar = (v, origem) => { const t = String(v || '').trim(); if (t && !nomes.has(t.toUpperCase())) nomes.set(t.toUpperCase(), { nome: t, origem }); };
-      const gql = `query($id: ID!, $after: String) { table_records(table_id: $id, first: 50, after: $after) {
-        pageInfo { hasNextPage endCursor } edges { node { title } } } }`;
-      let after = null;
-      for (let pagina = 0; pagina < 60; pagina++) {
-        const r = await pipefyQuery(gql, { id: TABELA_MODELOS_PIPEFY, after });
-        const conn = r?.table_records;
-        if (!conn) break;
-        for (const { node } of conn.edges || []) juntar(node?.title, 'pipefy');
-        if (!conn.pageInfo?.hasNextPage) break;
-        after = conn.pageInfo.endCursor;
-      }
-      const usados = await query(`SELECT pipefy_campos, campos_editados FROM pedidos_orcamento`);
-      for (const p of usados.rows) {
-        const c = (Array.isArray(p.pipefy_campos) ? p.pipefy_campos : []).find(x => x?.id === 'modelo_m_quina');
-        const v = p.campos_editados?.modelo_m_quina ?? c?.valor;
-        let lista = [];
-        try { const a = JSON.parse(v); lista = Array.isArray(a) ? a : [v]; } catch { lista = v ? [v] : []; }
-        for (const x of lista) juntar(x, 'card');
-      }
-      for (const { nome, origem } of nomes.values()) {
-        await query(`INSERT INTO orc_modelos (nome, origem) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [nome.slice(0, 200), origem]);
-      }
-    })().catch(err => { modelosOk = null; throw err; });
+    modelosOk = query(`
+      CREATE TABLE IF NOT EXISTS orc_modelos (
+        id              SERIAL PRIMARY KEY,
+        nome            VARCHAR(200) NOT NULL,
+        origem          VARCHAR(20)  NOT NULL DEFAULT 'b-req',
+        criado_por_nome VARCHAR(120),
+        criado_em       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS orc_modelos_nome_idx ON orc_modelos (UPPER(TRIM(nome)));`)
+      .catch(err => { modelosOk = null; throw err; });
   }
   return modelosOk;
 }
@@ -1388,7 +1360,7 @@ function garantirModelos() {
 export async function listarModelos(req, res, next) {
   try {
     await garantirModelos();
-    const r = await query(`SELECT id, nome, origem, criado_em FROM orc_modelos ORDER BY UPPER(nome)`);
+    const r = await query(`SELECT id, nome, origem, criado_em FROM orc_modelos WHERE origem = 'b-req' ORDER BY UPPER(nome)`);
     res.json({ modelos: r.rows });
   } catch (err) { next(err); }
 }
@@ -1399,8 +1371,15 @@ export async function criarModelo(req, res, next) {
     await garantirModelos();
     const nome = String(req.body?.nome || '').replace(/\s+/g, ' ').trim();
     if (nome.length < 2) return res.status(400).json({ erro: 'Informe o nome do modelo.' });
-    const ja = await query(`SELECT id, nome FROM orc_modelos WHERE UPPER(TRIM(nome)) = UPPER($1)`, [nome]);
-    if (ja.rows[0]) return res.json({ modelo: ja.rows[0], existente: true });
+    const ja = await query(`SELECT id, nome, origem FROM orc_modelos WHERE UPPER(TRIM(nome)) = UPPER($1)`, [nome]);
+    if (ja.rows[0]) {
+      // Já existia escondido (versão anterior): passa a valer como criado aqui
+      if (ja.rows[0].origem !== 'b-req') {
+        await query(`UPDATE orc_modelos SET origem = 'b-req', criado_por_nome = $2, criado_em = NOW() WHERE id = $1`, [ja.rows[0].id, req.usuario?.nome || null]);
+        return res.status(201).json({ modelo: { id: ja.rows[0].id, nome: ja.rows[0].nome } });
+      }
+      return res.json({ modelo: { id: ja.rows[0].id, nome: ja.rows[0].nome }, existente: true });
+    }
     const r = await query(`INSERT INTO orc_modelos (nome, origem, criado_por_nome) VALUES ($1, 'b-req', $2) RETURNING id, nome`,
       [nome.slice(0, 200), req.usuario?.nome || null]);
     res.status(201).json({ modelo: r.rows[0] });
