@@ -16,7 +16,7 @@ import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
   retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen, atualizarItensPedidoZen, buscarClienteZen,
 } from '../integrations/zenPedidoVenda.js';
-import { lerConfigOrcamento } from './configOrcamentoController.js';
+import { lerConfigOrcamento, idCampoConfig } from './configOrcamentoController.js';
 
 const BASE_SELECT = `
   SELECT
@@ -382,7 +382,7 @@ export async function moverPedido(req, res, next) {
     if (!pedido.pipefy_card_id && status !== pedido.status) {
       const valores = Object.fromEntries((Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).filter(c => c?.id).map(c => [c.id, c.valor]));
       const faltando = (cfg?.campos || []).filter(c => c.coluna === pedido.status && c.obrigatorio && c.tipo !== 'anexo'
-        && !String(valores[`bx_${c.id}`] ?? '').replace(/[\[\]"]/g, '').trim());
+        && !String(valores[idCampoConfig(c)] ?? '').replace(/[\[\]"]/g, '').trim());
       if (faltando.length) {
         return res.status(400).json({ erro: `Preencha antes de sair de "${nomeCol(pedido.status)}": ${faltando.map(c => c.rotulo).join(', ')}.` });
       }
@@ -595,7 +595,7 @@ async function salvarCamposNativos(pedido, novos) {
   const estrutura = await estruturaPipeOrcamento();
   const rotulos = new Map(estrutura.flatMap(f => f.campos.map(c => [c.id, c.rotulo])));
   const cfg = await lerConfigOrcamento().catch(() => null);
-  for (const c of cfg?.campos || []) rotulos.set(`bx_${c.id}`, c.rotulo);
+  for (const c of cfg?.campos || []) rotulos.set(idCampoConfig(c), c.rotulo);
   const lista = (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).filter(c => c?.id);
   const porId = new Map(lista.map(c => [c.id, c]));
   for (const [k, v] of Object.entries(novos || {})) {
@@ -650,7 +650,7 @@ export async function criarCardBoxer(req, res, next) {
     const cfg = await lerConfigOrcamento().catch(() => null);
     const inicioCfg = (cfg?.campos || []).filter(c => c.coluna === 'inicio');
     const inicio = inicioCfg.length
-      ? inicioCfg.map(c => ({ id: `bx_${c.id}`, rotulo: c.rotulo, obrigatorio: c.obrigatorio && c.tipo !== 'anexo', tipo: c.tipo }))
+      ? inicioCfg.map(c => ({ id: idCampoConfig(c), rotulo: c.rotulo, obrigatorio: c.obrigatorio && c.tipo !== 'anexo', tipo: c.tipo }))
       : ((await estruturaPipeOrcamento()).find(f => f.faseId === 'inicio')?.campos || []);
     const faltando = inicio.filter(c => c.obrigatorio && c.tipo !== 'id' && !String(campos[c.id] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha: ${faltando.map(c => c.rotulo).join(', ')}.` });

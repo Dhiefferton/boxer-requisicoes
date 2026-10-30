@@ -5,7 +5,10 @@
 // B-Requisições. Nada aqui consulta ou altera o Pipefy.
 //   orc_colunas: as colunas da tela (as do sistema + as criadas aqui)
 //   orc_campos : campos de cada coluna ('inicio' = formulário do Novo card)
-// Os valores dos campos ficam no card, com id "bx_<id do campo>".
+// Os valores dos campos ficam no card, com id "bx_<id do campo>". Campo trazido de uma
+// fase do Pipefy (pipefy_campo) usa o id do campo do Pipefy, onde o valor já está.
+// orc_colunas.campos_importados: os campos da fase do Pipefy já vieram para a coluna
+// (a partir daí a coluna mostra só os campos configurados aqui).
 // ============================================================
 import { query, transaction } from '../config/db.js';
 
@@ -63,7 +66,9 @@ function garantirConfig() {
           ativo      BOOLEAN NOT NULL DEFAULT TRUE,
           atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-        CREATE INDEX IF NOT EXISTS idx_orc_campos_coluna ON orc_campos (coluna);`);
+        CREATE INDEX IF NOT EXISTS idx_orc_campos_coluna ON orc_campos (coluna);
+        ALTER TABLE orc_campos  ADD COLUMN IF NOT EXISTS pipefy_campo VARCHAR(80);
+        ALTER TABLE orc_colunas ADD COLUMN IF NOT EXISTS campos_importados BOOLEAN NOT NULL DEFAULT FALSE;`);
       // Colunas do sistema que ainda não estão na tabela (primeira vez ou coluna nova no código)
       const tem = new Set((await query(`SELECT chave FROM orc_colunas`)).rows.map(r => r.chave));
       for (const [i, c] of COLUNAS_PADRAO.entries()) {
@@ -82,8 +87,8 @@ export async function lerConfigOrcamento() {
   if (cache && Date.now() - cache.em < 30000) return cache.dados;
   await garantirConfig();
   const [col, cam] = await Promise.all([
-    query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema FROM orc_colunas WHERE ativo ORDER BY ordem, chave`),
-    query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem
+    query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados FROM orc_colunas WHERE ativo ORDER BY ordem, chave`),
+    query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo
              FROM orc_campos WHERE ativo ORDER BY coluna, ordem, id`),
   ]);
   const dados = {
@@ -102,6 +107,9 @@ export async function verConfig(req, res, next) {
   try { res.json({ ...(await lerConfigOrcamento()), tipos: TIPOS_CAMPO, listas: LISTAS }); }
   catch (err) { next(err); }
 }
+
+/** Id do valor do campo no card: o do Pipefy (campo trazido da fase) ou bx_<id>. */
+export const idCampoConfig = (c) => c.pipefy_campo || `bx_${c.id}`;
 
 const COR_OK = /^#[0-9a-f]{6}$/i;
 const limpar = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -133,7 +141,7 @@ export async function salvarConfig(req, res, next) {
         if (c?.chave_temp) novasChaves[c.chave_temp] = chave;
       }
       return { chave, nome, cor: COR_OK.test(c?.cor || '') ? c.cor : '#64748b', ordem: (i + 1) * 10,
-        so_admin: c?.so_admin !== false, arquivada: !!c?.arquivada };
+        so_admin: c?.so_admin !== false, arquivada: !!c?.arquivada, campos_importados: !!c?.campos_importados };
     });
     const nomes = lista.map(c => c.nome.toLowerCase());
     const repetido = nomes.find((n, i) => nomes.indexOf(n) !== i);
@@ -169,33 +177,34 @@ export async function salvarConfig(req, res, next) {
       ordemPorColuna[coluna] = (ordemPorColuna[coluna] || 0) + 10;
       const opcoes = Array.isArray(c?.opcoes) ? [...new Set(c.opcoes.map(o => limpar(o, 120)).filter(Boolean))].slice(0, 100) : [];
       camposOk.push({ id: Number(c?.id) || null, coluna, tipo, rotulo, descricao: limpar(c?.descricao, 300) || null,
-        obrigatorio: !!c?.obrigatorio, opcoes, lista: tipo === 'conexao' ? (LISTAS.includes(c?.lista) ? c.lista : LISTAS[0]) : null,
-        ordem: ordemPorColuna[coluna] });
+        obrigatorio: !!c?.obrigatorio, opcoes, ordem: ordemPorColuna[coluna], pipefy_campo: limpar(c?.pipefy_campo, 80) || null,
+        lista: tipo === 'conexao' && !c?.pipefy_campo ? (LISTAS.includes(c?.lista) ? c.lista : LISTAS[0]) : null });
     }
 
     await transaction(async (cli) => {
       for (const c of lista) {
         await cli.query(
-          `INSERT INTO orc_colunas (chave, nome, cor, ordem, so_admin, arquivada, sistema, ativo, atualizado_em)
-           VALUES ($1,$2,$3,$4,$5,$6,FALSE,TRUE,NOW())
+          `INSERT INTO orc_colunas (chave, nome, cor, ordem, so_admin, arquivada, campos_importados, sistema, ativo, atualizado_em)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,FALSE,TRUE,NOW())
            ON CONFLICT (chave) DO UPDATE SET nome = EXCLUDED.nome, cor = EXCLUDED.cor, ordem = EXCLUDED.ordem,
-             so_admin = EXCLUDED.so_admin, arquivada = EXCLUDED.arquivada, ativo = TRUE, atualizado_em = NOW()`,
-          [c.chave, c.nome, c.cor, c.ordem, c.so_admin, c.arquivada]);
+             so_admin = EXCLUDED.so_admin, arquivada = EXCLUDED.arquivada,
+             campos_importados = orc_colunas.campos_importados OR EXCLUDED.campos_importados, ativo = TRUE, atualizado_em = NOW()`,
+          [c.chave, c.nome, c.cor, c.ordem, c.so_admin, c.arquivada, c.campos_importados]);
       }
       if (saem.length) await cli.query(`UPDATE orc_colunas SET ativo = FALSE, atualizado_em = NOW() WHERE chave = ANY($1::text[])`, [saem.map(c => c.chave)]);
       // Campos que saíram ficam desativados (os valores já preenchidos nos cards continuam guardados)
       const manter = camposOk.filter(c => c.id).map(c => c.id);
       await cli.query(`UPDATE orc_campos SET ativo = FALSE, atualizado_em = NOW() WHERE ativo AND NOT (id = ANY($1::int[]))`, [manter]);
       for (const c of camposOk) {
-        const vals = [c.coluna, c.tipo, c.rotulo, c.descricao, c.obrigatorio, JSON.stringify(c.opcoes), c.lista, c.ordem];
+        const vals = [c.coluna, c.tipo, c.rotulo, c.descricao, c.obrigatorio, JSON.stringify(c.opcoes), c.lista, c.ordem, c.pipefy_campo];
         if (c.id) {
           const r = await cli.query(
-            `UPDATE orc_campos SET coluna=$1, tipo=$2, rotulo=$3, descricao=$4, obrigatorio=$5, opcoes=$6::jsonb, lista=$7, ordem=$8,
-                    ativo = TRUE, atualizado_em = NOW() WHERE id = $9`, [...vals, c.id]);
+            `UPDATE orc_campos SET coluna=$1, tipo=$2, rotulo=$3, descricao=$4, obrigatorio=$5, opcoes=$6::jsonb, lista=$7, ordem=$8, pipefy_campo=$9,
+                    ativo = TRUE, atualizado_em = NOW() WHERE id = $10`, [...vals, c.id]);
           if (r.rowCount) continue;
         }
         await cli.query(
-          `INSERT INTO orc_campos (coluna, tipo, rotulo, descricao, obrigatorio, opcoes, lista, ordem) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)`, vals);
+          `INSERT INTO orc_campos (coluna, tipo, rotulo, descricao, obrigatorio, opcoes, lista, ordem, pipefy_campo) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)`, vals);
       }
     });
     cache = null;
