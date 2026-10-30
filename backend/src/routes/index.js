@@ -100,7 +100,7 @@ router.get('/admin/pipefy-uso/chamadas', autenticar, exigirPerfil('admin'), asyn
     const dia = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.dia || '')) ? req.query.dia
       : new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
     res.json(await chamadasPipefy({ dia, origem: req.query.origem || null, tipo: req.query.tipo || null,
-      operacao: req.query.operacao || null, erros: req.query.erros === '1', antes: req.query.antes || null }));
+      operacao: req.query.operacao || null, nome: req.query.nome || null, erros: req.query.erros === '1', antes: req.query.antes || null }));
   } catch (err) { next(err); }
 });
 router.get('/admin/usuarios',        autenticar, exigirPerfil('admin'), listarUsuarios);
