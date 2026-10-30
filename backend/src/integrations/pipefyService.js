@@ -33,6 +33,7 @@ async function pipefyMutation(mutation, variables) {
   console.log('TOKEN presente:', !!TOKEN);
 
   let response, text, data;
+  const inicio = Date.now();
   try {
     response = await fetch(PIPEFY_API, {
       method:  'POST',
@@ -45,10 +46,13 @@ async function pipefyMutation(mutation, variables) {
     text = await response.text();
     data = JSON.parse(text);
   } catch (e) {
-    await registrarChamadaPipefy(mutation, false);
+    await registrarChamadaPipefy(mutation, false, { variables, duracaoMs: Date.now() - inicio, erro: e.message });
     throw e;
   }
-  await registrarChamadaPipefy(mutation, response.ok && !data?.errors);
+  await registrarChamadaPipefy(mutation, response.ok && !data?.errors, {
+    variables, duracaoMs: Date.now() - inicio,
+    erro: data?.errors ? data.errors.map(x => x?.message).filter(Boolean).join(' | ') : (!response.ok ? `HTTP ${response.status}` : null),
+  });
 
   console.log('🔄 Pipefy HTTP status:', response.status);
   console.log('🔄 Pipefy response raw:', text.substring(0, 300));
