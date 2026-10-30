@@ -49,6 +49,7 @@ import {
 } from '../controllers/recebimentoImportacaoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { relatorioUsoPipefy, chamadasPipefy } from '../integrations/usoPipefy.js';
+import { verConfig as verConfigOrcamento, salvarConfig as salvarConfigOrcamento } from '../controllers/configOrcamentoController.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
 import { saidasMarketplace, reposicaoMarketplace, relatoriosMarketplace, relatorioMarketplace, gerarRelatorioMarketplace, sincronizarMarketplace } from '../controllers/marketplaceController.js';
 
@@ -167,6 +168,9 @@ router.patch('/pedidos-orcamento/:id/campos',   autenticar, exigirPerfil('admin'
 router.post('/pedidos-orcamento/novo-card',     autenticar, exigirPerfil('admin'), criarCardBoxer);
 router.get('/pedidos-orcamento/cliente-zen',    autenticar, exigirPerfil('admin'), clienteZen);
 router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operador', 'admin'), criarPedido);
+// Configuração da tela de Orçamentos (colunas e campos) — só admin altera
+router.get('/pedidos-orcamento/config',         autenticar, exigirLeituraOrcamentos, verConfigOrcamento);
+router.post('/pedidos-orcamento/config',        autenticar, exigirPerfil('admin'), salvarConfigOrcamento);
 // Modelos de máquina (lista do B-Requisições)
 router.get('/pedidos-orcamento/modelos',        autenticar, exigirLeituraOrcamentos, listarModelos);
 router.post('/pedidos-orcamento/modelos',       autenticar, exigirPerfil('operador', 'admin'), criarModelo);
