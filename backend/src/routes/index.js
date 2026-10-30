@@ -31,7 +31,7 @@ import {
   gerarRelatorio, listarRelatorios, detalharRelatorio
 } from '../controllers/necessidadesPecasController.js';
 import {
-  listarPedidos, criarPedido, moverPedido, enviarFotoOrcamento, verFotoOrcamento, excluirFotoOrcamento, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, criarCardBoxer, clienteZen, listarMovimentos
+  listarPedidos, criarPedido, moverPedido, enviarFotoOrcamento, verFotoOrcamento, excluirFotoOrcamento, listarModelos, criarModelo, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, criarCardBoxer, clienteZen, listarMovimentos
 } from '../controllers/pedidosOrcamentoController.js';
 import {
   listarInventarios, previaInventario, criarInventario, detalharInventario, meuInventario,
@@ -167,6 +167,9 @@ router.patch('/pedidos-orcamento/:id/campos',   autenticar, exigirPerfil('admin'
 router.post('/pedidos-orcamento/novo-card',     autenticar, exigirPerfil('admin'), criarCardBoxer);
 router.get('/pedidos-orcamento/cliente-zen',    autenticar, exigirPerfil('admin'), clienteZen);
 router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operador', 'admin'), criarPedido);
+// Modelos de máquina (lista do B-Requisições)
+router.get('/pedidos-orcamento/modelos',        autenticar, exigirLeituraOrcamentos, listarModelos);
+router.post('/pedidos-orcamento/modelos',       autenticar, exigirPerfil('operador', 'admin'), criarModelo);
 // Fotos do card — ficam só no B-Requisições (não vão para o Pipefy)
 router.get('/pedidos-orcamento/fotos/:fotoId',  autenticar, exigirLeituraOrcamentos, verFotoOrcamento);
 router.delete('/pedidos-orcamento/fotos/:fotoId', autenticar, exigirPerfil('operador', 'admin'), excluirFotoOrcamento);
