@@ -6,7 +6,7 @@
 // ZenERP — vem nos próximos passos.
 
 import { useState, useEffect, useRef } from 'react';
-import { ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity, History, Search, X, ListTree, MoveRight, EyeOff, Eye, Plus } from 'lucide-react';
+import { Settings, ArrowRight, RefreshCw, Ban, FileText, DownloadCloud, ExternalLink, ChevronDown, ChevronRight, Archive, Scissors, PackageCheck, Activity, History, Search, X, ListTree, MoveRight, EyeOff, Eye, Plus } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -15,7 +15,8 @@ import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import CamposCardOrcamento, { carregarEstrutura, valorLista } from '../../components/operador/CamposCardOrcamento';
 import NovoCardOrcamento from '../../components/operador/NovoCardOrcamento';
 import { FaixaFotosCard } from '../../components/operador/FotosOrcamento';
-import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN } from '../../utils/fasesOrcamento';
+import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN, aplicarConfigOrcamento } from '../../utils/fasesOrcamento';
+import ConfigOrcamento from '../../components/operador/ConfigOrcamento';
 
 // Colunas: fases do Pipefy + Em Separação / Separado (utils/fasesOrcamento.js).
 // Colunas novas só o admin move; o fluxo de sempre continua igual:
@@ -117,6 +118,15 @@ export default function PedidosOrcamento() {
 
   const ativos = pedidos.filter(p => !['finalizado', 'cancelado', 'sucata'].includes(p.status)).length;
 
+  // Configuração do admin: colunas (nome, cor, ordem, colunas novas) e campos
+  const [verConfig, setVerConfig] = useState(false);
+  const [, setVersaoConfig] = useState(0);
+  useEffect(() => {
+    pedidosOrcamentoService.config()
+      .then(({ data }) => { aplicarConfigOrcamento(data); setVersaoConfig(v => v + 1); })
+      .catch(() => { /* sem configuração: colunas padrão */ });
+  }, []);
+
   return (
     // Tela grande (5 colunas): tela travada na altura da janela e cada coluna rola sozinha
     <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-3.1rem)]">
@@ -142,6 +152,13 @@ export default function PedidosOrcamento() {
             </button>
           )}
           {usuario?.perfil === 'admin' && (
+            <button onClick={() => setVerConfig(true)} title="Configurar colunas e campos da tela"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
+                bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
+              <Settings size={13} /> Configurar
+            </button>
+          )}
+          {usuario?.perfil === 'admin' && (
             <button onClick={() => setVerMovimentacao(true)} title="Relatório de movimentação"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
                 bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
@@ -159,6 +176,9 @@ export default function PedidosOrcamento() {
         </div>
       </div>
 
+      {verConfig && usuario?.perfil === 'admin' && (
+        <ConfigOrcamento onFechar={() => setVerConfig(false)} onSalvo={(data) => { aplicarConfigOrcamento(data); setVersaoConfig(v => v + 1); }} />
+      )}
       {verMovimentacao && usuario?.perfil === 'admin' && <PainelMovimentacao onFechar={() => setVerMovimentacao(false)} />}
       {novoCard && usuario?.perfil === 'admin' && <NovoCardOrcamento onFechar={() => setNovoCard(false)} onCriado={() => { setNovoCard(false); carregar(); }} />}
 
@@ -168,13 +188,13 @@ export default function PedidosOrcamento() {
         <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-2 xl:flex-1 xl:min-h-0">
-          {COLUNAS.map(({ status, titulo, cor, badge, arquivada, admin }) => {
+          {COLUNAS.map(({ status, titulo, cor, badge, arquivada, admin, hex }) => {
             const itens = pedidos.filter(p => p.status === status && combinaBusca(p, busca));
             // Requisitar Peças: o card vai direto para Em Separação (pedido criado no Zen sozinho);
             // a coluna só aparece quando há card nela (card criado aqui ou parado por erro do Zen)
             if ((ocultarVazias || status === 'solicitacao') && !itens.length) return null;
             return (
-              <Coluna key={`${status}${busca ? '-busca' : ''}`} titulo={titulo} cor={cor} badge={badge} total={itens.length} arquivada={arquivada && !busca} soAdmin={admin}>
+              <Coluna key={`${status}${busca ? '-busca' : ''}`} titulo={titulo} cor={cor} badge={badge} hex={hex} total={itens.length} arquivada={arquivada && !busca} soAdmin={admin}>
                 {itens.length === 0 ? (
                   <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
                     <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem pedidos'}</p>
@@ -193,13 +213,16 @@ export default function PedidosOrcamento() {
   );
 }
 
-function Coluna({ titulo, cor, badge, total, arquivada = false, soAdmin = false, children }) {
+function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = false, children }) {
   // Finalizado: arquivado — lista fechada, abre na seta
   const [aberta, setAberta] = useState(!arquivada);
-  const pilula = <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>;
+  // Cor configurada pelo admin (hex) ou a padrão (classes)
+  const pilula = hex
+    ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: `${hex}26`, color: hex }}>{titulo}</span>
+    : <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>;
   return (
     <div className="space-y-2 w-[17.5rem] shrink-0 xl:min-h-0 xl:flex xl:flex-col">
-      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[var(--c-superficie)] xl:shrink-0`}>
+      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${hex ? '' : cor} bg-[var(--c-superficie)] xl:shrink-0`} style={hex ? { borderColor: `${hex}66` } : undefined}>
         {arquivada ? (
           <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1.5 text-[var(--c-suave)] hover:text-[var(--c-texto)]">
             {aberta ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
@@ -352,7 +375,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
             className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
         )}
       </div>
-      {verCampos && <CamposCardOrcamento pedido={pedido} ehAdmin={ehAdmin} podeEditar={podeEditar} faseAtualId={colunaAtual?.faseId} onFechar={() => setVerCampos(false)} onSalvo={onAtualizar} />}
+      {verCampos && <CamposCardOrcamento pedido={pedido} ehAdmin={ehAdmin} podeEditar={podeEditar} statusAtual={pedido.status} faseAtualId={colunaAtual?.faseId} onFechar={() => setVerCampos(false)} onSalvo={onAtualizar} />}
       {ehAdmin && verHistorico && (
         <PainelMovimentacao pedidoInicial={{ id: pedido.id, nome: pedido.cliente_nome || pedido.referencia }}
           onFechar={() => setVerHistorico(false)} />
