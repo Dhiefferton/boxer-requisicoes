@@ -35,12 +35,12 @@ function numBR(v) {
 const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
 const linkZenPedido = (id) => `${ZEN_APP_URL}/sale/sale?q=id==${id}`;
 const linkZenOrdem = (id) => `${ZEN_APP_URL}/material/pickingOrder?q=id==${id}`;
-// Colunas (mesmo visual da tela de Orçamentos). A liberação é automática
-// (Zen + Pipefy); pedido que parou no Pipefy fica na Entrada com o erro.
+// Colunas (mesmo visual da tela de Orçamentos). Sem o Pipefy: criado o pedido no Zen
+// (ordem de separação), vai sozinho para Em Separação; termina a separação no Zen,
+// vai para Em Conferência. Daí em diante o pedido é movido na tela.
 const COLUNAS = [
   { status: 'entrada',   inclui: ['entrada', 'liberacao'], titulo: 'Entrada',      cor: 'border-blue-500/40',   badge: 'bg-blue-500/15 text-blue-400' },
   { status: 'separacao', inclui: ['separacao'],            titulo: 'Em Separação', cor: 'border-purple-500/40', badge: 'bg-purple-500/15 text-purple-400' },
-  // Acompanhamento: andam sozinhas conforme o card avança no Pipefy
   { status: 'conferencia',  inclui: ['conferencia'],  titulo: 'Em Conferência',        cor: 'border-cyan-500/40',   badge: 'bg-cyan-500/15 text-cyan-400' },
   { status: 'teste_placas', inclui: ['teste_placas'], titulo: 'Em Teste de Placas',    cor: 'border-amber-500/40',  badge: 'bg-amber-500/15 text-amber-400' },
   { status: 'preparacao',   inclui: ['preparacao'],   titulo: 'Em Preparação (Exp.)',  cor: 'border-orange-500/40', badge: 'bg-orange-500/15 text-orange-400' },
@@ -87,7 +87,7 @@ export default function LojinhaBoxer() {
   useEffect(() => {
     lojinhaService.config().then(r => setConfig(c => ({ ...c, ...r.data }))).catch(() => {});
     carregar();
-    // Acompanha o Pipefy: atualiza sozinho a cada minuto
+    // Atualiza sozinho a cada minuto (separação do Zen)
     const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
     return () => clearInterval(t);
   }, []);
@@ -152,9 +152,7 @@ export default function LojinhaBoxer() {
           onSalvo={(p) => {
             setNovo(false);
             setAviso(p.zen_ordem_separacao_id
-              ? (NO_PIPEFY.includes(p.status)
-                ? `Pedido ${p.numero_pedido}: Zen pedido ${p.zen_pedido_id} / ordem ${p.zen_ordem_separacao_id} e ${p.qtd_cards} card(s) no Pipefy — já em Separação.`
-                : `Pedido ${p.numero_pedido} criado no Zen, mas o Pipefy deu erro: ${p.pipefy_erro || 'desconhecido'}. Use "Criar cards no Pipefy" no card.`)
+              ? `Pedido ${p.numero_pedido}: Zen pedido ${p.zen_pedido_id} / ordem de separação ${p.zen_ordem_separacao_id} — já em Separação.`
               : `Pedido ${p.numero_pedido} registrado, mas o Zen deu erro: ${p.zen_erro || 'desconhecido'}. Use "Tentar de novo" no card.`);
             carregar();
           }} />
@@ -228,7 +226,7 @@ function InfoLiberacao({ p, itens }) {
   const grupos = Array.from({ length: qtd }, (_, i) => itens.slice(i * ITENS_POR_CARD, (i + 1) * ITENS_POR_CARD));
   return (
     <div className="rounded-lg border border-[var(--c-destaque)]/40 bg-[var(--c-destaque)]/10 p-2.5 space-y-1.5">
-      <div className="grid grid-cols-2 gap-2">
+      <div>
         <div>
           <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Nº Ordem de Separação (Zen)</p>
           <a href={linkZenOrdem(p.zen_ordem_separacao_id)} target="_blank" rel="noreferrer" title="Abrir ordem de separação no Zen"
@@ -236,12 +234,8 @@ function InfoLiberacao({ p, itens }) {
             {p.zen_ordem_separacao_id} <ExternalLink size={13} />
           </a>
         </div>
-        <div>
-          <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Quantidade total de card</p>
-          <p className="font-bold text-base text-[var(--c-texto)]">{qtd}</p>
-        </div>
       </div>
-      {qtd > 1 && (
+      {false && qtd > 1 && (
         <ul className="text-[11px] text-[var(--c-texto)] space-y-0.5">
           {grupos.map((g, i) => (
             <li key={i}><b>Card {i + 1}:</b> {g.map(x => x.codigo).join(', ')} <span className="text-[var(--c-suave)]">({g.length} {g.length === 1 ? 'item' : 'itens'})</span></li>
@@ -293,16 +287,43 @@ function StatusPipefy({ p, carregar }) {
   );
 }
 
+// Mover o pedido de coluna (sem o Pipefy): próxima coluna em destaque e as outras na lista
+function MoverPedido({ p, carregar }) {
+  const [movendo, setMovendo] = useState(false);
+  const i = NO_PIPEFY.indexOf(p.status);
+  const proxima = COLUNAS.find(c => c.status === NO_PIPEFY[i + 1]);
+  async function mover(status) {
+    if (!status || status === p.status) return;
+    setMovendo(true);
+    try { await lojinhaService.mover(p.id, status); carregar(); }
+    catch (e) { alert(e.response?.data?.erro || 'Erro ao mover.'); }
+    finally { setMovendo(false); }
+  }
+  return (
+    <div className="flex items-center gap-1.5 pt-1">
+      {proxima && (
+        <button onClick={() => mover(proxima.status)} disabled={movendo}
+          className="flex-1 flex items-center justify-center gap-1 text-xs font-semibold py-1.5 rounded-lg bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 disabled:opacity-40">
+          {movendo ? 'Movendo…' : `Mover p/ ${proxima.titulo}`}
+        </button>
+      )}
+      <select value="" disabled={movendo} onChange={e => mover(e.target.value)} title="Mover para outra coluna"
+        className={`${proxima ? 'w-24' : 'flex-1'} bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-1.5 py-1.5 text-[11px] text-[var(--c-texto)] disabled:opacity-40`}>
+        <option value="">Outra…</option>
+        {COLUNAS.filter(c => NO_PIPEFY.includes(c.status) && c.status !== p.status).map(c => <option key={c.status} value={c.status}>{c.titulo}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function CardPedido({ p, carregar }) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
   const [aberto, setAberto] = useState(false);
   const desconto = valorDesconto(itens, p.assistente_autorizado);
   const [excluindo, setExcluindo] = useState(false);
   async function excluir() {
-    const cards = (p.pipefy_cards || []).filter(c => c?.id).length;
     const partes = [
       p.zen_pedido_id && `o pedido ${p.zen_pedido_id} no Zen (desfazendo a ordem de separação ${p.zen_ordem_separacao_id || ''})`,
-      cards && `${cards} card(s) no Pipefy`,
       'o pedido na Lojinha',
     ].filter(Boolean);
     if (!window.confirm(`Excluir o pedido ${p.numero_pedido}?\n\nIsso vai excluir ${partes.join(', ')}.\nNão dá para desfazer.`)) return;
@@ -317,7 +338,7 @@ function CardPedido({ p, carregar }) {
         <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] text-[var(--c-suave)]">{fmtData(p.data)}</span>
-          <button onClick={excluir} disabled={excluindo} title="Excluir pedido (Zen, Pipefy e Lojinha)"
+          <button onClick={excluir} disabled={excluindo} title="Excluir pedido (Zen e Lojinha)"
             className="p-1 rounded-lg text-[var(--c-suave)] hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50">
             {excluindo ? <Spinner size={13} /> : <Trash2 size={14} />}
           </button>
@@ -354,7 +375,7 @@ function CardPedido({ p, carregar }) {
         <b className="text-[12px] text-[var(--c-texto)]">{fmtR$(totalItens(itens) - desconto + Number(p.valor_frete || 0))}</b>
       </div>
       <StatusZen p={p} carregar={carregar} />
-      {['liberacao', ...NO_PIPEFY].includes(p.status) && <StatusPipefy p={p} carregar={carregar} />}
+      {NO_PIPEFY.includes(p.status) && <MoverPedido p={p} carregar={carregar} />}
     </div>
   );
 }
@@ -684,7 +705,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
             <button onClick={onFechar} className="px-4 py-2.5 rounded-xl border border-[var(--c-borda)] text-sm text-[var(--c-texto)]">Cancelar</button>
             <button onClick={salvar} disabled={salvando}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--c-destaque)] text-white text-sm font-semibold disabled:opacity-50">
-              {salvando ? <><Spinner size={14} /> Criando no Zen e no Pipefy…</> : <><Check size={15} /> Salvar na Entrada</>}
+              {salvando ? <><Spinner size={14} /> Criando no Zen…</> : <><Check size={15} /> Salvar na Entrada</>}
             </button>
           </div>
         </div>
