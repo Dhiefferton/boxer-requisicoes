@@ -40,7 +40,7 @@ import {
   configPlanilha, marcarPlanilha, marcarAjusteZen,
 } from '../controllers/inventarioController.js';
 import {
-  acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, moverPedidoLojinha, editarCamposLojinha, enviarFotoLojinha, verFotoLojinha, excluirFotoLojinha, listarMovimentosLojinha, verConfigLojinha, salvarConfigLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
+  acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, moverPedidoLojinha, editarCamposLojinha, enviarFotoLojinha, verFotoLojinha, excluirFotoLojinha, listarMovimentosLojinha, verConfigLojinha, salvarConfigLojinha, adicionarOpcaoLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
 } from '../controllers/lojinhaController.js';
 import {
   listarNotas as listarNotasRecImp, detalharNota as detalharNotaRecImp, verFoto as verFotoRecImp,
@@ -49,7 +49,7 @@ import {
 } from '../controllers/recebimentoImportacaoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { relatorioUsoPipefy, chamadasPipefy } from '../integrations/usoPipefy.js';
-import { verConfig as verConfigOrcamento, salvarConfig as salvarConfigOrcamento } from '../controllers/configOrcamentoController.js';
+import { verConfig as verConfigOrcamento, salvarConfig as salvarConfigOrcamento, adicionarOpcao as adicionarOpcaoOrcamento } from '../controllers/configOrcamentoController.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
 import { saidasMarketplace, reposicaoMarketplace, relatoriosMarketplace, relatorioMarketplace, gerarRelatorioMarketplace, sincronizarMarketplace } from '../controllers/marketplaceController.js';
 
@@ -171,6 +171,7 @@ router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operad
 // Configuração da tela de Orçamentos (colunas e campos) — só admin altera
 router.get('/pedidos-orcamento/config',         autenticar, exigirLeituraOrcamentos, verConfigOrcamento);
 router.post('/pedidos-orcamento/config',        autenticar, exigirPerfil('admin'), salvarConfigOrcamento);
+router.post('/pedidos-orcamento/config/campos/:id/opcoes', autenticar, exigirLeituraOrcamentos, adicionarOpcaoOrcamento);
 // Modelos de máquina (lista do B-Requisições)
 router.get('/pedidos-orcamento/modelos',        autenticar, exigirLeituraOrcamentos, listarModelos);
 router.post('/pedidos-orcamento/modelos',       autenticar, exigirPerfil('operador', 'admin'), criarModelo);
@@ -248,6 +249,7 @@ router.delete('/lojinha/fotos/:fotoId',    ...loja, excluirFotoLojinha);
 router.get('/lojinha/movimentos',          ...loja, listarMovimentosLojinha);
 router.get('/lojinha/quadro-config',        ...loja, verConfigLojinha);
 router.post('/lojinha/quadro-config',       ...loja, exigirPerfil('admin'), salvarConfigLojinha);
+router.post('/lojinha/quadro-config/campos/:id/opcoes', ...loja, adicionarOpcaoLojinha);
 router.delete('/lojinha/pedidos/:id', ...loja, excluirPedidoLojinha);
 
 // ── Recebimento/Importação (fotos das peças das NFs de importação)
