@@ -6,7 +6,7 @@
 // campos do botão Novo card. Tudo é editado aqui e gravado em "Salvar".
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { X, Plus, Settings, ChevronUp, ChevronDown, Trash2, Pencil, Check } from 'lucide-react';
+import { X, Plus, Settings, ChevronUp, ChevronDown, Trash2, Pencil, Check, GripVertical } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 
@@ -141,6 +141,22 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
       if (i < 0 || j < 0 || j >= daCol.length) return l;
       const a = daCol[i], b = daCol[j];
       return l.map(c => (c.uid === a.uid ? b : c.uid === b.uid ? a : c));
+    });
+    mudou();
+  }
+  // Arrastar e soltar: o campo arrastado vai para a posição do campo sob o mouse
+  const [arrastando, setArrastando] = useState(null);
+  function reposicionar(uid, alvo) {
+    if (!uid || uid === alvo) return;
+    setCampos(l => {
+      const daCol = l.filter(c => c.coluna === chaveAtual);
+      const de = daCol.findIndex(c => c.uid === uid), para = daCol.findIndex(c => c.uid === alvo);
+      if (de < 0 || para < 0) return l;
+      const nova = [...daCol];
+      const [item] = nova.splice(de, 1);
+      nova.splice(para, 0, item);
+      let i = 0;
+      return l.map(c => (c.coluna === chaveAtual ? nova[i++] : c));
     });
     mudou();
   }
@@ -309,13 +325,17 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                 )}
               </div>
               <div className="p-4 space-y-2">
-                <p className="text-[11px] text-[var(--c-suave)]">Campos: {camposAtuais.length} · clique num campo para editar</p>
+                <p className="text-[11px] text-[var(--c-suave)]">Campos: {camposAtuais.length} · clique num campo para editar · segure e arraste para mudar a ordem</p>
                 {aba === 'inicio' && <p className="text-[11px] text-[var(--c-suave)]">Sem campos aqui, o Novo card continua com o formulário de hoje. O CPF/CNPJ do cliente (busca no Zen) aparece sempre.</p>}
                 {!camposAtuais.length && <div className="border-2 border-dashed border-[var(--c-borda)] rounded-xl py-8 text-center text-xs text-[var(--c-suave)]">Nenhum campo. Escolha um tipo de campo à esquerda.</div>}
                 {camposAtuais.map(c => (
                   <div key={c.uid} onClick={() => { setCampoSel(c.uid); setNovaOpcao(''); }}
-                    className={`cursor-pointer rounded-xl border p-3 ${campoSel === c.uid ? 'border-[var(--c-destaque)] bg-[var(--c-destaque)]/10' : 'border-[var(--c-borda)] bg-[var(--c-cartao)] hover:border-[var(--c-borda-forte)]'}`}>
+                    draggable onDragStart={e => { setArrastando(c.uid); e.dataTransfer.effectAllowed = 'move'; }}
+                    onDragOver={e => { e.preventDefault(); if (arrastando && arrastando !== c.uid) reposicionar(arrastando, c.uid); }}
+                    onDragEnd={() => setArrastando(null)} onDrop={e => { e.preventDefault(); setArrastando(null); }}
+                    className={`cursor-grab active:cursor-grabbing rounded-xl border p-3 ${arrastando === c.uid ? 'opacity-50 ' : ''}${campoSel === c.uid ? 'border-[var(--c-destaque)] bg-[var(--c-destaque)]/10' : 'border-[var(--c-borda)] bg-[var(--c-cartao)] hover:border-[var(--c-borda-forte)]'}`}>
                     <div className="flex items-start gap-2">
+                      <GripVertical size={14} className="shrink-0 mt-1 text-[var(--c-suave)]" aria-label="Arraste para mudar a ordem" />
                       <Sigla tipo={c.tipo} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-[var(--c-texto)]">{c.obrigatorio && <span className="text-red-400">* </span>}{c.rotulo}
