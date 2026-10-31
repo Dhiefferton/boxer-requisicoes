@@ -40,7 +40,7 @@ import {
   configPlanilha, marcarPlanilha, marcarAjusteZen,
 } from '../controllers/inventarioController.js';
 import {
-  acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, moverPedidoLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
+  acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, moverPedidoLojinha, editarCamposLojinha, enviarFotoLojinha, verFotoLojinha, excluirFotoLojinha, listarMovimentosLojinha, verConfigLojinha, salvarConfigLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
 } from '../controllers/lojinhaController.js';
 import {
   listarNotas as listarNotasRecImp, detalharNota as detalharNotaRecImp, verFoto as verFotoRecImp,
@@ -241,6 +241,13 @@ router.post('/lojinha/pedidos', ...loja, criarPedidoLojinha);
 router.post('/lojinha/pedidos/:id/zen', ...loja, reenviarZenLojinha);
 router.post('/lojinha/pedidos/:id/pipefy', ...loja, reenviarPipefyLojinha);
 router.post('/lojinha/pedidos/:id/mover',  ...loja, moverPedidoLojinha);
+router.post('/lojinha/pedidos/:id/campos', ...loja, editarCamposLojinha);
+router.post('/lojinha/pedidos/:id/fotos',  ...loja, enviarFotoLojinha);
+router.get('/lojinha/fotos/:fotoId',       ...loja, verFotoLojinha);
+router.delete('/lojinha/fotos/:fotoId',    ...loja, excluirFotoLojinha);
+router.get('/lojinha/movimentos',          ...loja, listarMovimentosLojinha);
+router.get('/lojinha/quadro-config',        ...loja, verConfigLojinha);
+router.post('/lojinha/quadro-config',       ...loja, exigirPerfil('admin'), salvarConfigLojinha);
 router.delete('/lojinha/pedidos/:id', ...loja, excluirPedidoLojinha);
 
 // ── Recebimento/Importação (fotos das peças das NFs de importação)
