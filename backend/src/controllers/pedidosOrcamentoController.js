@@ -10,7 +10,7 @@ import { query } from '../config/db.js';
 import {
   pipefyQuery, listarCardsDaFase, extrairDadosOrcamento, listarCardsNovosOrcamento,
   buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO, estruturaPipeOrcamento, CAMPO_DOC_CLIENTE,
-  atualizarCamposCardPipefy, TIPOS_EDITAVEIS_PIPEFY,
+  atualizarCamposCardPipefy, TIPOS_EDITAVEIS_PIPEFY, PIPEFY_ATIVO,
 } from '../integrations/pipefyService.js';
 import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
@@ -196,14 +196,14 @@ async function enviarParaSeparacaoAuto(id, usuario) {
     if ((pedido.zen_erro || '') !== texto) {
       await registrarMovimento(id, 'erro_zen', {
         de: pedido.status, para: 'separando', usuario, origem: 'sincronizacao',
-        descricao: `Card em "Requisitar Peças" no Pipefy, mas não foi para Em Separação: ${texto.slice(0, 500)}`,
+        descricao: `Card em "Requisitar Peças", mas não foi para Em Separação: ${texto.slice(0, 500)}`,
         detalhes: { acao: 'criar_pedido', zen_pedido_id: zenPedidoId },
       });
     }
     return null;
   };
   if (!(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)) {
-    return registrarErro('Card sem peças com código e quantidade. Lance as peças no card do Pipefy — o sistema tenta de novo sozinho.');
+    return registrarErro(PIPEFY_ATIVO ? 'Card sem peças com código e quantidade. Lance as peças no card do Pipefy — o sistema tenta de novo sozinho.' : 'Card sem peças com código e quantidade. Preencha as peças no card e mova de novo.');
   }
   try {
     // Card que já tinha pedido no Zen e voltou para Requisitar Peças (ex.: revertido para
@@ -228,7 +228,7 @@ async function enviarParaSeparacaoAuto(id, usuario) {
         if (r.removidos?.length)   partes.push(`retiradas ${r.removidos.join(', ')}`);
         await registrarMovimento(id, 'pecas_atualizadas_zen', {
           de: pedido.status, para: 'separando', usuario, origem: 'sincronizacao',
-          descricao: `Card voltou para "Requisitar Peças" no Pipefy — pedido #${pedido.zen_pedido_id} revertido e peças atualizadas no Zen (${partes.join('; ')}); nova ordem de separação #${r.ordemSeparacaoId}`,
+          descricao: `Card voltou para "Requisitar Peças" — pedido #${pedido.zen_pedido_id} revertido e peças atualizadas no Zen (${partes.join('; ')}); nova ordem de separação #${r.ordemSeparacaoId}`,
           detalhes: { adicionados: r.adicionados, alterados: r.alterados, removidos: r.removidos,
                       ordem_anterior: pedido.zen_ordem_separacao_id, ordem_nova: r.ordemSeparacaoId },
         });
@@ -243,7 +243,7 @@ async function enviarParaSeparacaoAuto(id, usuario) {
     );
     await registrarMovimento(id, 'zen_pedido_criado', {
       de: pedido.status, para: 'separando', usuario, origem: 'sincronizacao',
-      descricao: `Card chegou em "Requisitar Peças" no Pipefy — pedido de venda #${zen.zenPedidoId} ${zen.criadoAgora ? 'criado' : 'completado'} no Zen (ordem de separação #${zen.ordemSeparacaoId}) e card enviado para Em Separação`,
+      descricao: `Card chegou em "Requisitar Peças" — pedido de venda #${zen.zenPedidoId} ${zen.criadoAgora ? 'criado' : 'completado'} no Zen (ordem de separação #${zen.ordemSeparacaoId}) e card enviado para Em Separação`,
       detalhes: { zen_pedido_id: zen.zenPedidoId, ordem_separacao: zen.ordemSeparacaoId, itens_incluidos: zen.itensIncluidos },
     });
     return zen;
@@ -379,7 +379,7 @@ export async function moverPedido(req, res, next) {
     const detalhesMov = {};
 
     // Card criado no B-Requisições: campos obrigatórios da coluna atual (configuração) antes de sair dela
-    if (!pedido.pipefy_card_id && status !== pedido.status) {
+    if ((!PIPEFY_ATIVO || !pedido.pipefy_card_id) && status !== pedido.status) {
       const valores = Object.fromEntries((Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).filter(c => c?.id).map(c => [c.id, c.valor]));
       const faltando = (cfg?.campos || []).filter(c => c.coluna === pedido.status && c.obrigatorio && c.tipo !== 'anexo'
         && !String(valores[idCampoConfig(c)] ?? '').replace(/[\[\]"]/g, '').trim());
@@ -389,14 +389,14 @@ export async function moverPedido(req, res, next) {
     }
 
     // Card do Pipefy só entra em Requisitar Peças quando o card for movido no Pipefy (sincronização)
-    if (status === 'solicitacao' && pedido.status !== 'solicitacao' && pedido.pipefy_card_id) {
+    if (PIPEFY_ATIVO && status === 'solicitacao' && pedido.status !== 'solicitacao' && pedido.pipefy_card_id) {
       return res.status(400).json({ erro: 'Este card só vai para Requisitar Peças quando for movido no Pipefy. Mova o card lá e aguarde a atualização automática (até 30s).' });
     }
 
     // Trava: sem peças (código + quantidade) não vai para Em Separação — nem tenta o Zen
     if (status === 'separando' && pedido.status !== 'separando'
         && !(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)) {
-      return res.status(400).json({ erro: pedido.pipefy_card_id
+      return res.status(400).json({ erro: PIPEFY_ATIVO && pedido.pipefy_card_id
         ? 'Este card não tem peças. Lance as peças no Pipefy (fase "Requisitar Peças") e aguarde a atualização automática (até 30s) antes de mandar para Em Separação.'
         : 'Este card não tem peças. Preencha as peças nos campos do card antes de mandar para Em Separação.' });
     }
@@ -455,6 +455,16 @@ export async function moverPedido(req, res, next) {
         ? `${NOME_STATUS[status]} — romaneio #${detalhesMov.romaneio} fechado e nota fiscal #${detalhesMov.nota} criada no Zen`
         : `Movido de ${nomeCol(pedido.status)} para ${nomeCol(status)}`,
     });
+    // Sem o Pipefy: entrou em Requisitar Peças -> cria o pedido no Zen e vai para Em Separação
+    // (se o Zen falhar, o card fica em Requisitar Peças com o erro na tela)
+    if (!PIPEFY_ATIVO && status === 'solicitacao' && pedido.status !== 'solicitacao') {
+      const r = await enviarParaSeparacaoAuto(pedido.id, req.usuario);
+      if (!r) {
+        const erroZen = (await query(`SELECT zen_erro FROM pedidos_orcamento WHERE id = $1`, [pedido.id])).rows[0]?.zen_erro;
+        return res.status(502).json({ erro: `O card foi para Requisitar Peças, mas não foi para Em Separação: ${erroZen || 'erro no Zen'}` });
+      }
+      return res.json({ sucesso: true, zen_pedido_id: r.zenPedidoId || pedido.zen_pedido_id || null, zen_ordem_separacao_id: r.ordemSeparacaoId || null });
+    }
     res.json({
       sucesso: true,
       zen_pedido_id: zen?.zenPedidoId || pedido.zen_pedido_id || null,
@@ -520,11 +530,19 @@ export async function editarCampos(req, res, next) {
     await garantirColunas();
     const campos = req.body?.campos;
     if (!campos || typeof campos !== 'object' || Array.isArray(campos)) return res.status(400).json({ erro: 'Envie { campos: { id_do_campo: valor } }.' });
-    const atual = (await query(`SELECT id, campos_editados, pipefy_card_id, pipefy_campos FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`, [parseInt(req.params.id)])).rows[0];
+    const atual = (await query(`SELECT id, campos_editados, pipefy_card_id, pipefy_campos, status, itens, zen_pedido_id FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`, [parseInt(req.params.id)])).rows[0];
     if (!atual) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    if (!atual.pipefy_card_id) {
-      // Card criado aqui: os campos são do próprio card
+    if (!PIPEFY_ATIVO || !atual.pipefy_card_id) {
+      // Card criado aqui (ou Pipefy desligado): os campos são do próprio card
       await salvarCamposNativos(atual, campos);
+      // Edição local antiga do mesmo campo deixa de valer (o valor agora é do card)
+      const resto = { ...(atual.campos_editados || {}) };
+      for (const k of Object.keys(campos)) delete resto[k];
+      if (Object.keys(resto).length !== Object.keys(atual.campos_editados || {}).length) {
+        await query(`UPDATE pedidos_orcamento SET campos_editados = $1::jsonb WHERE id = $2`,
+          [Object.keys(resto).length ? JSON.stringify(resto) : null, atual.id]);
+      }
+      await aplicarAprovacao(atual.id, campos);
       await registrarMovimento(atual.id, 'campos_editados', {
         usuario: req.usuario, descricao: `Campos do card preenchidos: ${Object.keys(campos).join(', ')}`, detalhes: campos,
       });
@@ -587,6 +605,29 @@ export async function editarCampos(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// "Aprovação" e "Peças Recusadas" preenchidos no card alimentam o pedido
+// (Aprovado Parcial: retirada das peças no Zen). Usado com o Pipefy desligado.
+async function aplicarAprovacao(pedidoId, campos) {
+  const estrutura = await estruturaPipeOrcamento();
+  const cfg = await lerConfigOrcamento().catch(() => null);
+  const rot = new Map(estrutura.flatMap(f => f.campos.map(c => [c.id, c.rotulo])));
+  for (const c of cfg?.campos || []) rot.set(idCampoConfig(c), c.rotulo);
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const texto = (v) => {
+    const s = String(v ?? '').trim();
+    if (s.startsWith('[')) { try { const a = JSON.parse(s); if (Array.isArray(a)) return a.map(String).join(', '); } catch { /* texto */ } }
+    return s;
+  };
+  for (const [k, v] of Object.entries(campos || {})) {
+    const r = norm(rot.get(k));
+    if (/pecas?\s+recusad/.test(r)) {
+      await query(`UPDATE pedidos_orcamento SET pecas_recusadas = $1 WHERE id = $2 AND recusadas_retiradas_em IS NULL`, [texto(v) || null, pedidoId]);
+    } else if (/^aprovacao$/.test(r) && texto(v)) {
+      await query(`UPDATE pedidos_orcamento SET aprovacao = $1 WHERE id = $2 AND recusadas_retiradas_em IS NULL`, [texto(v), pedidoId]);
+    }
+  }
+}
+
 // ── Cards criados direto no B-Requisições (sem Pipefy) ─────────
 // Os campos ficam em pipefy_campos (mesmo formato dos cards do Pipefy:
 // [{ id, nome, valor }]) e os dados usados no Zen (cliente, CNPJ, técnico,
@@ -609,12 +650,21 @@ async function salvarCamposNativos(pedido, novos) {
   const doc = String(campos.find(c => c.id === CAMPO_DOC_CLIENTE)?.valor || '').trim() || d.cliente_cnpj;
   await query(
     `UPDATE pedidos_orcamento
-        SET pipefy_campos = $1::jsonb, referencia = COALESCE($2, referencia), cliente_nome = $2, cliente_cnpj = $3,
-            tecnico = $4, frete_por_conta = $5, entregue_por = $6, ns_entrada = $7,
+        SET pipefy_campos = $1::jsonb, referencia = COALESCE($2, referencia),
+            cliente_nome = CASE WHEN $10 THEN COALESCE($2, cliente_nome) ELSE $2 END,
+            cliente_cnpj = CASE WHEN $10 THEN COALESCE($3, cliente_cnpj) ELSE $3 END,
+            tecnico = CASE WHEN $10 THEN COALESCE($4, tecnico) ELSE $4 END,
+            frete_por_conta = CASE WHEN $10 THEN COALESCE($5, frete_por_conta) ELSE $5 END,
+            entregue_por = CASE WHEN $10 THEN COALESCE($6, entregue_por) ELSE $6 END,
+            ns_entrada = CASE WHEN $10 THEN COALESCE($7, ns_entrada) ELSE $7 END,
+            -- peças mudaram depois do pedido no Zen: marca para atualizar no Zen
+            itens_alterados_em = CASE WHEN zen_pedido_id IS NOT NULL AND recusadas_retiradas_em IS NULL
+                                       AND status IN ('separando', 'separado', 'aprovado_recusado')
+                                       AND itens IS DISTINCT FROM $8::jsonb THEN NOW() ELSE itens_alterados_em END,
             itens = CASE WHEN recusadas_retiradas_em IS NULL THEN $8::jsonb ELSE itens END, atualizado_em = NOW()
       WHERE id = $9`,
     [JSON.stringify(campos), d.cliente_nome ? d.cliente_nome.slice(0, 255) : null, doc || null, d.tecnico, d.frete_por_conta,
-     d.entregue_por, d.ns_entrada, JSON.stringify(d.itens), pedido.id]);
+     d.entregue_por, d.ns_entrada, JSON.stringify(d.itens), pedido.id, !!pedido.pipefy_card_id]);
 }
 
 // GET /pedidos-orcamento/cliente-zen?documento= (admin) — cadastro do cliente no Zen
@@ -746,7 +796,8 @@ export async function sincronizarPipefy(req, res, next) {
 async function executarSincronizacao(req, res, next) {
   try {
     await garantirColunas();
-    const cards = await listarCardsDaFase();
+    // Pipefy desligado: só a parte do Zen (separação concluída -> Separado)
+    const cards = PIPEFY_ATIVO ? await listarCardsDaFase() : [];
     let novos = 0, atualizados = 0;
 
     // Card que voltou pra "Requisitar Peças" depois de cancelado aqui (cancelado
@@ -874,7 +925,7 @@ async function executarSincronizacao(req, res, next) {
     // (Entrada, Liberado p/ Orçar, Orçando…), já na coluna da fase atual.
     // Busca os atualizados nos últimos 7 dias (filtro do Pipefy) e importa os que faltam.
     let novosPipe = 0;
-    try {
+    if (PIPEFY_ATIVO) try {
       const desde7 = new Date(Date.now() - 7 * 86400000).toISOString();
       const atualizadosDesde = desde7 > CARDS_NOVOS_DESDE ? desde7 : CARDS_NOVOS_DESDE;
       const recentes = await listarCardsNovosOrcamento(CARDS_NOVOS_DESDE, atualizadosDesde);
@@ -962,7 +1013,7 @@ async function executarSincronizacao(req, res, next) {
         WHERE pipefy_card_id IS NOT NULL
           AND status NOT IN ('finalizado', 'cancelado', 'sucata')`
     );
-    if (acompanhados.rows.length) {
+    if (PIPEFY_ATIVO && acompanhados.rows.length) {
       try {
         const situacao = await buscarSituacaoCards(acompanhados.rows.map(p => p.pipefy_card_id));
         for (const p of acompanhados.rows) {
@@ -1183,7 +1234,7 @@ export async function retirarRecusadas(req, res, next) {
     // Lê o card de novo no Pipefy pra pegar o campo "Peças Recusadas" atualizado
     let aprovacao = pedido.aprovacao;
     let pecasRecusadas = pedido.pecas_recusadas;
-    if (pedido.pipefy_card_id) {
+    if (PIPEFY_ATIVO && pedido.pipefy_card_id) {
       try {
         const s = (await buscarSituacaoCards([pedido.pipefy_card_id])).get(String(pedido.pipefy_card_id));
         if (s) { aprovacao = s.aprovacao || aprovacao; pecasRecusadas = s.pecasRecusadas ?? pecasRecusadas; }
