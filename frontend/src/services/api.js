@@ -131,6 +131,13 @@ export const lojinhaService = {
   reenviarZen: (id, transacao) => api.post(`/lojinha/pedidos/${id}/zen`, transacao !== undefined ? { transacao } : {}, { timeout: 120000 }),
   reenviarPipefy: (id) => api.post(`/lojinha/pedidos/${id}/pipefy`, {}, { timeout: 120000 }),
   mover:   (id, status) => api.post(`/lojinha/pedidos/${id}/mover`, { status }),
+  quadroConfig:       ()      => api.get('/lojinha/quadro-config', { timeout: 30000 }),
+  salvarQuadroConfig: (dados) => api.post('/lojinha/quadro-config', dados, { timeout: 60000 }),
+  editarCampos: (id, campos)  => api.post(`/lojinha/pedidos/${id}/campos`, { campos }),
+  imagem:      (url)          => api.get(url, { responseType: 'blob', timeout: 30000 }),
+  enviarFoto:  (id, dados)    => api.post(`/lojinha/pedidos/${id}/fotos`, dados, { timeout: 60000 }),
+  excluirFoto: (fotoId)       => api.delete(`/lojinha/fotos/${fotoId}`),
+  movimentos:  (params)       => api.get('/lojinha/movimentos', { params, timeout: 30000 }),
   excluir: (id)        => api.delete(`/lojinha/pedidos/${id}`, { timeout: 120000 }),
 };
 
