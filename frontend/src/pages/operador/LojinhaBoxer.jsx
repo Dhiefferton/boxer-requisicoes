@@ -1,16 +1,23 @@
 // ============================================================
 // pages/operador/LojinhaBoxer.jsx — Lojinha Boxer
 // ============================================================
-// Duas colunas: Entrada e Liberação.
+// Quadro igual ao de Orçamentos: colunas configuráveis (Configurar, só admin),
+// card que abre em 3 partes (dados e fases anteriores | fase atual | mover),
+// campos por coluna, fotos e histórico de movimentação.
 // Entrada: cliente (CPF/CNPJ buscado no Zen) e se é Assistente Autorizado,
 // data, produtos (SKU do catálogo, só com saldo, com preço), nº do pedido
 // da lojinha, vendedora, envio e valor do frete.
 // Ao salvar, o sistema cria o pedido no Zen até a ordem de separação.
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
-import { Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, User, BadgeCheck, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, User, BadgeCheck, AlertTriangle, ExternalLink, Settings, Activity, History, ArrowRight, ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
 import { lojinhaService } from '../../services/api';
 import { Spinner } from '../../components/ui';
+import { useAuth } from '../../context/AuthContext';
+import ConfigOrcamento, { campoDaConfig } from '../../components/operador/ConfigOrcamento';
+import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
+import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
+import { Editor, Valor, SO_LEITURA, valorLista } from '../../components/operador/CamposCardOrcamento';
 
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
@@ -73,12 +80,43 @@ function combinaBusca(pedido, busca) {
 const campo = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[var(--c-destaque)]';
 const rotulo = 'block text-xs text-[var(--c-suave)] mb-1.5';
 
+// Fotos da Lojinha (mesmos componentes do Orçamento, com o serviço da Lojinha)
+const SERVICO_FOTOS = {
+  base: '/lojinha/fotos',
+  imagem: (url) => lojinhaService.imagem(url),
+  enviarFoto: (id, dados) => lojinhaService.enviarFoto(id, dados),
+  excluirFoto: (fotoId) => lojinhaService.excluirFoto(fotoId),
+};
+const SERVICO_CONFIG = { config: () => lojinhaService.quadroConfig(), salvarConfig: (d) => lojinhaService.salvarQuadroConfig(d) };
+const buscarMovimentos = (params) => lojinhaService.movimentos(params);
+
+// Coluna do pedido na tela ('liberacao' aparece na Entrada)
+const colunaDo = (p) => (['entrada', 'liberacao'].includes(p.status) ? 'entrada' : p.status);
+
+// Colunas da tela: as da configuração (nome, cor, ordem, colunas novas) ou as padrão
+function montarColunas(cfg) {
+  if (!cfg?.colunas?.length) return COLUNAS.map(c => ({ ...c, admin: false, arquivada: false }));
+  const padrao = new Map(COLUNAS.map(c => [c.status, c]));
+  return cfg.colunas.map(c => ({
+    ...(padrao.get(c.chave) || {}),
+    status: c.chave, inclui: c.chave === 'entrada' ? ['entrada', 'liberacao'] : [c.chave],
+    titulo: c.nome, hex: c.cor, admin: !!c.so_admin, arquivada: !!c.arquivada, zen: c.zen || null,
+  }));
+}
+
 export default function LojinhaBoxer() {
+  const { usuario } = useAuth();
+  const ehAdmin = usuario?.perfil === 'admin';
   const [config, setConfig] = useState({ tipos_envio: ['Sedex', 'PAC', 'Próprio', 'Transportadora'], transportadoras: [], avisos_uf: {}, vendedoras: [], erro_vendedoras: null });
   const [pedidos, setPedidos] = useState(null);
   const [novo, setNovo] = useState(false);
   const [aviso, setAviso] = useState('');
   const [busca, setBusca] = useState('');
+  const [cfg, setCfg] = useState(null);                 // colunas e campos (Configurar)
+  const [verConfig, setVerConfig] = useState(false);     // false | true | chave da coluna
+  const [verMov, setVerMov] = useState(false);
+  const [historico, setHistorico] = useState(null);      // { id, nome }
+  const [abertoId, setAbertoId] = useState(null);
 
   async function carregar() {
     try { const { data } = await lojinhaService.pedidos(); setPedidos(data.pedidos); }
@@ -86,6 +124,7 @@ export default function LojinhaBoxer() {
   }
   useEffect(() => {
     lojinhaService.config().then(r => setConfig(c => ({ ...c, ...r.data }))).catch(() => {});
+    lojinhaService.quadroConfig().then(r => setCfg(r.data)).catch(() => {});
     carregar();
     // Atualiza sozinho a cada minuto (separação do Zen)
     const t = setInterval(() => { if (!document.hidden) carregar(); }, 60000);
@@ -94,9 +133,14 @@ export default function LojinhaBoxer() {
 
   const lista = pedidos || [];
   const ativos = lista.filter(p => p.status !== 'finalizado').length;
+  const colunas = montarColunas(cfg);
+  const aberto = abertoId ? lista.find(p => p.id === abertoId) : null;
+  const nomeStatus = Object.fromEntries(colunas.map(c => [c.status, c.titulo]));
+  const corStatus = Object.fromEntries(colunas.map(c => [c.status, 'bg-[var(--c-borda)] text-[var(--c-texto)]']));
 
   return (
-    // Tela grande: travada na altura da janela e cada coluna rola sozinha (igual Orçamentos)
+    <FotosProvider servico={SERVICO_FOTOS}>
+    {/* Tela grande: travada na altura da janela e cada coluna rola sozinha (igual Orçamentos) */}
     <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-3.1rem)]">
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -118,6 +162,18 @@ export default function LojinhaBoxer() {
               bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 transition-colors">
             <Plus size={13} /> Novo pedido
           </button>
+          {ehAdmin && (
+            <button onClick={() => setVerConfig(true)} title="Configurar colunas e campos da tela"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
+              <Settings size={13} /> Configurar
+            </button>
+          )}
+          {ehAdmin && (
+            <button onClick={() => setVerMov(true)} title="Relatório de movimentação"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
+              <Activity size={13} /> Movimentação
+            </button>
+          )}
           <button onClick={carregar} title="Recarregar"
             className="p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)] transition-colors">
             <RefreshCw size={16} className={!pedidos ? 'animate-spin' : ''} />
@@ -130,21 +186,38 @@ export default function LojinhaBoxer() {
       {!pedidos ? (
         <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-rows-1 xl:grid-cols-none xl:grid-flow-col xl:auto-cols-[minmax(280px,1fr)] xl:overflow-x-auto xl:flex-1 xl:min-h-0 gap-4">
-          {COLUNAS.map(({ status, inclui, titulo, cor, badge }) => {
-            const doStatus = lista.filter(p => inclui.includes(p.status) && combinaBusca(p, busca));
+        <div className="flex gap-4 overflow-x-auto pb-2 xl:flex-1 xl:min-h-0">
+          {colunas.map(col => {
+            const doStatus = lista.filter(p => col.inclui.includes(p.status) && combinaBusca(p, busca));
             return (
-              <Coluna key={status} titulo={titulo} cor={cor} badge={badge} total={doStatus.length}>
+              <Coluna key={col.status} col={col} total={doStatus.length} arquivada={col.arquivada && !busca}
+                onConfigurar={ehAdmin ? () => setVerConfig(col.status) : undefined}>
                 {doStatus.length === 0 ? (
                   <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
                     <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem pedidos'}</p>
-                    {status === 'entrada' && !busca && <button onClick={() => setNovo(true)} className="mt-1 text-xs text-[var(--c-destaque)] font-semibold">+ Novo pedido</button>}
+                    {col.status === 'entrada' && !busca && <button onClick={() => setNovo(true)} className="mt-1 text-xs text-[var(--c-destaque)] font-semibold">+ Novo pedido</button>}
                   </div>
-                ) : doStatus.map(p => <CardPedido key={p.id} p={p} carregar={carregar} />)}
+                ) : doStatus.map(p => <CardPedido key={p.id} p={p} carregar={carregar} onAbrir={() => setAbertoId(p.id)} />)}
               </Coluna>
             );
           })}
         </div>
+      )}
+
+      {aberto && (
+        <CardAbertoLojinha p={aberto} cfg={cfg} colunas={colunas} ehAdmin={ehAdmin} carregar={carregar}
+          onFechar={() => setAbertoId(null)}
+          onHistorico={() => setHistorico({ id: aberto.id, nome: `Pedido ${aberto.numero_pedido} — ${aberto.cliente_nome}` })} />
+      )}
+      {verConfig && ehAdmin && (
+        <ConfigOrcamento servico={SERVICO_CONFIG} titulo="Configurações — Lojinha Boxer" semInicio
+          colunaInicial={typeof verConfig === 'string' ? verConfig : null}
+          onFechar={() => setVerConfig(false)} onSalvo={(data) => setCfg(data)} />
+      )}
+      {(verMov || historico) && (
+        <PainelMovimentacao buscar={buscarMovimentos} nomeStatus={nomeStatus} corStatus={corStatus}
+          titulo="Movimentação — Lojinha" arquivo="movimentacao-lojinha" pedidoInicial={historico}
+          onFechar={() => { setVerMov(false); setHistorico(null); }} />
       )}
 
       {novo && (
@@ -158,17 +231,41 @@ export default function LojinhaBoxer() {
           }} />
       )}
     </div>
+    </FotosProvider>
   );
 }
 
-function Coluna({ titulo, cor, badge, total, children }) {
+function Pilula({ col }) {
+  if (!col) return null;
+  return col.hex
+    ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: `${col.hex}26`, color: col.hex }}>{col.titulo}</span>
+    : <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${col.badge || ''}`}>{col.titulo}</span>;
+}
+
+function Coluna({ col, total, arquivada = false, onConfigurar, children }) {
+  const [aberta, setAberta] = useState(!arquivada);
   return (
-    <div className="space-y-2 min-w-0 xl:min-h-0 xl:flex xl:flex-col">
-      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${cor} bg-[var(--c-superficie)] xl:shrink-0`}>
-        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>
-        <span className="text-xs font-bold text-[var(--c-suave)]">{total}</span>
+    <div className="space-y-2 w-[17.5rem] shrink-0 xl:min-h-0 xl:flex xl:flex-col">
+      <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${col.hex ? '' : col.cor} bg-[var(--c-superficie)] xl:shrink-0`}
+        style={col.hex ? { borderColor: `${col.hex}66` } : undefined}>
+        {arquivada
+          ? <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1.5 text-[var(--c-suave)] hover:text-[var(--c-texto)]">
+              {aberta ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<Pilula col={col} />
+            </button>
+          : <Pilula col={col} />}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-bold text-[var(--c-suave)]">{total}</span>
+          {onConfigurar && (
+            <button onClick={onConfigurar} title="Editar esta coluna (nome, cor, campos)"
+              className="p-1 rounded-lg text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:bg-[var(--c-borda)] transition-colors">
+              <Settings size={13} />
+            </button>
+          )}
+        </div>
       </div>
-      <div className="space-y-2 xl:flex-1 xl:min-h-0 xl:overflow-y-auto xl:pr-1 xl:-mr-1 xl:pb-2">{children}</div>
+      {aberta
+        ? <div className="space-y-2 xl:flex-1 xl:min-h-0 xl:overflow-y-auto xl:pr-1 xl:-mr-1 xl:pb-2">{children}</div>
+        : <button onClick={() => setAberta(true)} className="w-full text-xs text-[var(--c-suave)] border border-dashed border-[var(--c-borda)] rounded-xl py-2 hover:text-[var(--c-texto)]">Mostrar {total}</button>}
     </div>
   );
 }
@@ -246,106 +343,27 @@ function InfoLiberacao({ p, itens }) {
   );
 }
 
-function StatusPipefy({ p, carregar }) {
-  const [enviando, setEnviando] = useState(false);
-  const cards = Array.isArray(p.pipefy_cards) ? p.pipefy_cards : [];
-  async function enviar() {
-    setEnviando(true);
-    try {
-      const { data: r } = await lojinhaService.reenviarPipefy(p.id);
-      if (!NO_PIPEFY.includes(r.pedido.status)) alert(`O Pipefy deu erro: ${r.pedido.pipefy_erro}`);
-      carregar();
-    } catch (e) { alert(e.response?.data?.erro || 'Erro ao enviar ao Pipefy.'); }
-    finally { setEnviando(false); }
-  }
-  const ok = NO_PIPEFY.includes(p.status);
-  return (
-    <div className={`text-[11px] px-2 py-1.5 rounded-lg space-y-1 ${ok ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
-      {cards.length > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-          <span>Pipefy:</span>
-          {cards.filter(c => c.id).map((c, i) => (
-            <a key={c.id} href={c.url || `https://app.pipefy.com/open-cards/${c.id}`} target="_blank" rel="noreferrer" className="hover:underline" title={c.fase || ''}>
-              Card {i + 1}{cards.length > 1 ? `/${cards.length}` : ''} <b>{c.id}</b> · {c.fase || '—'} <ExternalLink size={10} className="inline -mt-0.5" />
-            </a>
-          ))}
-        </div>
-      )}
-      {!ok && (
-        <>
-          {p.pipefy_erro
-            ? <div className="flex items-start gap-1"><AlertTriangle size={12} className="shrink-0 mt-0.5" /><span>Pipefy: {p.pipefy_erro}</span></div>
-            : !cards.length && <div>Pipefy: cards ainda não criados.</div>}
-          <button onClick={enviar} disabled={enviando}
-            className="px-2 py-0.5 rounded-lg border border-amber-400/40 text-amber-300 font-semibold disabled:opacity-50">
-            {enviando ? 'Enviando ao Pipefy…' : (cards.length ? 'Tentar de novo no Pipefy' : 'Criar cards no Pipefy')}
-          </button>
-        </>
-      )}
-      {ok && p.pipefy_avisos && <div className="text-[var(--c-suave)]">{p.pipefy_avisos}</div>}
-    </div>
-  );
+
+// Excluir o pedido (Zen e Lojinha) — usado no card e no card aberto
+async function excluirPedido(p) {
+  const partes = [
+    p.zen_pedido_id && `o pedido ${p.zen_pedido_id} no Zen (desfazendo a ordem de separação ${p.zen_ordem_separacao_id || ''})`,
+    'o pedido na Lojinha',
+  ].filter(Boolean);
+  if (!window.confirm(`Excluir o pedido ${p.numero_pedido}?\n\nIsso vai excluir ${partes.join(', ')}.\nNão dá para desfazer.`)) return false;
+  try { await lojinhaService.excluir(p.id); return true; }
+  catch (e) { alert(e.response?.data?.erro || 'Erro ao excluir.'); return false; }
 }
 
-// Mover o pedido de coluna (sem o Pipefy): próxima coluna em destaque e as outras na lista
-function MoverPedido({ p, carregar }) {
-  const [movendo, setMovendo] = useState(false);
-  const i = NO_PIPEFY.indexOf(p.status);
-  const proxima = COLUNAS.find(c => c.status === NO_PIPEFY[i + 1]);
-  async function mover(status) {
-    if (!status || status === p.status) return;
-    setMovendo(true);
-    try { await lojinhaService.mover(p.id, status); carregar(); }
-    catch (e) { alert(e.response?.data?.erro || 'Erro ao mover.'); }
-    finally { setMovendo(false); }
-  }
-  return (
-    <div className="flex items-center gap-1.5 pt-1">
-      {proxima && (
-        <button onClick={() => mover(proxima.status)} disabled={movendo}
-          className="flex-1 flex items-center justify-center gap-1 text-xs font-semibold py-1.5 rounded-lg bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 disabled:opacity-40">
-          {movendo ? 'Movendo…' : `Mover p/ ${proxima.titulo}`}
-        </button>
-      )}
-      <select value="" disabled={movendo} onChange={e => mover(e.target.value)} title="Mover para outra coluna"
-        className={`${proxima ? 'w-24' : 'flex-1'} bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-1.5 py-1.5 text-[11px] text-[var(--c-texto)] disabled:opacity-40`}>
-        <option value="">Outra…</option>
-        {COLUNAS.filter(c => NO_PIPEFY.includes(c.status) && c.status !== p.status).map(c => <option key={c.status} value={c.status}>{c.titulo}</option>)}
-      </select>
-    </div>
-  );
-}
-
-function CardPedido({ p, carregar }) {
+// Dados fixos do pedido (cliente, envio, produtos e totais)
+function DadosPedido({ p, sempreProdutos = false }) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
-  const [aberto, setAberto] = useState(false);
+  const [abertoProd, setAbertoProd] = useState(sempreProdutos);
   const desconto = valorDesconto(itens, p.assistente_autorizado);
-  const [excluindo, setExcluindo] = useState(false);
-  async function excluir() {
-    const partes = [
-      p.zen_pedido_id && `o pedido ${p.zen_pedido_id} no Zen (desfazendo a ordem de separação ${p.zen_ordem_separacao_id || ''})`,
-      'o pedido na Lojinha',
-    ].filter(Boolean);
-    if (!window.confirm(`Excluir o pedido ${p.numero_pedido}?\n\nIsso vai excluir ${partes.join(', ')}.\nNão dá para desfazer.`)) return;
-    setExcluindo(true);
-    try { await lojinhaService.excluir(p.id); carregar(); }
-    catch (e) { alert(e.response?.data?.erro || 'Erro ao excluir.'); carregar(); }
-    finally { setExcluindo(false); }
-  }
+  const parar = (e) => e.stopPropagation();
   return (
-    <div className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-1.5 min-w-0 break-words">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-[var(--c-suave)]">{fmtData(p.data)}</span>
-          <button onClick={excluir} disabled={excluindo} title="Excluir pedido (Zen e Lojinha)"
-            className="p-1 rounded-lg text-[var(--c-suave)] hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50">
-            {excluindo ? <Spinner size={13} /> : <Trash2 size={14} />}
-          </button>
-        </div>
-      </div>
+    <>
       <p className="text-[13px] font-semibold text-[var(--c-texto)] leading-snug">{p.cliente_nome}</p>
-      {['liberacao', ...NO_PIPEFY].includes(p.status) && p.zen_ordem_separacao_id && <InfoLiberacao p={p} itens={itens} />}
       {p.assistente_autorizado && <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400"><BadgeCheck size={11} /> Assistente Autorizado</span>}
       <p className="text-[11px] text-[var(--c-suave)] font-mono">{mascararDocumento(p.documento)}{p.cliente_cidade ? ` · ${p.cliente_cidade}` : ''}</p>
       <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -353,12 +371,14 @@ function CardPedido({ p, carregar }) {
         <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[var(--c-borda)] text-[var(--c-texto)]">
           {p.tipo_envio}{p.transportadora ? ` · ${p.transportadora}` : ''}
         </span>
-        <button onClick={() => setAberto(a => !a)} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] font-semibold">
-          <Package size={11} /> {itens.length} {itens.length === 1 ? 'produto' : 'produtos'}
-        </button>
+        {!sempreProdutos && (
+          <button onClick={e => { parar(e); setAbertoProd(a => !a); }} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] font-semibold">
+            <Package size={11} /> {itens.length} {itens.length === 1 ? 'produto' : 'produtos'}
+          </button>
+        )}
       </div>
-      {aberto && (
-        <ul className="pt-1 space-y-0.5">
+      {abertoProd && (
+        <ul className="pt-1 space-y-0.5" onClick={parar}>
           {itens.map(i => (
             <li key={i.codigo} className="flex justify-between gap-2 text-[12px] text-[var(--c-texto)]">
               <span className="truncate"><b className="font-mono">{i.codigo}</b> {i.descricao}</span>
@@ -371,11 +391,197 @@ function CardPedido({ p, carregar }) {
         </ul>
       )}
       <div className="flex items-center justify-between text-[10px] text-[var(--c-suave)]">
-        <span>Registrado por {p.criado_por_nome?.split(' ')[0] || '—'}</span>
+        <span>Registrado por {p.criado_por_nome?.split(' ')[0] || '—'} · {fmtData(p.data)}</span>
         <b className="text-[12px] text-[var(--c-texto)]">{fmtR$(totalItens(itens) - desconto + Number(p.valor_frete || 0))}</b>
       </div>
-      <StatusZen p={p} carregar={carregar} />
-      {NO_PIPEFY.includes(p.status) && <MoverPedido p={p} carregar={carregar} />}
+    </>
+  );
+}
+
+// Card do quadro (enxuto): clique abre o card
+function CardPedido({ p, carregar, onAbrir }) {
+  const itens = Array.isArray(p.itens) ? p.itens : [];
+  const [excluindo, setExcluindo] = useState(false);
+  const parar = (e) => e.stopPropagation();
+  async function excluir(e) {
+    parar(e);
+    setExcluindo(true);
+    if (await excluirPedido(p)) carregar();
+    setExcluindo(false);
+  }
+  return (
+    <div onClick={onAbrir} title="Abrir pedido"
+      className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-1.5 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-[var(--c-suave)]">{fmtData(p.data)}</span>
+          <button onClick={excluir} disabled={excluindo} title="Excluir pedido (Zen e Lojinha)"
+            className="p-1 rounded-lg text-[var(--c-suave)] hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50">
+            {excluindo ? <Spinner size={13} /> : <Trash2 size={14} />}
+          </button>
+        </div>
+      </div>
+      {p.zen_ordem_separacao_id && <div onClick={parar}><InfoLiberacao p={p} itens={itens} /></div>}
+      <div onClick={parar}><FaixaFotosCard pedido={p} onVerTodas={onAbrir} /></div>
+      <DadosPedido p={p} />
+      {!p.zen_ordem_separacao_id && <div onClick={parar}><StatusZen p={p} carregar={carregar} /></div>}
+    </div>
+  );
+}
+
+// ── Card aberto: dados e fases anteriores | fase atual | mover ──
+function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHistorico }) {
+  const [rascunho, setRascunho] = useState({});
+  const [salvando, setSalvando] = useState(false);
+  const [movendo, setMovendo] = useState(false);
+  const [erro, setErro] = useState('');
+  const atual = colunaDo(p);
+  const colAtual = colunas.find(c => c.status === atual);
+  const valores = p.campos || {};
+  const valorDe = (id) => (id in rascunho ? rascunho[id] : valores[id]);
+  const temValor = (id) => valorLista(valorDe(id)).length > 0;
+  const temFoto = (id) => (p.fotos_locais || []).some(f => f.campo === id);
+  const sujo = Object.keys(rascunho).length > 0;
+  const campos = cfg?.campos || [];
+  const camposDe = (k) => campos.filter(c => c.coluna === k).map(campoDaConfig);
+  const camposAtuais = camposDe(atual);
+  const idx = colunas.findIndex(c => c.status === atual);
+  const anteriores = colunas.filter(c => c.status !== atual)
+    .map(c => ({ col: c, campos: camposDe(c.status).filter(f => temValor(f.id) || (f.tipo === 'attachment' && temFoto(f.id))) }))
+    .filter(g => g.campos.length);
+
+  useEffect(() => {
+    const k = (e) => { if (e.key === 'Escape') fechar(); };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  });
+
+  async function salvar() {
+    if (!sujo) return true;
+    setSalvando(true); setErro('');
+    try { await lojinhaService.editarCampos(p.id, rascunho); setRascunho({}); await carregar(); return true; }
+    catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar os campos.'); return false; }
+    finally { setSalvando(false); }
+  }
+  function fechar() {
+    if (sujo && !confirm('Há campos alterados sem salvar. Fechar mesmo assim?')) return;
+    onFechar();
+  }
+  async function mover(status) {
+    if (sujo && !(await salvar())) return;
+    setMovendo(true); setErro('');
+    try { await lojinhaService.mover(p.id, status); await carregar(); }
+    catch (e) { setErro(e.response?.data?.erro || 'Erro ao mover.'); }
+    finally { setMovendo(false); }
+  }
+  async function excluir() {
+    if (await excluirPedido(p)) { onFechar(); carregar(); }
+  }
+
+  // Mover: a próxima coluna em destaque e as outras (Entrada é automática, via Zen)
+  const podeMover = !!p.zen_ordem_separacao_id;
+  const destinos = colunas.filter(c => c.status !== atual && c.status !== 'entrada' && !(c.admin && !ehAdmin) && !(colAtual?.admin && !ehAdmin));
+  const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
+  const outros = destinos.filter(c => c !== proxima);
+
+  const blocoCampo = (c, editavel) => (
+    <div key={c.id} className={`min-w-0 ${c.tipo === 'long_text' || c.tipo === 'attachment' ? 'sm:col-span-2' : ''}`}>
+      <dt className="text-xs font-semibold text-[var(--c-texto)]">{c.obrigatorio && <span className="text-red-400">* </span>}{c.rotulo}</dt>
+      {c.descricao && <p className="text-[11px] text-[var(--c-suave)]">{c.descricao}</p>}
+      <dd className="text-xs text-[var(--c-texto)] mt-1">
+        {c.tipo === 'attachment'
+          ? <FotosCampo pedido={p} campo={c} valor={null} podeEnviar={editavel} onMudou={carregar} />
+          : editavel && !SO_LEITURA.includes(c.tipo)
+          ? <Editor campo={c} valor={valorDe(c.id)} onChange={v => setRascunho(r => ({ ...r, [c.id]: v }))} />
+          : <Valor campo={c} valor={valorDe(c.id)} />}
+      </dd>
+    </div>
+  );
+  const botao = (c, principal = false) => {
+    const antes = colunas.indexOf(c) < idx;
+    return (
+      <button key={c.status} onClick={() => mover(c.status)} disabled={movendo || salvando || !podeMover}
+        className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold text-left transition-colors disabled:opacity-40 ${
+          principal ? 'border-[var(--c-destaque)]/50 bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25'
+          : 'border-[var(--c-borda)] text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40'}`}>
+        {!principal && antes && <ArrowLeft size={13} className="shrink-0 text-[var(--c-suave)]" />}
+        <span className="flex-1 truncate">{c.titulo}</span>
+        {(principal || !antes) && <ArrowRight size={13} className="shrink-0" />}
+      </button>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-2 sm:p-4" onClick={fechar}>
+      <div className="w-full max-w-[1320px] h-full max-h-[94dvh] flex flex-col bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+          {/* Esquerda: dados do pedido e fases anteriores */}
+          <div className="lg:w-[38%] lg:min-w-[340px] lg:overflow-y-auto border-b lg:border-b-0 lg:border-r border-[var(--c-borda)] p-5 space-y-4">
+            <div className="pb-3 border-b border-[var(--c-borda)]">
+              <p className="text-lg font-bold font-mono text-[var(--c-texto)]">Pedido {p.numero_pedido}</p>
+              <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-borda)] text-[var(--c-suave)]">Lojinha Boxer</span>
+            </div>
+            <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4 space-y-1.5">
+              <p className="text-sm font-bold text-[var(--c-texto)] mb-1">Dados do pedido</p>
+              <DadosPedido p={p} sempreProdutos />
+              <StatusZen p={p} carregar={carregar} />
+            </div>
+            {anteriores.map(g => (
+              <div key={g.col.status} className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4">
+                <div className="flex items-center gap-2 mb-3"><p className="text-sm font-bold text-[var(--c-texto)] flex-1">Fase</p><Pilula col={g.col} /></div>
+                <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-3">{g.campos.map(c => blocoCampo(c, false))}</dl>
+              </div>
+            ))}
+          </div>
+
+          {/* Meio: fase atual */}
+          <div className="flex-1 min-w-0 lg:overflow-y-auto p-5 space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-[var(--c-borda)]">
+              <p className="text-sm font-bold text-[var(--c-texto)]">Fase atual</p>
+              <Pilula col={colAtual} />
+            </div>
+            {p.zen_ordem_separacao_id && <InfoLiberacao p={p} itens={Array.isArray(p.itens) ? p.itens : []} />}
+            {colAtual?.zen && <p className="text-[11px] text-amber-400">Zen: {colAtual.zen}</p>}
+            {erro && <p className="text-xs text-red-400">{erro}</p>}
+            {camposAtuais.length
+              ? <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-4">{camposAtuais.map(c => blocoCampo(c, true))}</dl>
+              : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.{ehAdmin ? ' Crie em Configurar (engrenagem da coluna).' : ''}</p>}
+            {sujo && (
+              <div className="sticky bottom-0 flex items-center justify-end gap-2 py-2 bg-[var(--c-fundo)] border-t border-[var(--c-borda)]">
+                <p className="flex-1 text-[11px] text-amber-400">Alterações não salvas.</p>
+                <button onClick={() => setRascunho({})} className="px-3 py-1.5 rounded-lg text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">Descartar</button>
+                <button onClick={salvar} disabled={salvando}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
+                  {salvando ? <Spinner size={12} /> : <Check size={12} />} Salvar
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Direita: mover e ações */}
+          <div className="lg:w-[270px] shrink-0 lg:overflow-y-auto border-t lg:border-t-0 lg:border-l border-[var(--c-borda)] p-5 space-y-4 bg-[var(--c-superficie)]/40">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-[var(--c-texto)]">Mover pedido para</p>
+              <button onClick={fechar} aria-label="Fechar" className="p-1 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={18} /></button>
+            </div>
+            {!podeMover && <p className="text-[11px] rounded-xl border border-[var(--c-borda)] px-3 py-2 text-[var(--c-suave)]">O pedido sai da Entrada sozinho quando o Zen criar a ordem de separação.</p>}
+            {proxima && botao(proxima, true)}
+            {movendo && <p className="flex items-center gap-2 text-[11px] text-[var(--c-suave)]"><Spinner size={12} /> Movendo…</p>}
+            {outros.length > 0 && <div className="space-y-1.5 pt-3 border-t border-[var(--c-borda)]">{outros.map(c => botao(c))}</div>}
+            <div className="space-y-1.5 pt-3 border-t border-[var(--c-borda)]">
+              <button onClick={onHistorico}
+                className="w-full flex items-center gap-2 rounded-xl border border-[var(--c-borda)] px-3 py-2 text-xs font-semibold text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40">
+                <History size={13} /> <span className="flex-1 text-left">Histórico do pedido</span>
+              </button>
+              <button onClick={excluir}
+                className="w-full flex items-center gap-2 rounded-xl border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-500/10">
+                <Trash2 size={13} /> <span className="flex-1 text-left">Excluir pedido</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
