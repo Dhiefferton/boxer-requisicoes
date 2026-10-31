@@ -203,7 +203,7 @@ export default function PedidosOrcamento() {
                   </div>
                 ) : (
                   itens.map(pedido => (
-                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} podeEditar={podeEditar} ehAdmin={usuario?.perfil === 'admin'} />
+                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} podeEditar={podeEditar} ehAdmin={usuario?.perfil === 'admin'} onConfigurarColuna={(k) => setVerConfig(k)} />
                   ))
                 )}
               </Coluna>
@@ -256,7 +256,7 @@ function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = f
   );
 }
 
-function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
+function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColuna }) {
   const [mudando, setMudando] = useState(false);
   const itens = pedido.itens || [];
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
@@ -538,6 +538,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
         moverPara={moverPara} avancar={avancar} proxima={proxima} mudando={mudando} movendoPara={movendoPara}
         podeAvancar={podeAvancar} motivoSemAvancar={motivoSemAvancar}
         cancelar={cancelar} cancelando={cancelando} acoesZen={acoesZen}
+        onConfigurarMover={ehAdmin && onConfigurarColuna ? () => { setAberto(false); onConfigurarColuna(pedido.status); } : null}
         onHistorico={ehAdmin ? () => setVerHistorico(true) : null} />
     )}
     {ehAdmin && verHistorico && (

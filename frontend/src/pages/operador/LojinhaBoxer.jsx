@@ -101,6 +101,7 @@ function montarColunas(cfg) {
     ...(padrao.get(c.chave) || {}),
     status: c.chave, inclui: c.chave === 'entrada' ? ['entrada', 'liberacao'] : [c.chave],
     titulo: c.nome, hex: c.cor, admin: !!c.so_admin, arquivada: !!c.arquivada, zen: c.zen || null,
+    destinos: Array.isArray(c.destinos) ? c.destinos : null,
   }));
 }
 
@@ -207,6 +208,7 @@ export default function LojinhaBoxer() {
       {aberto && (
         <CardAbertoLojinha p={aberto} cfg={cfg} colunas={colunas} ehAdmin={ehAdmin} carregar={carregar}
           onFechar={() => setAbertoId(null)}
+          onConfigurarMover={ehAdmin ? () => { setAbertoId(null); setVerConfig(colunaDo(aberto)); } : null}
           onHistorico={() => setHistorico({ id: aberto.id, nome: `Pedido ${aberto.numero_pedido} — ${aberto.cliente_nome}` })} />
       )}
       {verConfig && ehAdmin && (
@@ -431,7 +433,7 @@ function CardPedido({ p, carregar, onAbrir }) {
 }
 
 // ── Card aberto: dados e fases anteriores | fase atual | mover ──
-function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHistorico }) {
+function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHistorico, onConfigurarMover = null }) {
   const [rascunho, setRascunho] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [movendo, setMovendo] = useState(false);
@@ -481,7 +483,8 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
 
   // Mover: a próxima coluna em destaque e as outras (Entrada é automática, via Zen)
   const podeMover = !!p.zen_ordem_separacao_id;
-  const destinos = colunas.filter(c => c.status !== atual && c.status !== 'entrada' && !(c.admin && !ehAdmin) && !(colAtual?.admin && !ehAdmin));
+  const permitido = (c) => !Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status);
+  const destinos = colunas.filter(c => c.status !== atual && c.status !== 'entrada' && permitido(c) && !(c.admin && !ehAdmin) && !(colAtual?.admin && !ehAdmin));
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
 
@@ -569,6 +572,12 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
             {proxima && botao(proxima, true)}
             {movendo && <p className="flex items-center gap-2 text-[11px] text-[var(--c-suave)]"><Spinner size={12} /> Movendo…</p>}
             {outros.length > 0 && <div className="space-y-1.5 pt-3 border-t border-[var(--c-borda)]">{outros.map(c => botao(c))}</div>}
+            {podeMover && !destinos.length && <p className="text-[11px] text-[var(--c-suave)]">Esta coluna não tem para onde mover.</p>}
+            {onConfigurarMover && (
+              <button onClick={onConfigurarMover} className="flex items-center gap-1.5 text-[11px] text-[var(--c-suave)] hover:text-[var(--c-destaque)]">
+                <Settings size={12} /> Configurar mover cards
+              </button>
+            )}
             <div className="space-y-1.5 pt-3 border-t border-[var(--c-borda)]">
               <button onClick={onHistorico}
                 className="w-full flex items-center gap-2 rounded-xl border border-[var(--c-borda)] px-3 py-2 text-xs font-semibold text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40">
