@@ -3,6 +3,12 @@
 // ============================================================
 
 import { registrarChamadaPipefy, nomeDaConsulta } from './usoPipefy.js';
+import { ESTRUTURA_ORCAMENTO } from './orcamentoEstrutura.js';
+
+// Integração com o Pipefy DESLIGADA (31/10/2026): o B-Requisições roda sozinho.
+// Nenhuma chamada sai para a API do Pipefy (consultas e alterações). Para religar:
+// variável de ambiente PIPEFY_ATIVO=true.
+export const PIPEFY_ATIVO = process.env.PIPEFY_ATIVO === 'true';
 
 const PIPEFY_API = 'https://api.pipefy.com/graphql';
 // Integração das requisições (criar/mover/excluir card no pipe "Boxer
@@ -29,6 +35,7 @@ function escapePipefy(str) {
 }
 
 async function pipefyMutation(mutation, variables) {
+  if (!PIPEFY_ATIVO) throw new Error('Integração com o Pipefy desligada — o B-Requisições está rodando sem o Pipefy.');
   console.log('🔄 Pipefy request iniciado...');
   console.log('TOKEN presente:', !!TOKEN);
 
@@ -325,9 +332,10 @@ export const CAMPOS_CLIENTE_ZEN = [
 ];
 export async function estruturaPipeOrcamento() {
   if (estruturaCache && Date.now() - estruturaEm < 3600000) return estruturaCache;
-  const d = await pipefyQuery(`query { pipe(id: ${ORCAMENTO_PIPE_ID}) {
+  // Pipefy desligado: usa a cópia da estrutura (orcamentoEstrutura.js)
+  const d = PIPEFY_ATIVO ? await pipefyQuery(`query { pipe(id: ${ORCAMENTO_PIPE_ID}) {
     start_form_fields { id label type options required }
-    phases { id name fields { id label type options required } } } }`);
+    phases { id name fields { id label type options required } } } }`) : { pipe: ESTRUTURA_ORCAMENTO };
   const pipe = d?.pipe || {};
   const campo = (f) => ({ id: f.id, rotulo: String(f.label || '').trim(), tipo: f.type, opcoes: f.options || [], obrigatorio: !!f.required });
   estruturaCache = [
