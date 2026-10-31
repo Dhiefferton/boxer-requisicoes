@@ -17,7 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import ConfigOrcamento, { campoDaConfig } from '../../components/operador/ConfigOrcamento';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
-import { Editor, Valor, SO_LEITURA, valorLista } from '../../components/operador/CamposCardOrcamento';
+import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora } from '../../components/operador/CamposCardOrcamento';
 
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
@@ -525,7 +525,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
 
   const blocoCampo = (c, editavel) => (
     <div key={c.id} className={`min-w-0 ${c.tipo === 'long_text' || c.tipo === 'attachment' ? 'sm:col-span-2' : ''}`}>
-      <dt className="text-xs font-semibold text-[var(--c-texto)]">{c.obrigatorio && <span className="text-red-400">* </span>}{c.rotulo}</dt>
+      <dt className="text-xs font-semibold text-[var(--c-texto)]">{obrigatorioAgora(c, valorDe) && <span className="text-red-400">* </span>}{c.rotulo}</dt>
       {c.descricao && <p className="text-[11px] text-[var(--c-suave)]">{c.descricao}</p>}
       <dd className="text-xs text-[var(--c-texto)] mt-1">
         {c.tipo === 'attachment'
