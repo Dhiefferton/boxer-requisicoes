@@ -117,7 +117,7 @@ export default function CardAbertoOrcamento({
   const podeMoverAqui = !(STATUS_SO_ADMIN.includes(pedido.status) && !ehAdmin);
 
   const blocoCampo = (c, editavel) => (
-    <div key={c.id} className={`min-w-0 ${ehLargo(c) ? 'sm:col-span-2' : ''}`}>
+    <div key={c.id} className="min-w-0">
       <dt className="text-xs font-semibold text-[var(--c-texto)] flex items-center gap-1">
         {obrigatorioAgora(c, valorDe) && <span className="text-red-400">*</span>}{c.rotulo}
         {c.id in editados && !(c.id in rascunho) && <span title="Editado no B-Requisições" className="text-[10px] font-normal text-amber-400">(editado)</span>}
@@ -208,7 +208,7 @@ export default function CardAbertoOrcamento({
               </div>
             )}
             {fases && (camposAtuais.length
-              ? <dl className="grid grid-cols-1 gap-y-4">{camposAtuais.map(c => blocoCampo(c, ehAdmin))}</dl>
+              ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, ehAdmin))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.</p>)}
 
             {sujo && (

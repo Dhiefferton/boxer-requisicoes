@@ -31,6 +31,15 @@ export const TIPOS_CAMPO = [
 ];
 const TIPO = Object.fromEntries(TIPOS_CAMPO.map(t => [t.tipo, t]));
 const COM_OPCOES = ['lista', 'unica', 'checkbox', 'etiquetas'];
+// Cores sugeridas para as etiquetas (cada opção nova pega a próxima)
+export const CORES_ETIQUETA = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#06b6d4', '#ec4899', '#84cc16', '#f97316', '#64748b'];
+function comOpcao(c, txt) {
+  const t = String(txt || '').trim();
+  if (!t || c.opcoes.includes(t)) return c;
+  const n = { ...c, opcoes: [...c.opcoes, t] };
+  if (c.tipo === 'etiquetas') n.cores = { ...(c.cores || {}), [t]: CORES_ETIQUETA[c.opcoes.length % CORES_ETIQUETA.length] };
+  return n;
+}
 const CORES = ['#64748b', '#f43f5e', '#0ea5e9', '#6366f1', '#3b82f6', '#f59e0b', '#a855f7', '#14b8a6',
   '#eab308', '#06b6d4', '#f97316', '#ef4444', '#84cc16', '#22c55e', '#71717a', '#ec4899'];
 const LISTAS = ['Modelos de máquina'];
@@ -57,6 +66,7 @@ function Previa({ campo }) {
   if (campo.tipo === 'longo') return <div className="h-14 rounded-lg bg-[var(--c-fundo)] border border-[var(--c-borda)]" />;
   if (campo.tipo === 'lista' || campo.tipo === 'unica') return <div className="h-8 rounded-lg bg-[var(--c-fundo)] border border-[var(--c-borda)] flex items-center justify-between px-2.5 text-[11px] text-[var(--c-suave)]"><span className="truncate">{ops}</span><span>▾</span></div>;
   if (campo.tipo === 'anexo') return <div className="h-12 rounded-lg border-2 border-dashed border-[var(--c-borda-forte)] flex items-center justify-center text-[11px] text-[var(--c-suave)]">Adicionar foto ou arquivo</div>;
+  if (campo.tipo === 'etiquetas' && (campo.opcoes || []).length) return <div className="flex flex-wrap gap-1.5">{campo.opcoes.map(o => <span key={o} className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: campo.cores?.[o] || '#64748b' }}>{o}</span>)}</div>;
   if (campo.tipo === 'checkbox' || campo.tipo === 'etiquetas') return <div className="flex items-center gap-2 text-[11px] text-[var(--c-suave)]"><span className="w-3.5 h-3.5 rounded border border-[var(--c-borda-forte)]" />{ops}</div>;
   if (campo.tipo === 'conexao' && campo.pipefy_campo) return <div className="text-xs font-semibold text-sky-400">Conexão do Pipefy</div>;
   if (campo.tipo === 'conexao') return <div className="text-xs font-semibold text-[var(--c-destaque-claro)]">+ Selecionar em “{campo.lista || LISTAS[0]}”</div>;
@@ -195,7 +205,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
     try {
       const { data } = await svc.salvarConfig({
         colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null })),
-        campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null, cria_opcoes: !!c.cria_opcoes,
+        campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null, cria_opcoes: !!c.cria_opcoes, cores: c.tipo === 'etiquetas' ? c.cores || null : null,
           uid: c.uid, condicao: c.obrigatorio && c.condicao?.campo && c.condicao?.valor ? c.condicao : null })),
       });
       // as colunas novas ganharam chave: mantém a seleção pela posição
@@ -397,6 +407,12 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       <p className="text-[11px] text-[var(--c-suave)]">Opções</p>
                       {campoAtual.opcoes.map((o, i) => (
                         <div key={`${o}-${i}`} className="flex items-center gap-2 rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] px-2.5 py-1.5 text-xs text-[var(--c-texto)]">
+                          {campoAtual.tipo === 'etiquetas' && (
+                            <label title="Cor da etiqueta" className="relative w-4 h-4 shrink-0 rounded-full cursor-pointer ring-1 ring-white/20" style={{ background: campoAtual.cores?.[o] || '#64748b' }}>
+                              <input type="color" value={campoAtual.cores?.[o] || '#64748b'} className="absolute inset-0 opacity-0 cursor-pointer"
+                                onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, cores: { ...(c.cores || {}), [o]: e.target.value } }))} />
+                            </label>
+                          )}
                           <span className="flex-1">{o}</span>
                           <button onClick={() => mudarCampo(campoAtual.uid, c => ({ ...c, opcoes: c.opcoes.filter((_, n) => n !== i) }))} aria-label="Remover opção" className="text-[var(--c-suave)] hover:text-red-400"><X size={12} /></button>
                         </div>
@@ -404,10 +420,10 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       <div className="flex gap-1.5">
                         <div className="relative flex-1">
                           <input value={novaOpcao} onChange={e => setNovaOpcao(e.target.value)} placeholder="Nova opção" className={`${inp} pr-7`}
-                            onKeyDown={e => { if (e.key === 'Enter' && novaOpcao.trim()) { mudarCampo(campoAtual.uid, c => ({ ...c, opcoes: [...c.opcoes, novaOpcao.trim()] })); setNovaOpcao(''); } }} />
+                            onKeyDown={e => { if (e.key === 'Enter' && novaOpcao.trim()) { mudarCampo(campoAtual.uid, c => comOpcao(c, novaOpcao)); setNovaOpcao(''); } }} />
                           {novaOpcao && <button onClick={() => setNovaOpcao('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)]"><X size={12} /></button>}
                         </div>
-                        <button onClick={() => { if (!novaOpcao.trim()) return; mudarCampo(campoAtual.uid, c => ({ ...c, opcoes: [...c.opcoes, novaOpcao.trim()] })); setNovaOpcao(''); }}
+                        <button onClick={() => { if (!novaOpcao.trim()) return; mudarCampo(campoAtual.uid, c => comOpcao(c, novaOpcao)); setNovaOpcao(''); }}
                           className="px-3 rounded-lg border border-[var(--c-borda)] bg-[var(--c-cartao)] text-xs font-semibold text-[var(--c-destaque-claro)]">Adicionar</button>
                       </div>
                     </div>
@@ -523,5 +539,5 @@ export function campoDaConfig(c, _i, todos = []) {
   const quando = ref ? { id: ref.pipefy_campo || `bx_${ref.id}`, valor: c.condicao.valor } : null;
   return { quando, id: c.pipefy_campo || `bx_${c.id}`, pipefy_campo: c.pipefy_campo || null, rotulo: c.rotulo, tipo: TIPO_EDITOR[c.tipo] || 'short_text', opcoes: Array.isArray(c.opcoes) ? c.opcoes : [],
     obrigatorio: !!c.obrigatorio, lista: c.pipefy_campo ? null : c.lista || null, descricao: c.descricao || '', boxer: !c.pipefy_campo,
-    cfg_id: c.id, cria_opcoes: c.tipo === 'lista' && !!c.cria_opcoes };
+    cfg_id: c.id, cria_opcoes: c.tipo === 'lista' && !!c.cria_opcoes, cores: c.tipo === 'etiquetas' && c.cores ? c.cores : null };
 }

@@ -59,7 +59,17 @@ export function Valor({ campo, valor }) {
       </div>
     );
   }
+  if (campo?.cores) return <Etiquetas lista={lista} cores={campo.cores} />;
   return <span className="whitespace-pre-wrap break-words">{lista.join(', ')}</span>;
+}
+
+// Etiquetas com a cor configurada em Configurar
+export function Etiquetas({ lista, cores }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {lista.map(o => <span key={o} className="px-2 py-0.5 rounded-full text-[11px] font-semibold text-white" style={{ background: cores?.[o] || '#64748b' }}>{o}</span>)}
+    </div>
+  );
 }
 
 // ── Modelo máquina: lista do B-Requisições, com busca e "Criar registro" ──
@@ -252,6 +262,18 @@ export function Editor({ campo, valor, onChange }) {
       const n = sel.includes(o) ? sel.filter(x => x !== o) : [...sel, o];
       onChange(n.length ? JSON.stringify(n) : '');
     };
+    if (campo.cores) return (
+      <div className="flex flex-wrap gap-1.5">
+        {campo.opcoes.map(o => {
+          const cor = campo.cores[o] || '#64748b', on = sel.includes(o);
+          return (
+            <button key={o} type="button" onClick={() => alternar(o)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border transition ${on ? 'text-white' : 'opacity-60 hover:opacity-100'}`}
+              style={on ? { background: cor, borderColor: cor } : { borderColor: cor, color: cor }}>{on ? '✓ ' : ''}{o}</button>
+          );
+        })}
+      </div>
+    );
     return (
       <div className="flex flex-wrap gap-2">
         {campo.opcoes.map(o => (
