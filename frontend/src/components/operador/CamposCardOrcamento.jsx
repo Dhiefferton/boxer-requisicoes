@@ -148,7 +148,50 @@ function SeletorModelo({ valor, onChange }) {
   );
 }
 
+// ── Data / data e hora: calendário do navegador; vazio, ao clicar já vem o momento atual ──
+const doisDig = (n) => String(n).padStart(2, '0');
+// Texto gravado ("28/10/2026 14:30", "2026-10-28 14:30:00", ISO…) → valor do input
+function paraInput(texto, comHora) {
+  const t = String(texto || '').trim();
+  let m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:[ T,]+(\d{1,2}):(\d{2}))?/);
+  let a, mes, d, h = '00', mi = '00';
+  if (m) { [, d, mes, a] = m; if (m[4]) { h = doisDig(m[4]); mi = m[5]; } }
+  else if ((m = t.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/))) { [, a, mes, d] = m; if (m[4]) { h = m[4]; mi = m[5]; } }
+  else return '';
+  return comHora ? `${a}-${mes}-${d}T${h}:${mi}` : `${a}-${mes}-${d}`;
+}
+// Valor do input → texto gravado (padrão brasileiro, igual ao Pipefy)
+function deInput(v, comHora) {
+  const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+  if (!m) return '';
+  return comHora ? `${m[3]}/${m[2]}/${m[1]} ${m[4] || '00'}:${m[5] || '00'}` : `${m[3]}/${m[2]}/${m[1]}`;
+}
+function agora(comHora) {
+  const n = new Date();
+  const d = `${doisDig(n.getDate())}/${doisDig(n.getMonth() + 1)}/${n.getFullYear()}`;
+  return comHora ? `${d} ${doisDig(n.getHours())}:${doisDig(n.getMinutes())}` : d;
+}
+function CampoData({ valor, onChange, comHora, cls }) {
+  const texto = valorLista(valor).join(', ');
+  const v = paraInput(texto, comHora);
+  return (
+    <div className="flex items-center gap-1.5">
+      <input type={comHora ? 'datetime-local' : 'date'} value={v}
+        onFocus={() => { if (!texto) onChange(agora(comHora)); }}
+        onChange={e => onChange(deInput(e.target.value, comHora))}
+        className={cls} />
+      <button type="button" onClick={() => onChange(agora(comHora))} title={comHora ? 'Data e hora de agora' : 'Hoje'}
+        className="shrink-0 px-2 py-1 rounded-lg border border-[var(--c-borda)] text-[10px] font-semibold text-[var(--c-suave)] hover:text-[var(--c-destaque)]">{comHora ? 'Agora' : 'Hoje'}</button>
+      {texto && <button type="button" onClick={() => onChange('')} title="Limpar" className="shrink-0 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
+    </div>
+  );
+}
+
 export function Editor({ campo, valor, onChange }) {
+  if (['date', 'datetime', 'due_date'].includes(campo.tipo)) {
+    const cls = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]';
+    return <CampoData valor={valor} onChange={onChange} comHora={campo.tipo !== 'date'} cls={cls} />;
+  }
   if (campo.id === 'modelo_m_quina' || campo.lista === 'Modelos de máquina') return <SeletorModelo valor={valor} onChange={onChange} />;
   const cls = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]';
   if (MULTI.includes(campo.tipo) && campo.opcoes?.length) {
