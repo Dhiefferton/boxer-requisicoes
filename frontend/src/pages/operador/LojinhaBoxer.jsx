@@ -86,6 +86,7 @@ const SERVICO_FOTOS = {
   imagem: (url) => lojinhaService.imagem(url),
   enviarFoto: (id, dados) => lojinhaService.enviarFoto(id, dados),
   excluirFoto: (fotoId) => lojinhaService.excluirFoto(fotoId),
+  criarOpcao: (campoId, opcao) => lojinhaService.criarOpcao(campoId, opcao),
 };
 const SERVICO_CONFIG = { config: () => lojinhaService.quadroConfig(), salvarConfig: (d) => lojinhaService.salvarQuadroConfig(d) };
 const buscarMovimentos = (params) => lojinhaService.movimentos(params);
