@@ -63,7 +63,10 @@ function Previa({ campo }) {
   return <div className="h-8 rounded-lg bg-[var(--c-fundo)] border border-[var(--c-borda)]" />;
 }
 
-export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = null }) {
+// servico: { config(), salvarConfig(dados), estrutura?() } — padrão: Orçamentos.
+// semInicio: esconde a aba "Formulário inicial" (quadros com formulário próprio, ex.: Lojinha).
+export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = null, servico = null, titulo = 'Configurações — Pedidos de Orçamento', semInicio = false }) {
+  const svc = servico || pedidosOrcamentoService;
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -107,7 +110,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
     });
   }
   useEffect(() => {
-    Promise.all([pedidosOrcamentoService.config(), pedidosOrcamentoService.estrutura().then(r => r.data.fases).catch(() => null)])
+    Promise.all([svc.config(), svc.estrutura ? svc.estrutura().then(r => r.data.fases).catch(() => null) : Promise.resolve(null)])
       .then(([{ data }, fases]) => carregarDe(data, fases))
       .catch(e => setErro(e.response?.data?.erro || 'Não consegui carregar a configuração.'))
       .finally(() => setCarregando(false));
@@ -173,7 +176,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
   async function salvar() {
     setSalvando(true); setErro('');
     try {
-      const { data } = await pedidosOrcamentoService.salvarConfig({
+      const { data } = await svc.salvarConfig({
         colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados })),
         campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null })),
       });
@@ -203,13 +206,13 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
         <div className="flex items-center gap-3 px-5 py-4 border-b border-[var(--c-borda)] bg-[var(--c-superficie)]">
           <div className="w-9 h-9 rounded-xl bg-[var(--c-destaque)]/15 text-[var(--c-destaque-claro)] flex items-center justify-center"><Settings size={18} /></div>
           <div className="flex-1 min-w-0">
-            <p className="text-base font-bold text-[var(--c-texto)]">Configurações — Pedidos de Orçamento</p>
+            <p className="text-base font-bold text-[var(--c-texto)]">{titulo}</p>
             <p className="text-xs text-[var(--c-suave)]">Colunas da tela e os campos de cada uma · gravado só no B-Requisições</p>
           </div>
           <button onClick={fechar} aria-label="Fechar" className="p-2 rounded-lg text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={18} /></button>
         </div>
         <div className="flex gap-1 px-5 border-b border-[var(--c-borda)] bg-[var(--c-superficie)] overflow-x-auto">
-          {abaBtn('inicio', 'Formulário inicial (Novo card)')}
+          {!semInicio && abaBtn('inicio', 'Formulário inicial (Novo card)')}
           {abaBtn('colunas', 'Colunas e campos')}
         </div>
 

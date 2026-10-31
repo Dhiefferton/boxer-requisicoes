@@ -5,7 +5,7 @@
 // adicionadas no B-Requisições. As fotos adicionadas aqui ficam SÓ no
 // B-Requisições (não são enviadas para o Pipefy).
 // ============================================================
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Camera, X, Paperclip, ImageOff, Trash2 } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
@@ -19,7 +19,17 @@ function lista(v) {
 }
 export const ehImagem = (url) => /\.(jpe?g|png|webp|gif|bmp)(\?|$)/i.test(String(url || '').split('#')[0]);
 const nomeArquivo = (url) => { try { return decodeURIComponent(new URL(url).pathname.split('/').pop() || url); } catch { return url; } };
-const urlLocal = (id, tam) => `/pedidos-orcamento/fotos/${id}${tam ? `?tam=${tam}` : ''}`;
+// Serviço das fotos: Orçamentos (padrão) ou outro quadro (ex.: Lojinha) via <FotosProvider>
+const SERVICO_ORCAMENTO = {
+  base: '/pedidos-orcamento/fotos',
+  imagem: (url) => pedidosOrcamentoService.imagem(url),
+  enviarFoto: (id, dados) => pedidosOrcamentoService.enviarFoto(id, dados),
+  excluirFoto: (fotoId) => pedidosOrcamentoService.excluirFoto(fotoId),
+};
+const FotosCtx = createContext(SERVICO_ORCAMENTO);
+export const FotosProvider = ({ servico, children }) => <FotosCtx.Provider value={servico}>{children}</FotosCtx.Provider>;
+let baseAtual = SERVICO_ORCAMENTO.base;
+const urlLocal = (id, tam, base = baseAtual) => `${base}/${id}${tam ? `?tam=${tam}` : ''}`;
 
 // Todas as fotos de um card: as do Pipefy (anexos com imagem) + as do B-Requisições
 export function fotosDoCard(pedido, campoId = null) {
@@ -39,12 +49,13 @@ export function fotosDoCard(pedido, campoId = null) {
 // ── Imagem autenticada (fotos do B-Requisições) ─────────────
 const cacheImg = new Map();
 function ImagemAuth({ url, className = '', onClick, alt = '' }) {
+  const svc = useContext(FotosCtx);
   const [src, setSrc] = useState(() => cacheImg.get(url));
   useEffect(() => {
     let vivo = true;
     if (cacheImg.has(url)) { setSrc(cacheImg.get(url)); return undefined; }
     setSrc(undefined);
-    pedidosOrcamentoService.imagem(url)
+    svc.imagem(url)
       .then(({ data }) => { const o = URL.createObjectURL(data); cacheImg.set(url, o); if (vivo) setSrc(o); })
       .catch(() => { cacheImg.set(url, null); if (vivo) setSrc(null); });
     return () => { vivo = false; };
@@ -56,14 +67,16 @@ function ImagemAuth({ url, className = '', onClick, alt = '' }) {
 
 // Miniatura de uma foto (Pipefy ou local)
 function Miniatura({ foto, className, onClick }) {
+  const svc = useContext(FotosCtx);
   const [falhou, setFalhou] = useState(false);
-  if (foto.tipo === 'local') return <ImagemAuth url={urlLocal(foto.id, 'mini')} className={className} onClick={onClick} />;
+  if (foto.tipo === 'local') return <ImagemAuth url={urlLocal(foto.id, 'mini', svc.base)} className={className} onClick={onClick} />;
   if (falhou) return <a href={foto.url} target="_blank" rel="noreferrer" title="Abrir no Pipefy" className={`${className} flex items-center justify-center text-[var(--c-suave)]`}><ImageOff size={14} /></a>;
   return <img src={foto.url} alt="" loading="lazy" onError={() => setFalhou(true)} onClick={onClick} className={`${className} object-cover cursor-zoom-in`} />;
 }
 
 // ── Foto ampliada ───────────────────────────────────────────
 export function FotoAmpliada({ fotos, inicio = 0, onFechar, podeExcluir, onExcluir }) {
+  const svc = useContext(FotosCtx);
   const [i, setI] = useState(inicio);
   const foto = fotos[i];
   useEffect(() => {
@@ -89,7 +102,7 @@ export function FotoAmpliada({ fotos, inicio = 0, onFechar, podeExcluir, onExclu
       <div className="flex items-center gap-2 max-w-full" onClick={e => e.stopPropagation()}>
         <button disabled={i === 0} onClick={() => setI(n => n - 1)} className="px-2 py-6 text-white/70 hover:text-white disabled:opacity-20 text-2xl">‹</button>
         {foto.tipo === 'local'
-          ? <ImagemAuth url={urlLocal(foto.id)} className="max-h-[80dvh] max-w-[85vw] !object-contain rounded-lg" />
+          ? <ImagemAuth url={urlLocal(foto.id, null, svc.base)} className="max-h-[80dvh] max-w-[85vw] !object-contain rounded-lg" />
           : <img src={foto.url} alt="" className="max-h-[80dvh] max-w-[85vw] object-contain rounded-lg" />}
         <button disabled={i === fotos.length - 1} onClick={() => setI(n => n + 1)} className="px-2 py-6 text-white/70 hover:text-white disabled:opacity-20 text-2xl">›</button>
       </div>
@@ -119,6 +132,7 @@ function reduzir(img, max, qualidade) {
 // ── Campo de fotos (dentro dos campos do card) ──────────────
 // valor = valor do campo de anexo no Pipefy; arquivos que não são imagem viram link.
 export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
+  const svc = useContext(FotosCtx);
   const [ampliada, setAmpliada] = useState(null);
   const [enviando, setEnviando] = useState(0);
   const [erro, setErro] = useState('');
@@ -134,7 +148,7 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
     try {
       for (const a of lista) {
         const img = await lerImagem(a);
-        await pedidosOrcamentoService.enviarFoto(pedido.id, {
+        await svc.enviarFoto(pedido.id, {
           campo_id: campo.id, imagem: reduzir(img, 1280, 0.75), miniatura: reduzir(img, 320, 0.7),
         });
         setEnviando(n => n - 1);
@@ -145,7 +159,7 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
   }
   async function excluir(foto) {
     if (!confirm('Excluir esta foto do B-Requisições?')) return;
-    try { await pedidosOrcamentoService.excluirFoto(foto.id); setAmpliada(null); onMudou?.(); }
+    try { await svc.excluirFoto(foto.id); setAmpliada(null); onMudou?.(); }
     catch (e) { alert(e.response?.data?.erro || 'Erro ao excluir a foto.'); }
   }
 

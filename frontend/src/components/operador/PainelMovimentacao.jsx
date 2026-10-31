@@ -35,10 +35,12 @@ const TIPOS = {
   sincronizacao:             { label: 'Sincronização automática', cor: 'bg-[var(--c-borda)] text-[var(--c-suave)]' },
   campos_editados:           { label: 'Campos editados',         cor: 'bg-amber-500/15 text-amber-400' },
   fase_pipefy:               { label: 'Fase do Pipefy',          cor: 'bg-[var(--c-destaque)]/15 text-[var(--c-destaque)]' },
+  foto_adicionada:           { label: 'Foto adicionada',         cor: 'bg-[var(--c-borda)] text-[var(--c-suave)]' },
+  foto_excluida:             { label: 'Foto excluída',           cor: 'bg-[var(--c-borda)] text-[var(--c-suave)]' },
 };
 const tipoInfo = (t) => TIPOS[t] || { label: t, cor: 'bg-[var(--c-borda)] text-[var(--c-suave)]' };
 
-const STATUS = NOME_STATUS_ORCAMENTO;
+let STATUS = NOME_STATUS_ORCAMENTO;
 const ORIGENS = {
   usuario:       { label: 'Usuário',       icon: User },
   sincronizacao: { label: 'Sincronização', icon: Cloud },
@@ -91,7 +93,7 @@ function textoDetalhes(det) {
     }).join(' · ');
 }
 
-const COR_STATUS = COR_STATUS_ORCAMENTO;
+let COR_STATUS = COR_STATUS_ORCAMENTO;
 const fmtDataCurta = (iso) => new Date(iso).toLocaleString('pt-BR', {
   day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo',
 });
@@ -101,7 +103,10 @@ const GERAL = 'geral';
  * @param onFechar     fecha o painel
  * @param pedidoInicial { id, nome } — abre direto na história deste card (todo o período)
  */
-export default function PainelMovimentacao({ onFechar, pedidoInicial = null }) {
+// buscar(params) / nomeStatus / corStatus / titulo / arquivo: para outros quadros (ex.: Lojinha). Padrão: Orçamentos.
+export default function PainelMovimentacao({ onFechar, pedidoInicial = null, buscar = null, nomeStatus = null, corStatus = null, titulo = 'Movimentação — Orçamentos', arquivo = 'movimentacao-orcamentos' }) {
+  STATUS = nomeStatus || NOME_STATUS_ORCAMENTO;
+  COR_STATUS = corStatus || COR_STATUS_ORCAMENTO;
   const soUmCard = !!pedidoInicial;
   const [periodo, setPeriodo] = useState(soUmCard ? 'tudo' : '30');
   const [movimentos, setMovimentos] = useState([]);
@@ -121,7 +126,7 @@ export default function PainelMovimentacao({ onFechar, pedidoInicial = null }) {
       const hoje = hojeISO();
       const params = p?.dias === null ? {} : { de: p.dias === 0 ? hoje : menosDias(hoje, p.dias), ate: hoje };
       if (soUmCard) params.pedido = pedidoInicial.id;
-      const { data } = await pedidosOrcamentoService.movimentos(params);
+      const { data } = await (buscar || pedidosOrcamentoService.movimentos)(params);
       setMovimentos(data.movimentos || []);
     } catch (err) {
       setErro(err.response?.data?.erro || 'Não foi possível carregar a movimentação.');
@@ -222,7 +227,7 @@ export default function PainelMovimentacao({ onFechar, pedidoInicial = null }) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Movimentação');
     const sufixo = soUmCard ? `card-${pedidoInicial.id}` : hojeISO();
-    XLSX.writeFile(wb, `movimentacao-orcamentos-${sufixo}.xlsx`);
+    XLSX.writeFile(wb, `${arquivo}-${sufixo}.xlsx`);
   }
 
   const filtrosAtivos = tipo || usuario || origem || busca;
@@ -241,7 +246,7 @@ export default function PainelMovimentacao({ onFechar, pedidoInicial = null }) {
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-bold text-[var(--c-texto)] truncate">
-              {soUmCard ? `Histórico — ${pedidoInicial.nome || `Pedido #${pedidoInicial.id}`}` : 'Movimentação — Orçamentos'}
+              {soUmCard ? `Histórico — ${pedidoInicial.nome || `Pedido #${pedidoInicial.id}`}` : titulo}
             </h2>
             <p className="text-xs text-[var(--c-suave)] truncate">
               {soUmCard ? 'Tudo o que aconteceu com este card, do primeiro ao último movimento'
