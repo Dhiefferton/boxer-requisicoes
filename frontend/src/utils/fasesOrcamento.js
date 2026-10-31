@@ -49,7 +49,7 @@ export function aplicarConfigColunas(colunasCfg) {
   const novas = colunasCfg.map(c => ({
     ...(padrao.get(c.chave) || {}),
     status: c.chave, titulo: c.nome, admin: !!c.so_admin, arquivada: !!c.arquivada,
-    faseId: c.fase_pipefy || padrao.get(c.chave)?.faseId, hex: c.cor, sistema: !!c.sistema, zen: c.zen || null, importados: !!c.campos_importados,
+    faseId: c.fase_pipefy || padrao.get(c.chave)?.faseId, hex: c.cor, sistema: !!c.sistema, zen: c.zen || null, importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null,
   }));
   COLUNAS_ORCAMENTO.splice(0, COLUNAS_ORCAMENTO.length, ...novas);
   for (const c of novas) NOME_STATUS_ORCAMENTO[c.status] = c.titulo;
