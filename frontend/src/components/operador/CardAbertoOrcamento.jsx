@@ -181,7 +181,7 @@ export default function CardAbertoOrcamento({
                     <p className="text-sm font-bold text-[var(--c-texto)] flex-1">{g.chave === 'inicio' ? 'Formulário inicial' : col ? 'Fase' : g.nome}</p>
                     {col && <Pilula coluna={col} />}
                   </div>
-                  <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-3">{g.campos.map(c => blocoCampo(c, false))}</dl>
+                  <dl className="grid grid-cols-1 gap-y-3">{g.campos.map(c => blocoCampo(c, false))}</dl>
                 </div>
               );
             })}
@@ -208,7 +208,7 @@ export default function CardAbertoOrcamento({
               </div>
             )}
             {fases && (camposAtuais.length
-              ? <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-4">{camposAtuais.map(c => blocoCampo(c, ehAdmin))}</dl>
+              ? <dl className="grid grid-cols-1 gap-y-4">{camposAtuais.map(c => blocoCampo(c, ehAdmin))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.</p>)}
 
             {sujo && (
