@@ -12,7 +12,8 @@ import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { podeEditarOrcamentos } from '../../utils/acessoOrcamentos';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
-import CamposCardOrcamento, { carregarEstrutura, valorLista } from '../../components/operador/CamposCardOrcamento';
+import { carregarEstrutura, valorLista } from '../../components/operador/CamposCardOrcamento';
+import CardAbertoOrcamento from '../../components/operador/CardAbertoOrcamento';
 import NovoCardOrcamento from '../../components/operador/NovoCardOrcamento';
 import { FaixaFotosCard } from '../../components/operador/FotosOrcamento';
 import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN, aplicarConfigOrcamento } from '../../utils/fasesOrcamento';
@@ -100,7 +101,7 @@ export default function PedidosOrcamento() {
     } catch (err) {
       // Falha isolada (rede/lentidão) é silenciosa; só avisa se falhar 3 vezes seguidas
       falhasSyncRef.current += 1;
-      if (falhasSyncRef.current >= 3) setMsgSync(err.response?.data?.erro || 'Não está conseguindo sincronizar com o Pipefy — tentando de novo a cada 30s.');
+      if (falhasSyncRef.current >= 3) setMsgSync(err.response?.data?.erro || 'Não está conseguindo atualizar a tela (Zen) — tentando de novo a cada 30s.');
       await carregar();
     } finally {
       syncRodandoRef.current = false;
@@ -269,17 +270,17 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
   const precisaRetirar = parcial && ['aprovado_recusado', 'em_manutencao', 'nao_liberado', 'liberado_saida'].includes(pedido.status) && !pedido.recusadas_retiradas_em;
   // Fase atual do card no Pipefy, quando é diferente da coluna daqui
   const colunaAtual = COLUNAS.find(c => c.status === pedido.status);
-  const faseDiferente = pedido.pipefy_fase && semAcento(pedido.pipefy_fase) !== semAcento(colunaAtual?.titulo) ? pedido.pipefy_fase : null;
+  // Pipefy desligado: a fase do Pipefy não é mais acompanhada (sem a etiqueta "No Pipefy")
+  const faseDiferente = null;
   const itensRetirados = Array.isArray(pedido.itens_recusados) ? pedido.itens_recusados : [];
   const [retirando, setRetirando] = useState(false);
   const proxima = precisaRetirar || !PROXIMA[pedido.status] ? null : COLUNAS.find(c => c.status === PROXIMA[pedido.status]);
-  const [verCampos, setVerCampos] = useState(false);
   const [movendoPara, setMovendoPara] = useState(false);
   // Admin: mover para qualquer coluna
   async function moverPara(status) {
     if (!status || status === pedido.status) return;
     const destino = COLUNAS.find(c => c.status === status);
-    const avisoZen = status === 'separando' && pedido.status === 'solicitacao' ? '\n\nIsso cria o pedido de venda e a ordem de separação no Zen.'
+    const avisoZen = (status === 'separando' && pedido.status === 'solicitacao') || status === 'solicitacao' ? '\n\nIsso cria o pedido de venda e a ordem de separação no Zen (o card vai para Em Separação).'
       : ['nao_liberado', 'finalizado'].includes(status) && pedido.zen_ordem_separacao_id && !pedido.zen_nota_id
         ? '\n\nIsso fecha o romaneio e cria a nota fiscal no Zen.' : '';
     // Card criado aqui: avisa os campos obrigatórios da fase atual ainda vazios (como no Pipefy)
@@ -368,61 +369,39 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
     finally { setCancelando(false); }
   }
 
-  return (
-    <div className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2 min-w-0 break-words">
-      <div className="flex items-center gap-1.5">
-        <FileText size={13} className="text-[var(--c-destaque)] shrink-0" />
-        <p className="text-sm text-[var(--c-texto)] font-medium flex-1">{pedido.cliente_nome || pedido.referencia}</p>
-        <button onClick={() => setVerCampos(true)} title="Todos os campos do card"
-          className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ListTree size={13} /></button>
-        {ehAdmin && (
-          <button onClick={() => setVerHistorico(true)} title="Histórico deste card"
-            className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><History size={13} /></button>
-        )}
-        {pedido.pipefy_url && (
-          <a href={pedido.pipefy_url} target="_blank" rel="noreferrer" title="Abrir no Pipefy"
-            className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
-        )}
-      </div>
-      {verCampos && <CamposCardOrcamento pedido={pedido} ehAdmin={ehAdmin} podeEditar={podeEditar} statusAtual={pedido.status} faseAtualId={colunaAtual?.faseId} onFechar={() => setVerCampos(false)} onSalvo={onAtualizar} />}
-      {ehAdmin && verHistorico && (
-        <PainelMovimentacao pedidoInicial={{ id: pedido.id, nome: pedido.cliente_nome || pedido.referencia }}
-          onFechar={() => setVerHistorico(false)} />
-      )}
-      {pedido.aprovacao && (
-        <span className={`inline-block mr-1 text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${
-          parcial ? 'text-amber-300 bg-amber-500/20'
-          : aprovacao.startsWith('aprov') ? 'text-green-300 bg-green-500/20'
-          : aprovacao.startsWith('recus') ? 'text-red-300 bg-red-500/20'
-          : aprovacao.startsWith('não lib') || aprovacao.startsWith('nao lib') ? 'text-red-300 bg-red-500/20'
-          : 'text-[var(--c-suave)] bg-[var(--c-borda)]'}`}>{pedido.aprovacao}</span>
-      )}
-      {pedido.pipefy_card_id && (
-        <span className="inline-block text-[10px] font-semibold text-[var(--c-destaque)] bg-[var(--c-destaque)]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
-      )}
+  const [aberto, setAberto] = useState(false);
+  const parar = (e) => e.stopPropagation();
+
+  // Etiquetas do Zen / Pipefy (quadro e card aberto)
+  const tagsZen = (
+    <>
       {faseDiferente && (
         <span title={pedido.zen_erro ? 'Não seguiu o Pipefy por causa do erro do Zen — corrija que ele segue na próxima sincronização (até 30s)'
           : pedido.status === 'separando' ? 'Etapa do Zen — segue o Pipefy quando a separação terminar' : undefined}
-          className="inline-block ml-1 text-[10px] font-semibold text-amber-300 bg-amber-500/15 rounded px-1.5 py-0.5">No Pipefy: {faseDiferente}</span>
+          className="inline-block mr-1 text-[10px] font-semibold text-amber-300 bg-amber-500/15 rounded px-1.5 py-0.5">No Pipefy: {faseDiferente}</span>
       )}
       {pedido.zen_pedido_id && (
-        <a href={`${ZEN_APP_URL}/sale/sale?q=id==${pedido.zen_pedido_id}`} target="_blank" rel="noreferrer" title="Abrir pedido no Zen"
-          className="inline-flex items-center gap-1 ml-1 text-[10px] font-semibold text-green-400 bg-green-500/10 hover:bg-green-500/20 rounded px-1.5 py-0.5">
+        <a href={`${ZEN_APP_URL}/sale/sale?q=id==${pedido.zen_pedido_id}`} target="_blank" rel="noreferrer" title="Abrir pedido no Zen" onClick={parar}
+          className="inline-flex items-center gap-1 mr-1 text-[10px] font-semibold text-green-400 bg-green-500/10 hover:bg-green-500/20 rounded px-1.5 py-0.5">
           Pedido Zen #{pedido.zen_pedido_id} <ExternalLink size={10} />
         </a>
       )}
       {pedido.zen_ordem_separacao_id && (
-        <a href={`${ZEN_APP_URL}/material/pickingOrder?q=id==${pedido.zen_ordem_separacao_id}`} target="_blank" rel="noreferrer" title="Abrir ordem de separação no Zen"
-          className="inline-flex items-center gap-1 ml-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded px-1.5 py-0.5">
+        <a href={`${ZEN_APP_URL}/material/pickingOrder?q=id==${pedido.zen_ordem_separacao_id}`} target="_blank" rel="noreferrer" title="Abrir ordem de separação no Zen" onClick={parar}
+          className="inline-flex items-center gap-1 mr-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded px-1.5 py-0.5">
           Ordem de separação #{pedido.zen_ordem_separacao_id} <ExternalLink size={10} />
         </a>
       )}
       {pedido.zen_nota_id && (
-        <a href={`${ZEN_APP_URL}/fiscal/outgoingInvoice.html?q=id==${pedido.zen_nota_id}`} target="_blank" rel="noreferrer" title="Abrir nota fiscal no Zen"
-          className="inline-flex items-center gap-1 ml-1 text-[10px] font-semibold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 rounded px-1.5 py-0.5">
+        <a href={`${ZEN_APP_URL}/fiscal/outgoingInvoice.html?q=id==${pedido.zen_nota_id}`} target="_blank" rel="noreferrer" title="Abrir nota fiscal no Zen" onClick={parar}
+          className="inline-flex items-center gap-1 mr-1 text-[10px] font-semibold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 rounded px-1.5 py-0.5">
           Nota fiscal #{pedido.zen_nota_id} <ExternalLink size={10} />
         </a>
       )}
+    </>
+  );
+  const alertas = (
+    <>
       {parcial && !pedido.recusadas_retiradas_em && (
         <div className="text-[11px] rounded-lg px-2 py-1.5 bg-amber-500/10 border border-amber-500/30 text-[var(--c-texto)]">
           <p className="font-semibold text-amber-400 mb-0.5">Peças recusadas</p>
@@ -450,10 +429,85 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
       {pedido.zen_erro && (
         <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg px-2 py-1 break-words">ZenERP: {pedido.zen_erro}</p>
       )}
-      {!pedido.pipefy_card_id && (
-        <span className="inline-block text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 rounded px-1.5 py-0.5">Criado no B-Requisições</span>
+    </>
+  );
+  const tabelaPecas = itens.length > 0 && (
+    <div className="rounded-lg border border-[var(--c-borda)] overflow-hidden">
+      <table className="w-full text-xs table-fixed">
+        <thead className="bg-[var(--c-fundo)] text-[var(--c-suave)]">
+          <tr>
+            <th className="text-left font-medium px-2 py-1">Peça</th>
+            <th className="text-right font-medium px-1.5 py-1 w-9">Qtd</th>
+            <th className="text-right font-medium px-2 py-1 w-[5.5rem]">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {itens.map((it, i) => (
+            <tr key={i} className={`border-t border-[var(--c-borda)] ${
+              !pedido.recusadas_retiradas_em && recusadosSet.has(String(it.codigo || '').trim().toUpperCase())
+                ? 'text-red-400 line-through' : 'text-[var(--c-texto)]'}`}>
+              <td className="px-2 py-1 break-words">
+                {it.codigo && <span className="font-mono text-[var(--c-destaque)] mr-1 break-all">{it.codigo}</span>}
+                {it.descricao}
+              </td>
+              <td className="px-1.5 py-1 text-right">{it.quantidade ?? '—'}</td>
+              <td className="px-2 py-1 text-right whitespace-nowrap">{brl(it.valor_unitario)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-[var(--c-borda)] text-[var(--c-texto)] font-semibold">
+            <td className="px-2 py-1" colSpan={2}>Total peças</td>
+            <td className="px-2 py-1 text-right whitespace-nowrap">{brl(totalItens)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+
+  // Ações do Zen (card aberto, lado direito)
+  const acoesZen = [];
+  if (podeEditar && ehAdmin && podeAtualizarItens && (itensAlterados || !precisaRetirar)) {
+    acoesZen.push({ id: 'zen', onClick: atualizarItensZen, ocupado: atualizandoItens, alerta: itensAlterados,
+      texto: itensAlterados ? 'Atualizar peças no Zen' : 'Peças no Zen', textoOcupado: 'Atualizando no Zen…' });
+  }
+  if (podeEditar && precisaRetirar && codigosRecusados.length) {
+    acoesZen.push({ id: 'retirar', onClick: retirarRecusadas, ocupado: retirando, alerta: true,
+      texto: 'Retirar peças recusadas no Zen', textoOcupado: 'Retirando no Zen…' });
+  }
+  const temPecas = (pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0);
+  const podeAvancar = !!proxima && !(proxima.status === 'separando' && !temPecas);
+  const motivoSemAvancar = 'Sem peças — preencha as peças nos campos do card para ir para Em Separação.';
+
+  return (
+    <>
+    <div onClick={() => setAberto(true)} title="Abrir card"
+      className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors">
+      <div className="flex items-center gap-1.5">
+        <FileText size={13} className="text-[var(--c-destaque)] shrink-0" />
+        <p className="text-sm text-[var(--c-texto)] font-medium flex-1">{pedido.cliente_nome || pedido.referencia}</p>
+        {pedido.pipefy_url && (
+          <a href={pedido.pipefy_url} target="_blank" rel="noreferrer" title="Abrir no Pipefy" onClick={parar}
+            className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
+        )}
+      </div>
+      {pedido.aprovacao && (
+        <span className={`inline-block mr-1 text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${
+          parcial ? 'text-amber-300 bg-amber-500/20'
+          : aprovacao.startsWith('aprov') ? 'text-green-300 bg-green-500/20'
+          : aprovacao.startsWith('recus') ? 'text-red-300 bg-red-500/20'
+          : aprovacao.startsWith('não lib') || aprovacao.startsWith('nao lib') ? 'text-red-300 bg-red-500/20'
+          : 'text-[var(--c-suave)] bg-[var(--c-borda)]'}`}>{pedido.aprovacao}</span>
       )}
-      <FaixaFotosCard pedido={pedido} onVerTodas={() => setVerCampos(true)} />
+      {pedido.pipefy_card_id && (
+        <span className="inline-block mr-1 text-[10px] font-semibold text-[var(--c-destaque)] bg-[var(--c-destaque)]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
+      )}
+      {!pedido.pipefy_card_id && (
+        <span className="inline-block mr-1 text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 rounded px-1.5 py-0.5">Criado no B-Requisições</span>
+      )}
+      {tagsZen}
+      {alertas}
+      <div onClick={parar}><FaixaFotosCard pedido={pedido} onVerTodas={() => setAberto(true)} /></div>
       {(pedido.pipefy_card_id || pedido.cliente_cnpj || pedido.ns_entrada || pedido.tecnico) && (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <Info rotulo="CNPJ" valor={formatarDoc(pedido.cliente_cnpj)} />
@@ -463,88 +517,34 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin }) {
           <Info rotulo="Entregue por" valor={pedido.entregue_por} />
         </dl>
       )}
-      {itens.length > 0 && (
-        <div className="rounded-lg border border-[var(--c-borda)] overflow-hidden">
-          <table className="w-full text-xs table-fixed">
-            <thead className="bg-[var(--c-fundo)] text-[var(--c-suave)]">
-              <tr>
-                <th className="text-left font-medium px-2 py-1">Peça</th>
-                <th className="text-right font-medium px-1.5 py-1 w-9">Qtd</th>
-                <th className="text-right font-medium px-2 py-1 w-[5.5rem]">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {itens.map((it, i) => (
-                <tr key={i} className={`border-t border-[var(--c-borda)] ${
-                  !pedido.recusadas_retiradas_em && recusadosSet.has(String(it.codigo || '').trim().toUpperCase())
-                    ? 'text-red-400 line-through' : 'text-[var(--c-texto)]'}`}>
-                  <td className="px-2 py-1 break-words">
-                    {it.codigo && <span className="font-mono text-[var(--c-destaque)] mr-1 break-all">{it.codigo}</span>}
-                    {it.descricao}
-                  </td>
-                  <td className="px-1.5 py-1 text-right">{it.quantidade ?? '—'}</td>
-                  <td className="px-2 py-1 text-right whitespace-nowrap">{brl(it.valor_unitario)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t border-[var(--c-borda)] text-[var(--c-texto)] font-semibold">
-                <td className="px-2 py-1" colSpan={2}>Total peças</td>
-                <td className="px-2 py-1 text-right whitespace-nowrap">{brl(totalItens)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
+      {tabelaPecas}
       {pedido.observacoes && <p className="text-xs text-[var(--c-suave)]">{pedido.observacoes}</p>}
       <p className="text-[11px] text-[var(--c-suave)]">{formatarData(pedido.created_at)} · por {pedido.criado_por_nome || '—'}</p>
-
-      {ehAdmin && (
-        <label className="flex items-center gap-1.5 text-[11px] text-[var(--c-suave)]">
-          <MoveRight size={12} className="shrink-0" />
-          <select value="" disabled={movendoPara} onChange={e => moverPara(e.target.value)}
-            className="flex-1 min-w-0 bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-1.5 py-1 text-[11px] text-[var(--c-texto)] disabled:opacity-40">
-            <option value="">{movendoPara ? 'Movendo…' : 'Mover para… (admin)'}</option>
-            {COLUNAS.filter(c => c.status !== pedido.status && !(pedido.pipefy_card_id && c.status === 'solicitacao')).map(c => <option key={c.status} value={c.status}>{c.titulo}</option>)}
-          </select>
-        </label>
-      )}
-      {podeEditar && (
-      <div className="flex gap-2 pt-1">
-        {ehAdmin && podeAtualizarItens && (itensAlterados || !precisaRetirar) && (
-          <button onClick={atualizarItensZen} disabled={atualizandoItens}
-            title="Acertar o pedido no Zen com as peças atuais do card"
-            className={`flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 px-2.5 rounded-lg disabled:opacity-40 ${
-              itensAlterados ? 'flex-1 bg-amber-500/15 text-amber-400 hover:bg-amber-500/25'
-              : 'text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)]'}`}>
-            {atualizandoItens ? 'Atualizando no Zen...' : <><PackageCheck size={13} /> {itensAlterados ? 'Atualizar peças no Zen' : 'Peças no Zen'}</>}
-          </button>
-        )}
-        {precisaRetirar && (
-          <button onClick={retirarRecusadas} disabled={retirando || codigosRecusados.length === 0}
-            className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 disabled:opacity-40">
-            {retirando ? 'Retirando no Zen...' : <><Scissors size={13} /> Retirar peças recusadas no Zen</>}
-          </button>
-        )}
-        {proxima && !(STATUS_SO_ADMIN.includes(pedido.status) && !ehAdmin) && (
-          proxima.status === 'separando' && !(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)
-          ? <span title={pedido.pipefy_card_id ? 'Lance as peças no Pipefy (Requisitar Peças) — a tela atualiza sozinha em até 30s' : 'Preencha as peças nos campos do card'}
-              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[var(--c-borda)] text-[var(--c-suave)] cursor-not-allowed">
-              Sem peças — não vai para Em Separação
-            </span>
-          : <button onClick={avancar} disabled={mudando}
-            className="flex-1 flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 rounded-lg bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 disabled:opacity-40">
-            {mudando ? (proxima.status === 'separando' ? 'Criando pedido no Zen...' : proxima.status === 'finalizado' ? 'Finalizando no Zen...' : 'Movendo...') : <>Mover p/ {proxima.titulo} <ArrowRight size={13} /></>}
-          </button>
-        )}
-        <button onClick={cancelar} disabled={cancelando}
-          title={pedido.status === 'aprovado_recusado' && pedido.zen_pedido_id ? 'Cancelar e excluir o pedido no Zen' : 'Cancelar'}
-          className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40">
-          {cancelando ? <span className="block w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" /> : <Ban size={14} />}
-        </button>
-      </div>
+      {(itensAlterados || precisaRetirar) && podeEditar && (
+        <p className="text-[11px] font-semibold text-amber-400">Abra o card para resolver no Zen.</p>
       )}
     </div>
+
+    {aberto && (
+      <CardAbertoOrcamento pedido={pedido} ehAdmin={ehAdmin} podeEditar={podeEditar}
+        onFechar={() => setAberto(false)} onAtualizar={onAtualizar}
+        resumo={(tagsZen || alertas || tabelaPecas) && (
+          <div className="space-y-2">
+            <div>{tagsZen}</div>
+            {alertas}
+            {tabelaPecas}
+          </div>
+        )}
+        moverPara={moverPara} avancar={avancar} proxima={proxima} mudando={mudando} movendoPara={movendoPara}
+        podeAvancar={podeAvancar} motivoSemAvancar={motivoSemAvancar}
+        cancelar={cancelar} cancelando={cancelando} acoesZen={acoesZen}
+        onHistorico={ehAdmin ? () => setVerHistorico(true) : null} />
+    )}
+    {ehAdmin && verHistorico && (
+      <PainelMovimentacao pedidoInicial={{ id: pedido.id, nome: pedido.cliente_nome || pedido.referencia }}
+        onFechar={() => setVerHistorico(false)} />
+    )}
+    </>
   );
 }
 
