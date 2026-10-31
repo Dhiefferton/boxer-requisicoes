@@ -568,7 +568,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
             {anteriores.map(g => (
               <div key={g.col.status} className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4">
                 <div className="flex items-center gap-2 mb-3"><p className="text-sm font-bold text-[var(--c-texto)] flex-1">Fase</p><Pilula col={g.col} /></div>
-                <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-3">{g.campos.map(c => blocoCampo(c, false))}</dl>
+                <dl className="grid grid-cols-1 gap-y-3">{g.campos.map(c => blocoCampo(c, false))}</dl>
               </div>
             ))}
           </div>
@@ -583,7 +583,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
             {colAtual?.zen && <p className="text-[11px] text-amber-400">Zen: {colAtual.zen}</p>}
             {erro && <p className="text-xs text-red-400">{erro}</p>}
             {camposAtuais.length
-              ? <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-4">{camposAtuais.map(c => blocoCampo(c, true))}</dl>
+              ? <dl className="grid grid-cols-1 gap-y-4">{camposAtuais.map(c => blocoCampo(c, true))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.{ehAdmin ? ' Crie em Configurar (engrenagem da coluna).' : ''}</p>}
             {sujo && (
               <div className="sticky bottom-0 flex items-center justify-end gap-2 py-2 bg-[var(--c-fundo)] border-t border-[var(--c-borda)]">

@@ -121,6 +121,21 @@ export default function PedidosOrcamento() {
 
   // Configuração do admin: colunas (nome, cor, ordem, colunas novas) e campos
   const [verConfig, setVerConfig] = useState(false);   // false | true | chave da coluna
+
+  // Arrastar o card para outra coluna (admin; mesmas regras e avisos do "Mover para")
+  const [arrastando, setArrastando] = useState(null);   // pedido sendo arrastado
+  const [soltando, setSoltando] = useState(null);       // coluna sob o mouse
+  const moverDoCard = useRef({});                       // id do pedido -> moverPara do card
+  function podeSoltar(p, status) {
+    if (!p || status === p.status) return false;
+    const atual = COLUNAS.find(c => c.status === p.status);
+    return !Array.isArray(atual?.destinos) || atual.destinos.includes(status);
+  }
+  function soltar(status) {
+    const p = arrastando;
+    setArrastando(null); setSoltando(null);
+    if (podeSoltar(p, status)) moverDoCard.current[p.id]?.(status);
+  }
   const [, setVersaoConfig] = useState(0);
   useEffect(() => {
     pedidosOrcamentoService.config()
@@ -196,14 +211,19 @@ export default function PedidosOrcamento() {
             if ((ocultarVazias || status === 'solicitacao') && !itens.length) return null;
             return (
               <Coluna key={`${status}${busca ? '-busca' : ''}`} titulo={titulo} cor={cor} badge={badge} hex={hex} total={itens.length} arquivada={arquivada && !busca} soAdmin={admin}
-                onConfigurar={usuario?.perfil === 'admin' ? () => setVerConfig(status) : undefined}>
+                onConfigurar={usuario?.perfil === 'admin' ? () => setVerConfig(status) : undefined}
+                arraste={arrastando ? { pode: podeSoltar(arrastando, status), sobre: soltando === status } : null}
+                onArrasteSobre={() => setSoltando(status)} onArrasteSai={() => setSoltando(s => (s === status ? null : s))}
+                onSoltar={() => soltar(status)}>
                 {itens.length === 0 ? (
                   <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
                     <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem pedidos'}</p>
                   </div>
                 ) : (
                   itens.map(pedido => (
-                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} podeEditar={podeEditar} ehAdmin={usuario?.perfil === 'admin'} onConfigurarColuna={(k) => setVerConfig(k)} />
+                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} podeEditar={podeEditar} ehAdmin={usuario?.perfil === 'admin'} onConfigurarColuna={(k) => setVerConfig(k)}
+                      registrarMover={(fn) => { moverDoCard.current[pedido.id] = fn; }}
+                      onArrastar={() => setArrastando(pedido)} onFimArraste={() => { setArrastando(null); setSoltando(null); }} />
                   ))
                 )}
               </Coluna>
@@ -215,15 +235,20 @@ export default function PedidosOrcamento() {
   );
 }
 
-function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = false, onConfigurar, children }) {
+function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = false, onConfigurar, arraste = null, onArrasteSobre, onArrasteSai, onSoltar, children }) {
   // Finalizado: arquivado — lista fechada, abre na seta
   const [aberta, setAberta] = useState(!arquivada);
   // Cor configurada pelo admin (hex) ou a padrão (classes)
   const pilula = hex
     ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: `${hex}26`, color: hex }}>{titulo}</span>
     : <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badge}`}>{titulo}</span>;
+  // Durante o arraste: coluna que aceita fica destacada; a que não aceita fica apagada
+  const realce = arraste ? (arraste.pode ? (arraste.sobre ? 'ring-2 ring-[var(--c-destaque)] bg-[var(--c-destaque)]/5' : 'ring-1 ring-[var(--c-destaque)]/40') : 'opacity-40') : '';
   return (
-    <div className="space-y-2 w-[17.5rem] shrink-0 xl:min-h-0 xl:flex xl:flex-col">
+    <div className={`space-y-2 w-[17.5rem] shrink-0 xl:min-h-0 xl:flex xl:flex-col rounded-2xl transition ${realce}`}
+      onDragOver={e => { if (arraste?.pode) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; onArrasteSobre?.(); } }}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) onArrasteSai?.(); }}
+      onDrop={e => { e.preventDefault(); onSoltar?.(); }}>
       <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${hex ? '' : cor} bg-[var(--c-superficie)] xl:shrink-0`} style={hex ? { borderColor: `${hex}66` } : undefined}>
         {arquivada ? (
           <button onClick={() => setAberta(v => !v)} className="flex items-center gap-1.5 text-[var(--c-suave)] hover:text-[var(--c-texto)]">
@@ -256,7 +281,7 @@ function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = f
   );
 }
 
-function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColuna }) {
+function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColuna, registrarMover, onArrastar, onFimArraste }) {
   const [mudando, setMudando] = useState(false);
   const itens = pedido.itens || [];
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
@@ -277,6 +302,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColu
   const proxima = precisaRetirar || !PROXIMA[pedido.status] ? null : COLUNAS.find(c => c.status === PROXIMA[pedido.status]);
   const [movendoPara, setMovendoPara] = useState(false);
   // Admin: mover para qualquer coluna
+  registrarMover?.((st) => moverPara(st));
   async function moverPara(status) {
     if (!status || status === pedido.status) return;
     const destino = COLUNAS.find(c => c.status === status);
@@ -481,8 +507,11 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColu
 
   return (
     <>
-    <div onClick={() => setAberto(true)} title="Abrir card"
-      className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors">
+    <div onClick={() => setAberto(true)} title={ehAdmin ? 'Abrir card (segure e arraste para mudar de coluna)' : 'Abrir card'}
+      draggable={ehAdmin && !movendoPara}
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(pedido.id)); onArrastar?.(); }}
+      onDragEnd={() => onFimArraste?.()}
+      className={`${movendoPara ? 'opacity-50 pointer-events-none ' : ''}p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors`}>
       <div className="flex items-center gap-1.5">
         <FileText size={13} className="text-[var(--c-destaque)] shrink-0" />
         <p className="text-sm text-[var(--c-texto)] font-medium flex-1">{pedido.cliente_nome || pedido.referencia}</p>
