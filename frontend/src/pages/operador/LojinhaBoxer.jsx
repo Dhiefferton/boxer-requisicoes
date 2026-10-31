@@ -139,6 +139,28 @@ export default function LojinhaBoxer() {
   const nomeStatus = Object.fromEntries(colunas.map(c => [c.status, c.titulo]));
   const corStatus = Object.fromEntries(colunas.map(c => [c.status, 'bg-[var(--c-borda)] text-[var(--c-texto)]']));
 
+  // Arrastar o card para outra coluna (mesmas regras dos botões de mover)
+  const [arrastando, setArrastando] = useState(null);   // pedido sendo arrastado
+  const [soltando, setSoltando] = useState(null);       // coluna sob o mouse
+  const [movendoId, setMovendoId] = useState(null);
+  function podeSoltar(p, col) {
+    if (!p || !p.zen_ordem_separacao_id) return false;
+    const atual = colunas.find(c => c.status === colunaDo(p));
+    if (col.status === colunaDo(p) || col.status === 'entrada') return false;
+    if (Array.isArray(atual?.destinos) && !atual.destinos.includes(col.status)) return false;
+    if (!ehAdmin && (col.admin || atual?.admin)) return false;
+    return true;
+  }
+  async function soltar(col) {
+    const p = arrastando;
+    setArrastando(null); setSoltando(null);
+    if (!podeSoltar(p, col)) return;
+    setMovendoId(p.id);
+    try { await lojinhaService.mover(p.id, col.status); }
+    catch (e) { alert(e.response?.data?.erro || 'Erro ao mover.'); }
+    finally { setMovendoId(null); carregar(); }
+  }
+
   return (
     <FotosProvider servico={SERVICO_FOTOS}>
     {/* Tela grande: travada na altura da janela e cada coluna rola sozinha (igual Orçamentos) */}
@@ -192,13 +214,18 @@ export default function LojinhaBoxer() {
             const doStatus = lista.filter(p => col.inclui.includes(p.status) && combinaBusca(p, busca));
             return (
               <Coluna key={col.status} col={col} total={doStatus.length} arquivada={col.arquivada && !busca}
-                onConfigurar={ehAdmin ? () => setVerConfig(col.status) : undefined}>
+                onConfigurar={ehAdmin ? () => setVerConfig(col.status) : undefined}
+                arraste={arrastando ? { pode: podeSoltar(arrastando, col), sobre: soltando === col.status } : null}
+                onArrasteSobre={() => setSoltando(col.status)} onArrasteSai={() => setSoltando(s => (s === col.status ? null : s))}
+                onSoltar={() => soltar(col)}>
                 {doStatus.length === 0 ? (
                   <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
                     <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem pedidos'}</p>
                     {col.status === 'entrada' && !busca && <button onClick={() => setNovo(true)} className="mt-1 text-xs text-[var(--c-destaque)] font-semibold">+ Novo pedido</button>}
                   </div>
-                ) : doStatus.map(p => <CardPedido key={p.id} p={p} carregar={carregar} onAbrir={() => setAbertoId(p.id)} />)}
+                ) : doStatus.map(p => <CardPedido key={p.id} p={p} carregar={carregar} onAbrir={() => setAbertoId(p.id)}
+                    movendo={movendoId === p.id}
+                    onArrastar={() => setArrastando(p)} onFimArraste={() => { setArrastando(null); setSoltando(null); }} />)}
               </Coluna>
             );
           })}
@@ -244,10 +271,15 @@ function Pilula({ col }) {
     : <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${col.badge || ''}`}>{col.titulo}</span>;
 }
 
-function Coluna({ col, total, arquivada = false, onConfigurar, children }) {
+function Coluna({ col, total, arquivada = false, onConfigurar, arraste = null, onArrasteSobre, onArrasteSai, onSoltar, children }) {
   const [aberta, setAberta] = useState(!arquivada);
+  // Durante o arraste: coluna que aceita fica destacada; a que não aceita fica apagada
+  const realce = arraste ? (arraste.pode ? (arraste.sobre ? 'ring-2 ring-[var(--c-destaque)] bg-[var(--c-destaque)]/5' : 'ring-1 ring-[var(--c-destaque)]/40') : 'opacity-40') : '';
   return (
-    <div className="space-y-2 w-[17.5rem] shrink-0 xl:min-h-0 xl:flex xl:flex-col">
+    <div className={`space-y-2 w-[17.5rem] shrink-0 xl:min-h-0 xl:flex xl:flex-col rounded-2xl transition ${realce}`}
+      onDragOver={e => { if (arraste?.pode) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; onArrasteSobre?.(); } }}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) onArrasteSai?.(); }}
+      onDrop={e => { e.preventDefault(); onSoltar?.(); }}>
       <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${col.hex ? '' : col.cor} bg-[var(--c-superficie)] xl:shrink-0`}
         style={col.hex ? { borderColor: `${col.hex}66` } : undefined}>
         {arquivada
@@ -401,7 +433,7 @@ function DadosPedido({ p, sempreProdutos = false }) {
 }
 
 // Card do quadro (enxuto): clique abre o card
-function CardPedido({ p, carregar, onAbrir }) {
+function CardPedido({ p, carregar, onAbrir, movendo = false, onArrastar, onFimArraste }) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
   const [excluindo, setExcluindo] = useState(false);
   const parar = (e) => e.stopPropagation();
@@ -412,8 +444,11 @@ function CardPedido({ p, carregar, onAbrir }) {
     setExcluindo(false);
   }
   return (
-    <div onClick={onAbrir} title="Abrir pedido"
-      className="p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-1.5 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors">
+    <div onClick={onAbrir} title="Abrir pedido (segure e arraste para mudar de coluna)"
+      draggable={!!p.zen_ordem_separacao_id && !movendo}
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(p.id)); onArrastar?.(); }}
+      onDragEnd={() => onFimArraste?.()}
+      className={`${movendo ? 'opacity-50 pointer-events-none ' : ''}p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-1.5 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors`}>
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
         <div className="flex items-center gap-1.5">
