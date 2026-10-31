@@ -38,9 +38,9 @@ const nomeArquivo = (url) => {
 };
 const MULTI = ['checklist_vertical', 'checklist_horizontal', 'label_select'];
 const ESCOLHA = ['select', 'radio_vertical', 'radio_horizontal'];
-const SO_LEITURA = ['attachment', 'id'];
+export const SO_LEITURA = ['attachment', 'id'];
 
-function Valor({ campo, valor }) {
+export function Valor({ campo, valor }) {
   const lista = valorLista(valor);
   if (!lista.length) return <span className="text-[var(--c-suave)]">—</span>;
   if (campo?.tipo === 'attachment') {
@@ -182,6 +182,31 @@ export function Editor({ campo, valor, onChange }) {
   return <input value={texto} onChange={e => onChange(e.target.value)} className={cls} />;
 }
 
+// Grupos de campos do card (uma fase/coluna por grupo): configurados no B-Requisições
+// (Configurar) + fases do Pipefy ainda não trazidas + campos fora da estrutura.
+// atual = grupo da coluna/fase em que o card está.
+export function montarGrupos(fases, pedido, statusAtual, faseAtualId) {
+  // Campos do card que não estão na estrutura (ex.: campo removido do pipe)
+  const conhecidos = new Set((fases || []).flatMap(f => f.campos.map(c => c.id)));
+  const outros = (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [])
+    .filter(c => c?.id && !conhecidos.has(c.id)).map(c => ({ id: c.id, rotulo: c.nome, tipo: 'short_text', opcoes: [] }));
+  // A fase atual do card vem primeiro (são os campos a preencher agora)
+  // Fases cujos campos já foram trazidos para a configuração: aparecem pelo grupo configurado
+  const importadas = new Set(COLUNAS_ORCAMENTO.filter(c => c.importados && c.faseId).map(c => String(c.faseId)));
+  const visiveis = (fases || []).filter(f => !importadas.has(String(f.faseId)));
+  const chaveDaFase = (id) => (id === 'inicio' ? 'inicio' : COLUNAS_ORCAMENTO.find(c => String(c.faseId) === String(id))?.status || null);
+  const ordenadas = [...visiveis.filter(f => f.faseId === faseAtualId), ...visiveis.filter(f => f.faseId !== faseAtualId)]
+    .map(f => ({ ...f, chave: chaveDaFase(f.faseId), atual: f.faseId === faseAtualId }));
+  // Campos configurados no B-Requisições (Configurar): um grupo por coluna, a coluna atual primeiro
+  const cfgCampos = CONFIG_ORCAMENTO.campos || [];
+  const ordemCols = ['inicio', ...COLUNAS_ORCAMENTO.map(c => c.status)];
+  const nomeCol = (k) => (k === 'inicio' ? 'Abertura do card' : COLUNAS_ORCAMENTO.find(c => c.status === k)?.titulo || k);
+  const gruposCfg = [...new Set(cfgCampos.map(c => c.coluna))]
+    .sort((a, b) => (a === statusAtual ? -1 : b === statusAtual ? 1 : ordemCols.indexOf(a) - ordemCols.indexOf(b)))
+    .map(k => ({ faseId: `bx-${k}`, nome: COLUNAS_ORCAMENTO.find(c => c.status === k)?.importados ? nomeCol(k) : `${nomeCol(k)} · B-Requisições`, chave: k, atual: k === statusAtual, campos: cfgCampos.filter(c => c.coluna === k).map(campoDaConfig) }));
+  return [...gruposCfg, ...ordenadas, ...(outros.length ? [{ faseId: 'outros', nome: 'Outros campos', campos: outros }] : [])];
+}
+
 export default function CamposCardOrcamento({ pedido, ehAdmin, podeEditar = ehAdmin, onFechar, onSalvo, faseAtualId, statusAtual }) {
   const [fases, setFases] = useState(null);
   const [erro, setErro] = useState('');
@@ -201,23 +226,7 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, podeEditar = ehAd
   const valorDe = (id) => (id in rascunho ? rascunho[id] : id in editados ? editados[id] : doPipefy[id]);
   const temValor = (id) => valorLista(valorDe(id)).length > 0;
 
-  // Campos do card que não estão na estrutura (ex.: campo removido do pipe)
-  const conhecidos = new Set((fases || []).flatMap(f => f.campos.map(c => c.id)));
-  const outros = (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [])
-    .filter(c => c?.id && !conhecidos.has(c.id)).map(c => ({ id: c.id, rotulo: c.nome, tipo: 'short_text', opcoes: [] }));
-  // A fase atual do card vem primeiro (são os campos a preencher agora)
-  // Fases cujos campos já foram trazidos para a configuração: aparecem pelo grupo configurado
-  const importadas = new Set(COLUNAS_ORCAMENTO.filter(c => c.importados && c.faseId).map(c => String(c.faseId)));
-  const visiveis = (fases || []).filter(f => !importadas.has(String(f.faseId)));
-  const ordenadas = fases ? [...visiveis.filter(f => f.faseId === faseAtualId), ...visiveis.filter(f => f.faseId !== faseAtualId)] : [];
-  // Campos configurados no B-Requisições (Configurar): um grupo por coluna, a coluna atual primeiro
-  const cfgCampos = CONFIG_ORCAMENTO.campos || [];
-  const ordemCols = ['inicio', ...COLUNAS_ORCAMENTO.map(c => c.status)];
-  const nomeCol = (k) => (k === 'inicio' ? 'Abertura do card' : COLUNAS_ORCAMENTO.find(c => c.status === k)?.titulo || k);
-  const gruposCfg = [...new Set(cfgCampos.map(c => c.coluna))]
-    .sort((a, b) => (a === statusAtual ? -1 : b === statusAtual ? 1 : ordemCols.indexOf(a) - ordemCols.indexOf(b)))
-    .map(k => ({ faseId: `bx-${k}`, nome: COLUNAS_ORCAMENTO.find(c => c.status === k)?.importados ? nomeCol(k) : `${nomeCol(k)} · B-Requisições`, atual: k === statusAtual, campos: cfgCampos.filter(c => c.coluna === k).map(campoDaConfig) }));
-  const grupos = fases ? [...gruposCfg, ...ordenadas, ...(outros.length ? [{ faseId: 'outros', nome: 'Outros campos', campos: outros }] : [])] : [];
+  const grupos = fases ? montarGrupos(fases, pedido, statusAtual, faseAtualId) : [];
   const nativo = !pedido.pipefy_card_id;
 
   async function salvar() {
@@ -266,7 +275,7 @@ export default function CamposCardOrcamento({ pedido, ehAdmin, podeEditar = ehAd
             </div>
           )}
           {!fases && !erro && <div className="flex justify-center py-10"><Spinner className="text-[var(--c-destaque)]" /></div>}
-          {editando && <p className="text-[11px] text-amber-400">{nativo ? 'Card do B-Requisições: os campos ficam gravados aqui.' : 'A edição é gravada também no card do Pipefy. Conexões (Cliente, Peça, Técnico…) e anexos ficam só no B-Requisições.'} Anexos do Pipefy não são editáveis por aqui; fotos adicionadas aqui ficam só no B-Requisições. * = obrigatório no Pipefy.</p>}
+          {editando && <p className="text-[11px] text-amber-400">Os campos ficam gravados só no B-Requisições. Anexos antigos do Pipefy não são editáveis; fotos adicionadas aqui ficam no B-Requisições. * = obrigatório.</p>}
           {grupos.map(g => {
             // Campos de foto (anexo com "foto" no nome) aparecem sempre, para adicionar fotos aqui
             const temFoto = (c) => c.tipo === 'attachment' && (c.boxer || /foto/i.test(c.rotulo || '') || (pedido.fotos_locais || []).some(f => f.campo === c.id));
