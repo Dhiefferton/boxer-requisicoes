@@ -13,7 +13,8 @@
 // Acesso: admin, operador e o setor SAC / Suporte.
 // ============================================================
 import { query } from '../config/db.js';
-import { buscarClienteZen, excluirPedidoVendaZen } from '../integrations/zenPedidoVenda.js';
+import { buscarClienteZen, excluirPedidoVendaZen, consultarOrdemSeparacao } from '../integrations/zenPedidoVenda.js';
+import { PIPEFY_ATIVO } from '../integrations/pipefyService.js';
 import { criarPedidoLojinhaZen, listarVendedorasZen } from '../integrations/zenLojinha.js';
 import { criarCardsLojinha, excluirCardLojinha, fasesDosCards, cardsDoPedidoLojinha } from '../integrations/pipefyLojinha.js';
 import { buscarPedidoLI } from '../integrations/lojaIntegrada.js';
@@ -134,6 +135,13 @@ async function enviarZen(pedido) {
 
 // Cria os cards no Pipefy e move até Separação (nunca lança erro)
 async function enviarPipefy(pedido) {
+  // Pipefy desligado: com a ordem de separação no Zen o pedido vai direto para Em Separação
+  if (!PIPEFY_ATIVO) {
+    const r = await query(
+      `UPDATE lojinha_boxer_pedidos SET status = 'separacao', separacao_em = COALESCE(separacao_em, NOW()), pipefy_erro = NULL
+        WHERE id = $1 RETURNING *`, [pedido.id]);
+    return r.rows[0];
+  }
   const salvar = (cards) => query(`UPDATE lojinha_boxer_pedidos SET pipefy_cards = $2 WHERE id = $1`, [pedido.id, JSON.stringify(cards)]);
   try {
     const u = pedido.criado_por
@@ -296,6 +304,7 @@ let ultimaSync = 0;
 async function sincronizarFasesPipefy() {
   if (Date.now() - ultimaSync < 30000) return;
   ultimaSync = Date.now();
+  if (!PIPEFY_ATIVO) return sincronizarSemPipefy();
   const r = await query(`SELECT id, status, pipefy_cards, numero_pedido FROM lojinha_boxer_pedidos
                           WHERE status IN ('separacao', 'conferencia', 'teste_placas', 'preparacao')`);
   if (!r.rows.length) return;
@@ -334,11 +343,44 @@ async function sincronizarFasesPipefy() {
   }
 }
 
+// Sem o Pipefy: pedido parado na liberação vai para Em Separação, e Em Separação
+// passa para Em Conferência quando a separação termina no Zen (reserva finalizada).
+// As outras colunas são movidas na tela (POST /lojinha/pedidos/:id/mover).
+async function sincronizarSemPipefy() {
+  await query(`UPDATE lojinha_boxer_pedidos SET status = 'separacao', separacao_em = COALESCE(separacao_em, NOW()), pipefy_erro = NULL
+                WHERE status = 'liberacao' AND zen_ordem_separacao_id IS NOT NULL`);
+  const r = await query(`SELECT id, zen_ordem_separacao_id FROM lojinha_boxer_pedidos
+                          WHERE status = 'separacao' AND zen_ordem_separacao_id IS NOT NULL`);
+  for (const p of r.rows) {
+    try {
+      const s = await consultarOrdemSeparacao(p.zen_ordem_separacao_id);
+      if (s.separado) await query(`UPDATE lojinha_boxer_pedidos SET status = 'conferencia' WHERE id = $1 AND status = 'separacao'`, [p.id]);
+    } catch (e) { console.error(`[Lojinha] ordem ${p.zen_ordem_separacao_id}:`, e.message); }
+  }
+}
+
+// POST /lojinha/pedidos/:id/mover { status } — muda a coluna do pedido (sem o Pipefy)
+export async function moverPedidoLojinha(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const status = String(req.body?.status || '');
+    if (!ORDEM_STATUS.includes(status)) return res.status(400).json({ erro: 'Coluna inválida.' });
+    const p = (await query(`SELECT id, status, zen_ordem_separacao_id FROM lojinha_boxer_pedidos WHERE id = $1`, [parseInt(req.params.id)])).rows[0];
+    if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (!p.zen_ordem_separacao_id) return res.status(409).json({ erro: 'O pedido ainda não tem ordem de separação no Zen.' });
+    const r = await query(
+      `UPDATE lojinha_boxer_pedidos SET status = $2, separacao_em = COALESCE(separacao_em, NOW()),
+              finalizado_em = CASE WHEN $3 THEN COALESCE(finalizado_em, NOW()) ELSE NULL END
+        WHERE id = $1 RETURNING *`, [p.id, status, status === 'finalizado']);
+    res.json({ pedido: r.rows[0] });
+  } catch (err) { next(err); }
+}
+
 // GET /lojinha/pedidos
 export async function listarPedidosLojinha(req, res, next) {
   try {
     await garantirEstrutura();
-    await sincronizarFasesPipefy().catch(e => console.error('[Lojinha] sync Pipefy:', e.message));
+    await sincronizarFasesPipefy().catch(e => console.error('[Lojinha] sync:', e.message));
     const r = await query(
       `(SELECT * FROM lojinha_boxer_pedidos WHERE status <> 'finalizado')
        UNION ALL
@@ -439,8 +481,8 @@ export async function excluirPedidoLojinha(req, res, next) {
       }
     }
 
-    // 2. Pipefy
-    const cards = (Array.isArray(p.pipefy_cards) ? p.pipefy_cards : []).filter(c => c?.id);
+    // 2. Pipefy (desligado: os cards antigos ficam lá, nada é chamado)
+    const cards = PIPEFY_ATIVO ? (Array.isArray(p.pipefy_cards) ? p.pipefy_cards : []).filter(c => c?.id) : [];
     const restantes = [];
     const erros = [];
     for (const c of cards) {
