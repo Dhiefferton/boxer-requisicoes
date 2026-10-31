@@ -47,7 +47,8 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
           );
           CREATE INDEX IF NOT EXISTS idx_${TF}_coluna ON ${TF} (coluna);
           ALTER TABLE ${TF}  ADD COLUMN IF NOT EXISTS pipefy_campo VARCHAR(80);
-          ALTER TABLE ${TC} ADD COLUMN IF NOT EXISTS campos_importados BOOLEAN NOT NULL DEFAULT FALSE;`);
+          ALTER TABLE ${TC} ADD COLUMN IF NOT EXISTS campos_importados BOOLEAN NOT NULL DEFAULT FALSE;
+          ALTER TABLE ${TC} ADD COLUMN IF NOT EXISTS destinos JSONB;`);
         // Colunas do sistema que ainda não estão na tabela (primeira vez ou coluna nova no código)
         const tem = new Set((await query(`SELECT chave FROM ${TC}`)).rows.map(r => r.chave));
         for (const [i, c] of padrao.entries()) {
@@ -66,7 +67,7 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
     if (cache && Date.now() - cache.em < 30000) return cache.dados;
     await garantirConfig();
     const [col, cam] = await Promise.all([
-      query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados FROM ${TC} WHERE ativo ORDER BY ordem, chave`),
+      query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados, destinos FROM ${TC} WHERE ativo ORDER BY ordem, chave`),
       query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo
                FROM ${TF} WHERE ativo ORDER BY coluna, ordem, id`),
     ]);
@@ -120,12 +121,17 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
           if (c?.chave_temp) novasChaves[c.chave_temp] = chave;
         }
         return { chave, nome, cor: COR_OK.test(c?.cor || '') ? c.cor : '#64748b', ordem: (i + 1) * 10,
-          so_admin: c?.so_admin !== false, arquivada: !!c?.arquivada, campos_importados: !!c?.campos_importados };
+          so_admin: c?.so_admin !== false, arquivada: !!c?.arquivada, campos_importados: !!c?.campos_importados,
+          destinos: Array.isArray(c?.destinos) ? c.destinos.map(String) : null };
       });
       const nomes = lista.map(c => c.nome.toLowerCase());
       const repetido = nomes.find((n, i) => nomes.indexOf(n) !== i);
       if (repetido) return res.status(400).json({ erro: `Há duas colunas com o nome "${repetido}".` });
   
+      // Para onde cada coluna pode mover (null = todas): chaves novas trocadas, só colunas que ficam
+      const chavesFinais = new Set(lista.map(c => c.chave));
+      for (const c of lista) if (c.destinos) c.destinos = [...new Set(c.destinos.map(k => novasChaves[k] || k))].filter(k => k !== c.chave && chavesFinais.has(k));
+
       // Colunas que saíram: as do sistema não podem ser excluídas; as criadas aqui só se estiverem vazias
       const ficam = new Set(lista.map(c => c.chave));
       const saem = atuais.filter(c => !ficam.has(c.chave));
@@ -163,12 +169,12 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
       await transaction(async (cli) => {
         for (const c of lista) {
           await cli.query(
-            `INSERT INTO ${TC} (chave, nome, cor, ordem, so_admin, arquivada, campos_importados, sistema, ativo, atualizado_em)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,FALSE,TRUE,NOW())
+            `INSERT INTO ${TC} (chave, nome, cor, ordem, so_admin, arquivada, campos_importados, destinos, sistema, ativo, atualizado_em)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,FALSE,TRUE,NOW())
              ON CONFLICT (chave) DO UPDATE SET nome = EXCLUDED.nome, cor = EXCLUDED.cor, ordem = EXCLUDED.ordem,
-               so_admin = EXCLUDED.so_admin, arquivada = EXCLUDED.arquivada,
+               so_admin = EXCLUDED.so_admin, arquivada = EXCLUDED.arquivada, destinos = EXCLUDED.destinos,
                campos_importados = ${TC}.campos_importados OR EXCLUDED.campos_importados, ativo = TRUE, atualizado_em = NOW()`,
-            [c.chave, c.nome, c.cor, c.ordem, c.so_admin, c.arquivada, c.campos_importados]);
+            [c.chave, c.nome, c.cor, c.ordem, c.so_admin, c.arquivada, c.campos_importados, c.destinos ? JSON.stringify(c.destinos) : null]);
         }
         if (saem.length) await cli.query(`UPDATE ${TC} SET ativo = FALSE, atualizado_em = NOW() WHERE chave = ANY($1::text[])`, [saem.map(c => c.chave)]);
         // Campos que saíram ficam desativados (os valores já preenchidos nos cards continuam guardados)

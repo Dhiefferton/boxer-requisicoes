@@ -376,6 +376,11 @@ export async function moverPedido(req, res, next) {
     if (req.usuario?.perfil !== 'admin' && (soAdmin(status) || soAdmin(pedido.status))) {
       return res.status(403).json({ erro: 'Só o administrador move cards nessa coluna.' });
     }
+    // Para onde a coluna atual pode mover (Configurar → "Pode mover cards desta coluna para")
+    const destinosCol = colCfg.get(pedido.status)?.destinos;
+    if (Array.isArray(destinosCol) && status !== pedido.status && !destinosCol.includes(status)) {
+      return res.status(400).json({ erro: `De "${nomeCol(pedido.status)}" não dá para mover para "${nomeCol(status)}". Ajuste em Configurar.` });
+    }
     const detalhesMov = {};
 
     // Card criado no B-Requisições: campos obrigatórios da coluna atual (configuração) antes de sair dela

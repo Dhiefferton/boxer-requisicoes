@@ -445,6 +445,11 @@ export async function moverPedidoLojinha(req, res, next) {
     if (req.usuario?.perfil !== 'admin' && (col.get(status)?.so_admin || col.get(atual)?.so_admin)) {
       return res.status(403).json({ erro: 'Só o administrador move pedidos nessa coluna.' });
     }
+    // Para onde a coluna atual pode mover (Configurar → "Pode mover cards desta coluna para")
+    const destinosCol = col.get(atual)?.destinos;
+    if (Array.isArray(destinosCol) && !destinosCol.includes(status)) {
+      return res.status(400).json({ erro: `De "${col.get(atual)?.nome || atual}" não dá para mover para "${col.get(status)?.nome || status}". Ajuste em Configurar.` });
+    }
     // Campos obrigatórios da coluna atual antes de sair dela
     const valores = p.campos || {};
     const faltando = cfg.campos.filter(c => c.coluna === atual && c.obrigatorio && c.tipo !== 'anexo'
