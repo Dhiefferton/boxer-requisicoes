@@ -8,7 +8,7 @@
 // Os campos ficam gravados só no B-Requisições (integração com o Pipefy desligada).
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { X, ArrowRight, ArrowLeft, Save, ExternalLink, History, Ban, PackageCheck, Scissors, RotateCcw } from 'lucide-react';
+import { X, Settings, ArrowRight, ArrowLeft, Save, ExternalLink, History, Ban, PackageCheck, Scissors, RotateCcw } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 import { FotosCampo } from './FotosOrcamento';
@@ -33,8 +33,8 @@ function Pilula({ coluna, grande = false }) {
 export default function CardAbertoOrcamento({
   pedido, ehAdmin, podeEditar, onFechar, onAtualizar, resumo,
   // ações do card (mesmas regras do quadro)
-  moverPara, avancar, proxima, mudando, movendoPara, podeAvancar, motivoSemAvancar,
-  cancelar, cancelando, acoesZen, onHistorico,
+  moverPara, avancar, proxima: proximaProp, mudando, movendoPara, podeAvancar, motivoSemAvancar,
+  cancelar, cancelando, acoesZen, onHistorico, onConfigurarMover = null,
 }) {
   const [fases, setFases] = useState(null);
   const [erro, setErro] = useState('');
@@ -102,8 +102,12 @@ export default function CardAbertoOrcamento({
 
   // Botões de mover (direita)
   const idxAtual = COLUNAS_ORCAMENTO.findIndex(c => c.status === pedido.status);
+  let proxima = proximaProp;
+  // Configurar → "Pode mover cards desta coluna para" (sem lista = todas)
+  const permitido = (c) => !Array.isArray(colunaAtual?.destinos) || colunaAtual.destinos.includes(c.status);
+  if (proxima && !permitido(proxima)) proxima = null;
   const destinos = ehAdmin
-    ? COLUNAS_ORCAMENTO.filter(c => c.status !== pedido.status)
+    ? COLUNAS_ORCAMENTO.filter(c => c.status !== pedido.status && permitido(c))
     : [];
   const destaque = proxima
     ? null
@@ -243,6 +247,14 @@ export default function CardAbertoOrcamento({
             )}
             {!ehAdmin && !proxima && (
               <p className="text-[11px] text-[var(--c-suave)]">Só o administrador move este card.</p>
+            )}
+            {ehAdmin && !proxima && !destaque && !outros.length && (
+              <p className="text-[11px] text-[var(--c-suave)]">Esta coluna não tem para onde mover.</p>
+            )}
+            {onConfigurarMover && (
+              <button onClick={onConfigurarMover} className="flex items-center gap-1.5 text-[11px] text-[var(--c-suave)] hover:text-[var(--c-destaque)]">
+                <Settings size={12} /> Configurar mover cards
+              </button>
             )}
 
             {(acoesZen?.length > 0 || podeEditar || onHistorico) && (

@@ -177,7 +177,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
     setSalvando(true); setErro('');
     try {
       const { data } = await svc.salvarConfig({
-        colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados })),
+        colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null })),
         campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null })),
       });
       // as colunas novas ganharam chave: mantém a seleção pela posição
@@ -409,6 +409,29 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                     <input type="checkbox" checked={!!colAtual.arquivada} onChange={() => mudarColuna(colSel, c => ({ ...c, arquivada: !c.arquivada }))} />
                     Coluna arquivada (lista fechada na tela)
                   </label>
+                  {/* Para onde os cards desta coluna podem ir (igual "Configurar mover cards" do Pipefy) */}
+                  <div className="rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <p className="flex-1 text-[11px] font-semibold text-[var(--c-texto)]">Pode mover cards desta coluna para</p>
+                      <button onClick={() => mudarColuna(colSel, c => ({ ...c, destinos: null }))} className="text-[10px] text-[var(--c-destaque-claro)] hover:underline">todas</button>
+                      <button onClick={() => mudarColuna(colSel, c => ({ ...c, destinos: [] }))} className="text-[10px] text-[var(--c-suave)] hover:underline">nenhuma</button>
+                    </div>
+                    {colunas.filter(o => keyCol(o) !== colSel).map(o => {
+                      const k = keyCol(o);
+                      const marcado = !Array.isArray(colAtual.destinos) || colAtual.destinos.includes(k);
+                      return (
+                        <label key={k} className="flex items-center gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
+                          <input type="checkbox" checked={marcado} onChange={() => mudarColuna(colSel, c => {
+                            const todas = colunas.filter(x => keyCol(x) !== colSel).map(keyCol);
+                            const atual = Array.isArray(c.destinos) ? c.destinos : todas;
+                            return { ...c, destinos: atual.includes(k) ? atual.filter(x => x !== k) : [...atual, k] };
+                          })} />
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: o.cor }} />{o.nome}
+                        </label>
+                      );
+                    })}
+                    <p className="text-[10px] text-[var(--c-suave)]">Os botões de mover do card mostram só as colunas marcadas. Movimentos automáticos (Zen) não mudam.</p>
+                  </div>
                   <div className="text-[11px] text-[var(--c-suave)] rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 leading-relaxed">
                     <b className="text-[var(--c-texto)]">Ação no Zen</b><br />{colAtual.zen || 'Nenhuma. O card só muda de coluna.'}
                     {colAtual.fase_pipefy && <><br /><b className="text-[var(--c-texto)]">Pipefy</b><br />Segue a fase do Pipefy desta coluna.</>}
