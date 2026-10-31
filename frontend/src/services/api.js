@@ -130,6 +130,7 @@ export const lojinhaService = {
   criar:   (dados)     => api.post('/lojinha/pedidos', dados, { timeout: 120000 }),
   reenviarZen: (id, transacao) => api.post(`/lojinha/pedidos/${id}/zen`, transacao !== undefined ? { transacao } : {}, { timeout: 120000 }),
   reenviarPipefy: (id) => api.post(`/lojinha/pedidos/${id}/pipefy`, {}, { timeout: 120000 }),
+  mover:   (id, status) => api.post(`/lojinha/pedidos/${id}/mover`, { status }),
   excluir: (id)        => api.delete(`/lojinha/pedidos/${id}`, { timeout: 120000 }),
 };
 
