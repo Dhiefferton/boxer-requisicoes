@@ -25,8 +25,11 @@ const SERVICO_ORCAMENTO = {
   imagem: (url) => pedidosOrcamentoService.imagem(url),
   enviarFoto: (id, dados) => pedidosOrcamentoService.enviarFoto(id, dados),
   excluirFoto: (fotoId) => pedidosOrcamentoService.excluirFoto(fotoId),
+  criarOpcao: (campoId, opcao) => pedidosOrcamentoService.criarOpcao(campoId, opcao),
 };
 const FotosCtx = createContext(SERVICO_ORCAMENTO);
+/** Serviço do quadro atual (Orçamentos ou Lojinha) — usado também pelos campos do card. */
+export const useServicoQuadro = () => useContext(FotosCtx);
 export const FotosProvider = ({ servico, children }) => <FotosCtx.Provider value={servico}>{children}</FotosCtx.Provider>;
 let baseAtual = SERVICO_ORCAMENTO.base;
 const urlLocal = (id, tam, base = baseAtual) => `${base}/${id}${tam ? `?tam=${tam}` : ''}`;

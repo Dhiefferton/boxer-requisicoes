@@ -195,7 +195,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
     try {
       const { data } = await svc.salvarConfig({
         colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null })),
-        campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null,
+        campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null, cria_opcoes: !!c.cria_opcoes,
           uid: c.uid, condicao: c.obrigatorio && c.condicao?.campo && c.condicao?.valor ? c.condicao : null })),
       });
       // as colunas novas ganharam chave: mantém a seleção pela posição
@@ -412,6 +412,12 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       </div>
                     </div>
                   )}
+                  {campoAtual.tipo === 'lista' && (
+                    <label className="flex items-start gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
+                      <input type="checkbox" className="mt-0.5" checked={!!campoAtual.cria_opcoes} onChange={() => mudarCampo(campoAtual.uid, c => ({ ...c, cria_opcoes: !c.cria_opcoes }))} />
+                      <span>Quem preenche pode criar novas opções<span className="block text-[10px] text-[var(--c-suave)]">Aparece “+ Nova opção” na lista do card; a opção criada fica salva para os próximos.</span></span>
+                    </label>
+                  )}
                   {campoAtual.pipefy_campo && <p className="text-[11px] text-sky-400">Campo que já existia na fase do Pipefy: o valor do card continua o mesmo. Nome, descrição, obrigatório, ordem e opções mudam só aqui no B-Requisições.</p>}
                   {campoAtual.tipo === 'conexao' && !campoAtual.pipefy_campo && (
                     <label className="block text-[11px] text-[var(--c-suave)] space-y-1">Lista do B-Requisições
@@ -516,5 +522,6 @@ export function campoDaConfig(c, _i, todos = []) {
   const ref = c.condicao?.campo ? (todos || []).find(x => Number(x.id) === Number(c.condicao.campo)) : null;
   const quando = ref ? { id: ref.pipefy_campo || `bx_${ref.id}`, valor: c.condicao.valor } : null;
   return { quando, id: c.pipefy_campo || `bx_${c.id}`, pipefy_campo: c.pipefy_campo || null, rotulo: c.rotulo, tipo: TIPO_EDITOR[c.tipo] || 'short_text', opcoes: Array.isArray(c.opcoes) ? c.opcoes : [],
-    obrigatorio: !!c.obrigatorio, lista: c.pipefy_campo ? null : c.lista || null, descricao: c.descricao || '', boxer: !c.pipefy_campo };
+    obrigatorio: !!c.obrigatorio, lista: c.pipefy_campo ? null : c.lista || null, descricao: c.descricao || '', boxer: !c.pipefy_campo,
+    cfg_id: c.id, cria_opcoes: c.tipo === 'lista' && !!c.cria_opcoes };
 }

@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { X, Pencil, Save, Paperclip, RotateCcw, Search, Plus, Check } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
-import { FotosCampo } from './FotosOrcamento';
+import { FotosCampo, useServicoQuadro } from './FotosOrcamento';
 import { CONFIG_ORCAMENTO, COLUNAS_ORCAMENTO } from '../../utils/fasesOrcamento';
 import { campoDaConfig } from './ConfigOrcamento';
 
@@ -194,6 +194,51 @@ function CampoData({ valor, onChange, comHora, cls }) {
   );
 }
 
+// Lista em que quem preenche pode criar uma opção nova (fica salva no campo para os próximos cards)
+function ListaComNova({ campo, valor, onChange, cls }) {
+  const svc = useServicoQuadro();
+  const [opcoes, setOpcoes] = useState(() => campo.opcoes || []);
+  const [nova, setNova] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+  useEffect(() => { setOpcoes(campo.opcoes || []); }, [campo.opcoes]);
+  const atual = valorLista(valor)[0] || '';
+  const salvar = async () => {
+    const t = (nova || '').replace(/\s+/g, ' ').trim();
+    if (!t) return;
+    setSalvando(true); setErro('');
+    try {
+      const { data } = await svc.criarOpcao(campo.cfg_id, t);
+      const lista = Array.isArray(data?.opcoes) ? data.opcoes : [...opcoes, t];
+      setOpcoes(lista);
+      if (Array.isArray(campo.opcoes)) campo.opcoes.splice(0, campo.opcoes.length, ...lista);
+      onChange(data?.opcao || t);
+      setNova(null);
+    } catch (e) { setErro(e?.response?.data?.erro || 'Não foi possível criar a opção.'); }
+    finally { setSalvando(false); }
+  };
+  if (nova !== null) return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5">
+        <input autoFocus value={nova} onChange={e => setNova(e.target.value)} placeholder="Nome da nova opção" maxLength={120}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); salvar(); } if (e.key === 'Escape') setNova(null); }} className={cls} />
+        <button type="button" onClick={salvar} disabled={salvando || !nova.trim()} title="Criar opção"
+          className="shrink-0 px-2 py-1 rounded-lg bg-[var(--c-destaque)] text-white text-[10px] font-semibold disabled:opacity-50">{salvando ? '...' : 'Criar'}</button>
+        <button type="button" onClick={() => { setNova(null); setErro(''); }} title="Cancelar" className="shrink-0 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>
+      </div>
+      {erro && <p className="text-[10px] text-red-400">{erro}</p>}
+    </div>
+  );
+  return (
+    <select value={atual} onChange={e => { if (e.target.value === '__nova__') setNova(''); else onChange(e.target.value); }} className={cls}>
+      <option value="">—</option>
+      {opcoes.map(o => <option key={o} value={o}>{o}</option>)}
+      {atual && !opcoes.includes(atual) && <option value={atual}>{atual}</option>}
+      <option value="__nova__">+ Nova opção…</option>
+    </select>
+  );
+}
+
 export function Editor({ campo, valor, onChange }) {
   if (['date', 'datetime', 'due_date'].includes(campo.tipo)) {
     const cls = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]';
@@ -217,6 +262,7 @@ export function Editor({ campo, valor, onChange }) {
       </div>
     );
   }
+  if (campo.cria_opcoes && campo.cfg_id) return <ListaComNova campo={campo} valor={valor} onChange={onChange} cls={cls} />;
   if (ESCOLHA.includes(campo.tipo) && campo.opcoes?.length) {
     const atual = valorLista(valor)[0] || '';
     return (
