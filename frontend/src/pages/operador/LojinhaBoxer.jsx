@@ -525,7 +525,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
   const outros = destinos.filter(c => c !== proxima);
 
   const blocoCampo = (c, editavel) => (
-    <div key={c.id} className={`min-w-0 ${c.tipo === 'long_text' || c.tipo === 'attachment' ? 'sm:col-span-2' : ''}`}>
+    <div key={c.id} className="min-w-0">
       <dt className="text-xs font-semibold text-[var(--c-texto)]">{obrigatorioAgora(c, valorDe) && <span className="text-red-400">* </span>}{c.rotulo}</dt>
       {c.descricao && <p className="text-[11px] text-[var(--c-suave)]">{c.descricao}</p>}
       <dd className="text-xs text-[var(--c-texto)] mt-1">
@@ -584,7 +584,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
             {colAtual?.zen && <p className="text-[11px] text-amber-400">Zen: {colAtual.zen}</p>}
             {erro && <p className="text-xs text-red-400">{erro}</p>}
             {camposAtuais.length
-              ? <dl className="grid grid-cols-1 gap-y-4">{camposAtuais.map(c => blocoCampo(c, true))}</dl>
+              ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, true))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.{ehAdmin ? ' Crie em Configurar (engrenagem da coluna).' : ''}</p>}
             {sujo && (
               <div className="sticky bottom-0 flex items-center justify-end gap-2 py-2 bg-[var(--c-fundo)] border-t border-[var(--c-borda)]">
