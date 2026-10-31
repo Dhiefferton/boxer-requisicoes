@@ -8,6 +8,8 @@ import { ESTRUTURA_ORCAMENTO } from './orcamentoEstrutura.js';
 // Integração com o Pipefy DESLIGADA (31/10/2026): o B-Requisições roda sozinho.
 // Nenhuma chamada sai para a API do Pipefy (consultas e alterações). Para religar:
 // variável de ambiente PIPEFY_ATIVO=true.
+// Exceção: as Planilhas (tempos de separação/conferência, pipefyTempos.js) continuam
+// lendo o Pipefy, pela pipefyQueryPlanilhas.
 export const PIPEFY_ATIVO = process.env.PIPEFY_ATIVO === 'true';
 
 const PIPEFY_API = 'https://api.pipefy.com/graphql';
@@ -34,8 +36,8 @@ function escapePipefy(str) {
     .replace(/[\u0000-\u001F]/g, '');
 }
 
-async function pipefyMutation(mutation, variables) {
-  if (!PIPEFY_ATIVO) throw new Error('Integração com o Pipefy desligada — o B-Requisições está rodando sem o Pipefy.');
+async function pipefyMutation(mutation, variables, liberado = false) {
+  if (!PIPEFY_ATIVO && !liberado) throw new Error('Integração com o Pipefy desligada — o B-Requisições está rodando sem o Pipefy.');
   console.log('🔄 Pipefy request iniciado...');
   console.log('TOKEN presente:', !!TOKEN);
 
@@ -77,6 +79,12 @@ async function pipefyMutation(mutation, variables) {
 // Usada pra diagnóstico (listar pipes/fases) e, futuramente, pra ler cards.
 export async function pipefyQuery(query, variables) {
   return pipefyMutation(query, variables);
+}
+
+// Só leitura para as Planilhas: funciona mesmo com a integração desligada
+export async function pipefyQueryPlanilhas(query, variables) {
+  if (/\bmutation\b/i.test(String(query))) throw new Error('Planilhas: só consultas ao Pipefy.');
+  return pipefyMutation(query, variables, true);
 }
 
 // Pipe "Orçamento BOXER SOLDAS" -> fase "Requisitar Peças"

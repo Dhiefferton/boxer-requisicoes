@@ -8,7 +8,7 @@
 // última passada). As planilhas Pedidos.xlsx e Conferência.xlsx leem daqui.
 // ============================================================
 import { query } from '../config/db.js';
-import { pipefyQuery } from './pipefyService.js';
+import { pipefyQueryPlanilhas as pipefyQuery } from './pipefyService.js';
 
 const PIPE_ID = '301502578';            // Peças p/ Envio
 const INICIO_PADRAO = '2026-09-25T00:00:00Z';
