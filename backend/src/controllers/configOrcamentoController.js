@@ -69,7 +69,8 @@ function garantirConfig() {
         CREATE INDEX IF NOT EXISTS idx_orc_campos_coluna ON orc_campos (coluna);
         ALTER TABLE orc_campos  ADD COLUMN IF NOT EXISTS pipefy_campo VARCHAR(80);
         ALTER TABLE orc_colunas ADD COLUMN IF NOT EXISTS campos_importados BOOLEAN NOT NULL DEFAULT FALSE;
-          ALTER TABLE orc_colunas ADD COLUMN IF NOT EXISTS destinos JSONB;`);
+          ALTER TABLE orc_colunas ADD COLUMN IF NOT EXISTS destinos JSONB;
+          ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS condicao JSONB;`);
       // Colunas do sistema que ainda não estão na tabela (primeira vez ou coluna nova no código)
       const tem = new Set((await query(`SELECT chave FROM orc_colunas`)).rows.map(r => r.chave));
       for (const [i, c] of COLUNAS_PADRAO.entries()) {
@@ -89,7 +90,7 @@ export async function lerConfigOrcamento() {
   await garantirConfig();
   const [col, cam] = await Promise.all([
     query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados, destinos FROM orc_colunas WHERE ativo ORDER BY ordem, chave`),
-    query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo
+    query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao
              FROM orc_campos WHERE ativo ORDER BY coluna, ordem, id`),
   ]);
   const dados = {
@@ -184,7 +185,9 @@ export async function salvarConfig(req, res, next) {
       const opcoes = Array.isArray(c?.opcoes) ? [...new Set(c.opcoes.map(o => limpar(o, 120)).filter(Boolean))].slice(0, 100) : [];
       camposOk.push({ id: Number(c?.id) || null, coluna, tipo, rotulo, descricao: limpar(c?.descricao, 300) || null,
         obrigatorio: !!c?.obrigatorio, opcoes, ordem: ordemPorColuna[coluna], pipefy_campo: limpar(c?.pipefy_campo, 80) || null,
-        lista: tipo === 'conexao' && !c?.pipefy_campo ? (LISTAS.includes(c?.lista) ? c.lista : LISTAS[0]) : null });
+        lista: tipo === 'conexao' && !c?.pipefy_campo ? (LISTAS.includes(c?.lista) ? c.lista : LISTAS[0]) : null,
+          // Obrigatório só quando outro campo tem um valor: { campo: uid do outro campo, valor }
+          uid: String(c?.uid || ''), condicao: c?.condicao?.campo && c?.condicao?.valor ? { campo: String(c.condicao.campo), valor: limpar(c.condicao.valor, 120) } : null });
     }
 
     await transaction(async (cli) => {
@@ -201,16 +204,27 @@ export async function salvarConfig(req, res, next) {
       // Campos que saíram ficam desativados (os valores já preenchidos nos cards continuam guardados)
       const manter = camposOk.filter(c => c.id).map(c => c.id);
       await cli.query(`UPDATE orc_campos SET ativo = FALSE, atualizado_em = NOW() WHERE ativo AND NOT (id = ANY($1::int[]))`, [manter]);
+      const idPorUid = {};
       for (const c of camposOk) {
         const vals = [c.coluna, c.tipo, c.rotulo, c.descricao, c.obrigatorio, JSON.stringify(c.opcoes), c.lista, c.ordem, c.pipefy_campo];
         if (c.id) {
           const r = await cli.query(
             `UPDATE orc_campos SET coluna=$1, tipo=$2, rotulo=$3, descricao=$4, obrigatorio=$5, opcoes=$6::jsonb, lista=$7, ordem=$8, pipefy_campo=$9,
                     ativo = TRUE, atualizado_em = NOW() WHERE id = $10`, [...vals, c.id]);
+          if (r.rowCount) idPorUid[c.uid] = c.id;
           if (r.rowCount) continue;
         }
-        await cli.query(
-          `INSERT INTO orc_campos (coluna, tipo, rotulo, descricao, obrigatorio, opcoes, lista, ordem, pipefy_campo) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)`, vals);
+        const ins = await cli.query(
+          `INSERT INTO orc_campos (coluna, tipo, rotulo, descricao, obrigatorio, opcoes, lista, ordem, pipefy_campo) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9) RETURNING id`, vals);
+        idPorUid[c.uid] = ins.rows[0]?.id;
+      }
+      // Condições ("obrigatório só quando"): o outro campo pelo id gravado
+      for (const c of camposOk) {
+        const id = idPorUid[c.uid] || c.id;
+        if (!id) continue;
+        const ref = c.condicao ? (idPorUid[c.condicao.campo] || Number(String(c.condicao.campo).replace(/^id_/, '')) || null) : null;
+        await cli.query(`UPDATE orc_campos SET condicao = $1::jsonb WHERE id = $2`,
+          [ref && ref !== id ? JSON.stringify({ campo: ref, valor: c.condicao.valor }) : null, id]);
       }
     });
     cache = null;

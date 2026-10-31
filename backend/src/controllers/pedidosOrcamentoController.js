@@ -17,6 +17,7 @@ import {
   retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen, atualizarItensPedidoZen, buscarClienteZen,
 } from '../integrations/zenPedidoVenda.js';
 import { lerConfigOrcamento, idCampoConfig } from './configOrcamentoController.js';
+import { exigidoAgora } from './configQuadro.js';
 
 const BASE_SELECT = `
   SELECT
@@ -386,7 +387,7 @@ export async function moverPedido(req, res, next) {
     // Card criado no B-Requisições: campos obrigatórios da coluna atual (configuração) antes de sair dela
     if ((!PIPEFY_ATIVO || !pedido.pipefy_card_id) && status !== pedido.status) {
       const valores = Object.fromEntries((Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).filter(c => c?.id).map(c => [c.id, c.valor]));
-      const faltando = (cfg?.campos || []).filter(c => c.coluna === pedido.status && c.obrigatorio && c.tipo !== 'anexo'
+      const faltando = (cfg?.campos || []).filter(c => c.coluna === pedido.status && exigidoAgora(c, cfg.campos, valores, idCampoConfig) && c.tipo !== 'anexo'
         && !String(valores[idCampoConfig(c)] ?? '').replace(/[\[\]"]/g, '').trim());
       if (faltando.length) {
         return res.status(400).json({ erro: `Preencha antes de sair de "${nomeCol(pedido.status)}": ${faltando.map(c => c.rotulo).join(', ')}.` });
@@ -705,7 +706,7 @@ export async function criarCardBoxer(req, res, next) {
     const cfg = await lerConfigOrcamento().catch(() => null);
     const inicioCfg = (cfg?.campos || []).filter(c => c.coluna === 'inicio');
     const inicio = inicioCfg.length
-      ? inicioCfg.map(c => ({ id: idCampoConfig(c), rotulo: c.rotulo, obrigatorio: c.obrigatorio && c.tipo !== 'anexo', tipo: c.tipo }))
+      ? inicioCfg.map(c => ({ id: idCampoConfig(c), rotulo: c.rotulo, obrigatorio: exigidoAgora(c, inicioCfg, campos, idCampoConfig) && c.tipo !== 'anexo', tipo: c.tipo }))
       : ((await estruturaPipeOrcamento()).find(f => f.faseId === 'inicio')?.campos || []);
     const faltando = inicio.filter(c => c.obrigatorio && c.tipo !== 'id' && !String(campos[c.id] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha: ${faltando.map(c => c.rotulo).join(', ')}.` });

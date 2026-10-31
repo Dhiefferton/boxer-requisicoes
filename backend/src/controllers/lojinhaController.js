@@ -15,7 +15,7 @@
 import { query } from '../config/db.js';
 import { buscarClienteZen, excluirPedidoVendaZen, consultarOrdemSeparacao } from '../integrations/zenPedidoVenda.js';
 import { PIPEFY_ATIVO } from '../integrations/pipefyService.js';
-import { criarConfigQuadro } from './configQuadro.js';
+import { criarConfigQuadro, exigidoAgora } from './configQuadro.js';
 
 // ── Colunas e campos da Lojinha (Configurar, só admin) ─────
 // Colunas do sistema (status gravados no pedido). Entrada também mostra 'liberacao'.
@@ -452,7 +452,7 @@ export async function moverPedidoLojinha(req, res, next) {
     }
     // Campos obrigatórios da coluna atual antes de sair dela
     const valores = p.campos || {};
-    const faltando = cfg.campos.filter(c => c.coluna === atual && c.obrigatorio && c.tipo !== 'anexo'
+    const faltando = cfg.campos.filter(c => c.coluna === atual && exigidoAgora(c, cfg.campos, valores, cfgLojinha.idCampoConfig) && c.tipo !== 'anexo'
       && !String(valores[cfgLojinha.idCampoConfig(c)] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha antes de sair de "${col.get(atual)?.nome || atual}": ${faltando.map(c => c.rotulo).join(', ')}.` });
     const r = await query(
