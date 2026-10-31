@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { X, Plus, Search, CheckCircle2 } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
-import { carregarEstrutura, Editor, valorLista } from './CamposCardOrcamento';
+import { carregarEstrutura, Editor, valorLista, obrigatorioAgora } from './CamposCardOrcamento';
 import { CONFIG_ORCAMENTO } from '../../utils/fasesOrcamento';
 import { campoDaConfig } from './ConfigOrcamento';
 
@@ -73,7 +73,7 @@ export default function NovoCardOrcamento({ onFechar, onCriado }) {
 
   async function criar() {
     if (!cliente) { setErro('Busque o cliente no Zen pelo CPF/CNPJ.'); return; }
-    const faltando = (campos || []).filter(c => c.obrigatorio && !valorLista(valores[c.id]).length);
+    const faltando = (campos || []).filter(c => obrigatorioAgora(c, (id) => valores[id]) && !valorLista(valores[c.id]).length);
     if (faltando.length) { setErro(`Preencha: ${faltando.map(c => c.rotulo).join(', ')}.`); return; }
     setSalvando(true); setErro('');
     try {
@@ -123,7 +123,7 @@ export default function NovoCardOrcamento({ onFechar, onCriado }) {
           )}
           {campos?.filter(c => !DO_ZEN.includes(c.id)).map(c => (
             <div key={c.id}>
-              <label className="block text-xs text-[var(--c-suave)] mb-1">{c.rotulo}{c.obrigatorio && <span className="text-red-400">*</span>}</label>
+              <label className="block text-xs text-[var(--c-suave)] mb-1">{c.rotulo}{obrigatorioAgora(c, (id) => valores[id]) && <span className="text-red-400">*</span>}</label>
               <Editor campo={c} valor={valores[c.id] || ''} onChange={v => setValores(x => ({ ...x, [c.id]: v }))} />
             </div>
           ))}

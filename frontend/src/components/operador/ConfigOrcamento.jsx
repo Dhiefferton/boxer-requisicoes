@@ -84,7 +84,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
   // da sua fase do Pipefy recebem esses campos aqui, para editar (grava no Salvar)
   function carregarDe(data, fases = null) {
     const cols = data.colunas.map(c => ({ ...c }));
-    const lista = data.campos.map(c => ({ ...c, uid: `id_${c.id}`, opcoes: Array.isArray(c.opcoes) ? c.opcoes : [] }));
+    const lista = data.campos.map(c => ({ ...c, uid: `id_${c.id}`, opcoes: Array.isArray(c.opcoes) ? c.opcoes : [],
+      condicao: c.condicao?.campo ? { campo: `id_${c.condicao.campo}`, valor: c.condicao.valor } : null }));
     const trazidas = [];
     if (Array.isArray(fases)) {
       for (const col of cols) {
@@ -194,7 +195,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
     try {
       const { data } = await svc.salvarConfig({
         colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null })),
-        campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null })),
+        campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null,
+          uid: c.uid, condicao: c.obrigatorio && c.condicao?.campo && c.condicao?.valor ? c.condicao : null })),
       });
       // as colunas novas ganharam chave: mantém a seleção pela posição
       const pos = colunas.findIndex(c => keyCol(c) === colSel);
@@ -339,6 +341,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       <Sigla tipo={c.tipo} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-[var(--c-texto)]">{c.obrigatorio && <span className="text-red-400">* </span>}{c.rotulo}
+                          {c.obrigatorio && c.condicao?.campo && <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-amber-400 bg-amber-500/10 rounded px-1 py-0.5" title={`Obrigatório só quando "${camposAtuais.find(o => o.uid === c.condicao.campo)?.rotulo || '?'}" for "${c.condicao.valor}"`}>condicional</span>}
                           {c.pipefy_campo && <span title="Campo que já existia na fase do Pipefy (o valor do card vem de lá)" className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-sky-400 bg-sky-500/10 rounded px-1 py-0.5">Pipefy</span>}</p>
                         {c.descricao && <p className="text-[11px] text-[var(--c-suave)]">{c.descricao}</p>}
                       </div>
@@ -367,6 +370,28 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                     <input type="checkbox" checked={!!campoAtual.obrigatorio} onChange={() => mudarCampo(campoAtual.uid, c => ({ ...c, obrigatorio: !c.obrigatorio }))} />
                     {aba === 'inicio' ? 'Obrigatório para criar o card' : 'Obrigatório para sair desta coluna'}
                   </label>
+                  {campoAtual.obrigatorio && (() => {
+                    // Obrigatório só quando outro campo (com opções) desta coluna tiver um valor
+                    const refs = camposAtuais.filter(o => o.uid !== campoAtual.uid && COM_OPCOES.includes(o.tipo) && (o.opcoes || []).length);
+                    const ref = refs.find(o => o.uid === campoAtual.condicao?.campo) || null;
+                    return (
+                      <div className="rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 space-y-1.5">
+                        <p className="text-[11px] font-semibold text-[var(--c-texto)]">Quando é obrigatório</p>
+                        <select value={ref ? ref.uid : ''} className={inp}
+                          onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: e.target.value ? { campo: e.target.value, valor: (refs.find(o => o.uid === e.target.value)?.opcoes || [])[0] || '' } : null }))}>
+                          <option value="">Sempre</option>
+                          {refs.map(o => <option key={o.uid} value={o.uid}>Só quando "{o.rotulo}" for…</option>)}
+                        </select>
+                        {ref && (
+                          <select value={campoAtual.condicao?.valor || ''} className={inp}
+                            onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: { ...c.condicao, valor: e.target.value } }))}>
+                            {ref.opcoes.map(o => <option key={o} value={o}>{o}</option>)}
+                          </select>
+                        )}
+                        {!refs.length && <p className="text-[10px] text-[var(--c-suave)]">Para condicionar, crie antes nesta coluna um campo com opções (lista, única opção ou checkbox).</p>}
+                      </div>
+                    );
+                  })()}
                   {COM_OPCOES.includes(campoAtual.tipo) && (
                     <div className="space-y-1.5">
                       <p className="text-[11px] text-[var(--c-suave)]">Opções</p>
@@ -486,7 +511,10 @@ const TIPO_EDITOR = {
   data: 'date', datahora: 'datetime', vencimento: 'due_date', etiquetas: 'label_select', email: 'email', telefone: 'phone',
   lista: 'select', unica: 'radio_vertical', numero: 'number', moeda: 'currency', documento: 'short_text', conexao: 'connector',
 };
-export function campoDaConfig(c) {
-  return { id: c.pipefy_campo || `bx_${c.id}`, pipefy_campo: c.pipefy_campo || null, rotulo: c.rotulo, tipo: TIPO_EDITOR[c.tipo] || 'short_text', opcoes: Array.isArray(c.opcoes) ? c.opcoes : [],
+export function campoDaConfig(c, _i, todos = []) {
+  // Obrigatório só quando outro campo tiver um valor (condição gravada com o id do outro campo)
+  const ref = c.condicao?.campo ? (todos || []).find(x => Number(x.id) === Number(c.condicao.campo)) : null;
+  const quando = ref ? { id: ref.pipefy_campo || `bx_${ref.id}`, valor: c.condicao.valor } : null;
+  return { quando, id: c.pipefy_campo || `bx_${c.id}`, pipefy_campo: c.pipefy_campo || null, rotulo: c.rotulo, tipo: TIPO_EDITOR[c.tipo] || 'short_text', opcoes: Array.isArray(c.opcoes) ? c.opcoes : [],
     obrigatorio: !!c.obrigatorio, lista: c.pipefy_campo ? null : c.lista || null, descricao: c.descricao || '', boxer: !c.pipefy_campo };
 }

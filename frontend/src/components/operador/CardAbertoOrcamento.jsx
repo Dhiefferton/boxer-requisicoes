@@ -12,7 +12,7 @@ import { X, Settings, ArrowRight, ArrowLeft, Save, ExternalLink, History, Ban, P
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 import { FotosCampo } from './FotosOrcamento';
-import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA } from './CamposCardOrcamento';
+import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA, obrigatorioAgora } from './CamposCardOrcamento';
 import { COLUNAS_ORCAMENTO, STATUS_SO_ADMIN } from '../../utils/fasesOrcamento';
 
 const ehLargo = (c) => c.tipo === 'long_text' || c.tipo === 'attachment';
@@ -119,7 +119,7 @@ export default function CardAbertoOrcamento({
   const blocoCampo = (c, editavel) => (
     <div key={c.id} className={`min-w-0 ${ehLargo(c) ? 'sm:col-span-2' : ''}`}>
       <dt className="text-xs font-semibold text-[var(--c-texto)] flex items-center gap-1">
-        {c.obrigatorio && <span className="text-red-400">*</span>}{c.rotulo}
+        {obrigatorioAgora(c, valorDe) && <span className="text-red-400">*</span>}{c.rotulo}
         {c.id in editados && !(c.id in rascunho) && <span title="Editado no B-Requisições" className="text-[10px] font-normal text-amber-400">(editado)</span>}
         {editavel && c.id in editados && !(c.id in rascunho) && (
           <button title="Desfazer a edição local" onClick={() => setRascunho(r => ({ ...r, [c.id]: '' }))}

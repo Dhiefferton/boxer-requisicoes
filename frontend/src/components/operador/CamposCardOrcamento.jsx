@@ -40,6 +40,13 @@ const MULTI = ['checklist_vertical', 'checklist_horizontal', 'label_select'];
 const ESCOLHA = ['select', 'radio_vertical', 'radio_horizontal'];
 export const SO_LEITURA = ['attachment', 'id'];
 
+// Obrigatório agora? (campo.quando = obrigatório só quando outro campo tiver o valor)
+export function obrigatorioAgora(campo, valorDe) {
+  if (!campo?.obrigatorio) return false;
+  if (!campo.quando) return true;
+  return valorLista(valorDe(campo.quando.id)).map(v => String(v).trim()).includes(String(campo.quando.valor).trim());
+}
+
 export function Valor({ campo, valor }) {
   const lista = valorLista(valor);
   if (!lista.length) return <span className="text-[var(--c-suave)]">—</span>;
