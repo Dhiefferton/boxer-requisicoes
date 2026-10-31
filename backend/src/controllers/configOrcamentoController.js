@@ -70,7 +70,8 @@ function garantirConfig() {
         ALTER TABLE orc_campos  ADD COLUMN IF NOT EXISTS pipefy_campo VARCHAR(80);
         ALTER TABLE orc_colunas ADD COLUMN IF NOT EXISTS campos_importados BOOLEAN NOT NULL DEFAULT FALSE;
           ALTER TABLE orc_colunas ADD COLUMN IF NOT EXISTS destinos JSONB;
-          ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS condicao JSONB;`);
+          ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS condicao JSONB;
+          ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS cria_opcoes BOOLEAN NOT NULL DEFAULT FALSE;`);
       // Colunas do sistema que ainda não estão na tabela (primeira vez ou coluna nova no código)
       const tem = new Set((await query(`SELECT chave FROM orc_colunas`)).rows.map(r => r.chave));
       for (const [i, c] of COLUNAS_PADRAO.entries()) {
@@ -90,7 +91,7 @@ export async function lerConfigOrcamento() {
   await garantirConfig();
   const [col, cam] = await Promise.all([
     query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados, destinos FROM orc_colunas WHERE ativo ORDER BY ordem, chave`),
-    query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao
+    query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao, cria_opcoes
              FROM orc_campos WHERE ativo ORDER BY coluna, ordem, id`),
   ]);
   const dados = {
@@ -182,11 +183,12 @@ export async function salvarConfig(req, res, next) {
       if (!tipo) return res.status(400).json({ erro: `Tipo de campo inválido: ${c?.tipo}.` });
       if (!rotulo) return res.status(400).json({ erro: 'Todo campo precisa de um nome.' });
       ordemPorColuna[coluna] = (ordemPorColuna[coluna] || 0) + 10;
-      const opcoes = Array.isArray(c?.opcoes) ? [...new Set(c.opcoes.map(o => limpar(o, 120)).filter(Boolean))].slice(0, 100) : [];
+      const opcoes = Array.isArray(c?.opcoes) ? [...new Set(c.opcoes.map(o => limpar(o, 120)).filter(Boolean))].slice(0, 300) : [];
       camposOk.push({ id: Number(c?.id) || null, coluna, tipo, rotulo, descricao: limpar(c?.descricao, 300) || null,
         obrigatorio: !!c?.obrigatorio, opcoes, ordem: ordemPorColuna[coluna], pipefy_campo: limpar(c?.pipefy_campo, 80) || null,
         lista: tipo === 'conexao' && !c?.pipefy_campo ? (LISTAS.includes(c?.lista) ? c.lista : LISTAS[0]) : null,
           // Obrigatório só quando outro campo tem um valor: { campo: uid do outro campo, valor }
+          cria_opcoes: tipo === 'lista' && !!c?.cria_opcoes,
           uid: String(c?.uid || ''), condicao: c?.condicao?.campo && c?.condicao?.valor ? { campo: String(c.condicao.campo), valor: limpar(c.condicao.valor, 120) } : null });
     }
 
@@ -223,8 +225,8 @@ export async function salvarConfig(req, res, next) {
         const id = idPorUid[c.uid] || c.id;
         if (!id) continue;
         const ref = c.condicao ? (idPorUid[c.condicao.campo] || Number(String(c.condicao.campo).replace(/^id_/, '')) || null) : null;
-        await cli.query(`UPDATE orc_campos SET condicao = $1::jsonb WHERE id = $2`,
-          [ref && ref !== id ? JSON.stringify({ campo: ref, valor: c.condicao.valor }) : null, id]);
+        await cli.query(`UPDATE orc_campos SET condicao = $1::jsonb, cria_opcoes = $3 WHERE id = $2`,
+          [ref && ref !== id ? JSON.stringify({ campo: ref, valor: c.condicao.valor }) : null, id, c.cria_opcoes]);
       }
     });
     cache = null;
@@ -233,4 +235,26 @@ export async function salvarConfig(req, res, next) {
     if (err.status) return res.status(err.status).json({ erro: err.message });
     next(err);
   }
+}
+
+// POST .../campos/:id/opcoes — quem preenche o card cria uma opção nova na lista (campo com "pode criar opções")
+export async function adicionarOpcao(req, res, next) {
+  try {
+    await garantirConfig();
+    const id = Number(req.params.id);
+    const opcao = limpar(req.body?.opcao, 120);
+    if (!id || !opcao) return res.status(400).json({ erro: 'Informe a opção.' });
+    const r = await query(`SELECT tipo, cria_opcoes, COALESCE(opcoes, '[]'::jsonb) AS opcoes FROM orc_campos WHERE id = $1 AND ativo`, [id]);
+    const c = r.rows[0];
+    if (!c) return res.status(404).json({ erro: 'Campo não encontrado.' });
+    if (!c.cria_opcoes) return res.status(403).json({ erro: 'Este campo não permite criar opções.' });
+    const atuais = Array.isArray(c.opcoes) ? c.opcoes.map(String) : [];
+    const igual = atuais.find(o => o.toLowerCase() === opcao.toLowerCase());
+    if (igual) return res.json({ sucesso: true, opcao: igual, opcoes: atuais });
+    if (atuais.length >= 300) return res.status(400).json({ erro: 'Lista cheia (300 opções).' });
+    const opcoes = [...atuais, opcao];
+    await query(`UPDATE orc_campos SET opcoes = $1::jsonb, atualizado_em = NOW() WHERE id = $2`, [JSON.stringify(opcoes), id]);
+    cache = null;
+    res.json({ sucesso: true, opcao, opcoes });
+  } catch (err) { next(err); }
 }

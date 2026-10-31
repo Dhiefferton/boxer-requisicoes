@@ -30,6 +30,7 @@ const COLUNAS_LOJINHA = [
 const cfgLojinha = criarConfigQuadro({ TC: 'loj_colunas', TF: 'loj_campos', tabPedidos: 'lojinha_boxer_pedidos', padrao: COLUNAS_LOJINHA });
 export const verConfigLojinha = (req, res, next) => cfgLojinha.verConfig(req, res, next);
 export const salvarConfigLojinha = (req, res, next) => cfgLojinha.salvarConfig(req, res, next);
+export const adicionarOpcaoLojinha = (req, res, next) => cfgLojinha.adicionarOpcao(req, res, next);
 
 // ── Histórico de movimentação ───────────────────────────────
 async function registrarMovLoj(pedido, tipo, { de = null, para = null, descricao = null, detalhes = null, usuario = null, origem = 'usuario' } = {}) {
