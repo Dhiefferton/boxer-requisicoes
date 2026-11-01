@@ -428,12 +428,6 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       </div>
                     </div>
                   )}
-                  {campoAtual.tipo === 'lista' && (
-                    <label className="flex items-start gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
-                      <input type="checkbox" className="mt-0.5" checked={!!campoAtual.cria_opcoes} onChange={() => mudarCampo(campoAtual.uid, c => ({ ...c, cria_opcoes: !c.cria_opcoes }))} />
-                      <span>Quem preenche pode criar novas opções<span className="block text-[10px] text-[var(--c-suave)]">Aparece “+ Nova opção” na lista do card; a opção criada fica salva para os próximos.</span></span>
-                    </label>
-                  )}
                   {campoAtual.pipefy_campo && <p className="text-[11px] text-sky-400">Campo que já existia na fase do Pipefy: o valor do card continua o mesmo. Nome, descrição, obrigatório, ordem e opções mudam só aqui no B-Requisições.</p>}
                   {campoAtual.tipo === 'conexao' && !campoAtual.pipefy_campo && (
                     <label className="block text-[11px] text-[var(--c-suave)] space-y-1">Lista do B-Requisições

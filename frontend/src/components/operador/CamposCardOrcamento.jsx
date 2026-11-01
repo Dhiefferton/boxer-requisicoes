@@ -7,8 +7,8 @@
 // como Cliente/Peça, anexos, etiquetas) ficam só no B-Requisições.
 // Os demais só visualizam.
 // ============================================================
-import { useEffect, useMemo, useState } from 'react';
-import { X, Pencil, Save, Paperclip, RotateCcw, Search, Plus, Check } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { X, Pencil, Save, Paperclip, RotateCcw, Search, Plus, Check, ChevronDown } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 import { FotosCampo, useServicoQuadro } from './FotosOrcamento';
@@ -204,48 +204,95 @@ function CampoData({ valor, onChange, comHora, cls }) {
   );
 }
 
-// Lista em que quem preenche pode criar uma opção nova (fica salva no campo para os próximos cards)
-function ListaComNova({ campo, valor, onChange, cls }) {
+// Lista com busca e "Criar registro" (todas as listas, Orçamento e Lojinha).
+// A opção criada fica salva no campo para os próximos cards (quando o campo é do Configurar).
+const normBusca = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function ListaBusca({ campo, valor, onChange }) {
   const svc = useServicoQuadro();
+  const caixa = useRef(null);
   const [opcoes, setOpcoes] = useState(() => campo.opcoes || []);
-  const [nova, setNova] = useState(null);
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState('');
+  const [novo, setNovo] = useState(null); // null = fechado; texto = nome do registro novo
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   useEffect(() => { setOpcoes(campo.opcoes || []); }, [campo.opcoes]);
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e) => { if (caixa.current && !caixa.current.contains(e.target)) { setAberto(false); setNovo(null); } };
+    document.addEventListener('mousedown', fora);
+    return () => document.removeEventListener('mousedown', fora);
+  }, [aberto]);
   const atual = valorLista(valor)[0] || '';
-  const salvar = async () => {
-    const t = (nova || '').replace(/\s+/g, ' ').trim();
+  const filtradas = opcoes.filter(o => normBusca(o).includes(normBusca(busca)));
+  const escolher = (o) => { onChange(o); setAberto(false); setBusca(''); setNovo(null); setErro(''); };
+  async function criar() {
+    const t = String(novo || '').replace(/\s+/g, ' ').trim();
     if (!t) return;
+    const igual = opcoes.find(o => normBusca(o) === normBusca(t));
+    if (igual) { escolher(igual); return; }
+    if (!campo.cfg_id || !svc.criarOpcao) { setOpcoes(l => [...l, t]); escolher(t); return; }
     setSalvando(true); setErro('');
     try {
       const { data } = await svc.criarOpcao(campo.cfg_id, t);
       const lista = Array.isArray(data?.opcoes) ? data.opcoes : [...opcoes, t];
       setOpcoes(lista);
       if (Array.isArray(campo.opcoes)) campo.opcoes.splice(0, campo.opcoes.length, ...lista);
-      onChange(data?.opcao || t);
-      setNova(null);
-    } catch (e) { setErro(e?.response?.data?.erro || 'Não foi possível criar a opção.'); }
+      escolher(data?.opcao || t);
+    } catch (e) { setErro(e?.response?.data?.erro || 'Não foi possível criar o registro.'); }
     finally { setSalvando(false); }
-  };
-  if (nova !== null) return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-1.5">
-        <input autoFocus value={nova} onChange={e => setNova(e.target.value)} placeholder="Nome da nova opção" maxLength={120}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); salvar(); } if (e.key === 'Escape') setNova(null); }} className={cls} />
-        <button type="button" onClick={salvar} disabled={salvando || !nova.trim()} title="Criar opção"
-          className="shrink-0 px-2 py-1 rounded-lg bg-[var(--c-destaque)] text-white text-[10px] font-semibold disabled:opacity-50">{salvando ? '...' : 'Criar'}</button>
-        <button type="button" onClick={() => { setNova(null); setErro(''); }} title="Cancelar" className="shrink-0 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>
-      </div>
-      {erro && <p className="text-[10px] text-red-400">{erro}</p>}
-    </div>
-  );
+  }
+  const inp = 'w-full py-1.5 rounded-lg text-xs bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]';
   return (
-    <select value={atual} onChange={e => { if (e.target.value === '__nova__') setNova(''); else onChange(e.target.value); }} className={cls}>
-      <option value="">—</option>
-      {opcoes.map(o => <option key={o} value={o}>{o}</option>)}
-      {atual && !opcoes.includes(atual) && <option value={atual}>{atual}</option>}
-      <option value="__nova__">+ Nova opção…</option>
-    </select>
+    <div ref={caixa} className="relative">
+      <button type="button" onClick={() => setAberto(a => !a)}
+        className="w-full flex items-center gap-2 text-left bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1.5 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]">
+        <span className="flex-1 truncate">{atual || <span className="text-[var(--c-suave)]">Selecione…</span>}</span>
+        <ChevronDown size={13} className="shrink-0 text-[var(--c-suave)]" />
+      </button>
+      {aberto && (
+        <div className="absolute z-30 mt-1 w-full bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl shadow-xl p-2 space-y-2">
+          {novo === null ? (
+            <button type="button" onClick={() => { setNovo(busca); setErro(''); }}
+              className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/10">
+              <Plus size={12} /> Criar registro
+            </button>
+          ) : (
+            <div className="rounded-lg border border-[var(--c-destaque)]/40 bg-[var(--c-destaque)]/5 p-2 space-y-1.5">
+              <p className="text-[11px] font-semibold text-[var(--c-texto)]">Novo registro em “{campo.rotulo}”</p>
+              <input autoFocus value={novo} onChange={e => setNovo(e.target.value)} placeholder="Nome" maxLength={120}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); criar(); } if (e.key === 'Escape') setNovo(null); }}
+                className={`${inp} px-2`} />
+              <div className="flex justify-end gap-1.5">
+                <button type="button" onClick={() => setNovo(null)} className="px-2 py-1 rounded-lg text-[11px] text-[var(--c-suave)] hover:text-[var(--c-texto)]">Cancelar</button>
+                <button type="button" onClick={criar} disabled={salvando || !String(novo).trim()}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
+                  {salvando ? <Spinner size={11} /> : <Check size={11} />} Salvar registro
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="relative">
+            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
+            <input autoFocus={novo === null} value={busca} onChange={e => setBusca(e.target.value)} placeholder="Pesquisar"
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (filtradas.length === 1) escolher(filtradas[0]); } if (e.key === 'Escape') setAberto(false); }}
+              className={`${inp} pl-7 pr-7`} />
+            {busca && <button type="button" onClick={() => setBusca('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
+          </div>
+          {erro && <p className="text-[11px] text-red-400">{erro}</p>}
+          <div className="max-h-56 overflow-y-auto space-y-0.5">
+            {atual && <button type="button" onClick={() => escolher('')} className="w-full text-left px-2 py-1 rounded-lg text-[11px] text-[var(--c-suave)] hover:bg-[var(--c-borda)]/40">Limpar seleção</button>}
+            {filtradas.map(o => (
+              <button key={o} type="button" onClick={() => escolher(o)}
+                className={`w-full flex items-center gap-1.5 text-left px-2 py-1.5 rounded-lg text-xs hover:bg-[var(--c-borda)]/40 ${o === atual ? 'text-[var(--c-destaque)] font-semibold' : 'text-[var(--c-texto)]'}`}>
+                {o === atual && <Check size={12} />}{o}
+              </button>
+            ))}
+            {!filtradas.length && <p className="px-2 py-2 text-[11px] text-[var(--c-suave)]">{opcoes.length ? 'Nada encontrado. Use “Criar registro”.' : 'Lista vazia. Use “Criar registro”.'}</p>}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -284,17 +331,7 @@ export function Editor({ campo, valor, onChange }) {
       </div>
     );
   }
-  if (campo.cria_opcoes && campo.cfg_id) return <ListaComNova campo={campo} valor={valor} onChange={onChange} cls={cls} />;
-  if (ESCOLHA.includes(campo.tipo) && campo.opcoes?.length) {
-    const atual = valorLista(valor)[0] || '';
-    return (
-      <select value={atual} onChange={e => onChange(e.target.value)} className={cls}>
-        <option value="">—</option>
-        {campo.opcoes.map(o => <option key={o} value={o}>{o}</option>)}
-        {atual && !campo.opcoes.includes(atual) && <option value={atual}>{atual}</option>}
-      </select>
-    );
-  }
+  if (ESCOLHA.includes(campo.tipo)) return <ListaBusca campo={campo} valor={valor} onChange={onChange} />;
   const texto = valorLista(valor).join(', ');
   if (campo.tipo === 'long_text') return <textarea rows={3} value={texto} onChange={e => onChange(e.target.value)} className={cls} />;
   return <input value={texto} onChange={e => onChange(e.target.value)} className={cls} />;
