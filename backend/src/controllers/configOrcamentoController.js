@@ -241,7 +241,7 @@ export async function salvarConfig(req, res, next) {
   }
 }
 
-// POST .../campos/:id/opcoes — quem preenche o card cria uma opção nova na lista (campo com "pode criar opções")
+// POST .../campos/:id/opcoes — quem preenche o card cria um registro novo na lista (todas as listas)
 export async function adicionarOpcao(req, res, next) {
   try {
     await garantirConfig();
@@ -251,7 +251,7 @@ export async function adicionarOpcao(req, res, next) {
     const r = await query(`SELECT tipo, cria_opcoes, COALESCE(opcoes, '[]'::jsonb) AS opcoes FROM orc_campos WHERE id = $1 AND ativo`, [id]);
     const c = r.rows[0];
     if (!c) return res.status(404).json({ erro: 'Campo não encontrado.' });
-    if (!c.cria_opcoes) return res.status(403).json({ erro: 'Este campo não permite criar opções.' });
+    if (!['lista', 'unica'].includes(c.tipo)) return res.status(400).json({ erro: 'Este campo não é uma lista.' });
     const atuais = Array.isArray(c.opcoes) ? c.opcoes.map(String) : [];
     const igual = atuais.find(o => o.toLowerCase() === opcao.toLowerCase());
     if (igual) return res.json({ sucesso: true, opcao: igual, opcoes: atuais });
