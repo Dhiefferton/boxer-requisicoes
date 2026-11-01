@@ -576,11 +576,10 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColu
     {aberto && (
       <CardAbertoOrcamento pedido={pedido} ehAdmin={ehAdmin} podeEditar={podeEditar}
         onFechar={() => setAberto(false)} onAtualizar={onAtualizar}
-        resumo={(tagsZen || alertas || tabelaPecas) && (
+        resumo={(tagsZen || alertas) && (
           <div className="space-y-2">
             <div>{tagsZen}</div>
             {alertas}
-            {tabelaPecas}
           </div>
         )}
         moverPara={moverPara} avancar={avancar} proxima={proxima} mudando={mudando} movendoPara={movendoPara}
