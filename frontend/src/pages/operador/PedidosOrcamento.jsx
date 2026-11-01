@@ -285,15 +285,18 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColu
   const [mudando, setMudando] = useState(false);
   // Peça vinda do campo "Registro" gravada antes da correção: mostra descrição e valor do registro
   const itens = (pedido.itens || []).map(it => {
-    const t = String(it?.descricao || '').trim();
-    if (it?.codigo || !t.startsWith('{')) return it;
-    try {
-      const r = JSON.parse(t);
-      if (!r?.descricao) return it;
-      const m = String(r.descricao).match(/^\s*([A-Za-z0-9./]*\d[A-Za-z0-9./]*)\s*-\s*(.*)$/s);
-      return { ...it, codigo: m ? m[1].trim() : null, descricao: m ? m[2].trim() : r.descricao,
-        valor_unitario: it.valor_unitario ?? (Number.isFinite(Number(r.valor)) ? Number(r.valor) : null) };
-    } catch { return it; }
+    const t = [it?.codigo, it?.descricao].filter(Boolean).join(' ');
+    if (!t.includes('"descricao"')) return it;
+    let r = null;
+    try { r = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch { r = null; }
+    if (!r?.descricao) {
+      const d = t.match(/"descricao"\s*:\s*"((?:[^"\\]|\\.)*)"/), v = t.match(/"valor"\s*:\s*(-?[\d.]+)/);
+      if (!d) return it;
+      r = { descricao: d[1], valor: v ? Number(v[1]) : null };
+    }
+    const m = String(r.descricao).match(/^\s*([A-Za-z0-9./]*\d[A-Za-z0-9./]*)\s*-\s*(.*)$/s);
+    return { ...it, codigo: m ? m[1].trim() : null, descricao: m ? m[2].trim() : r.descricao,
+      valor_unitario: it.valor_unitario ?? (Number.isFinite(Number(r.valor)) ? Number(r.valor) : null) };
   });
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
   // Automáticos (sincronização a cada 30s): Separando -> Separado (reserva finalizada no Zen)
