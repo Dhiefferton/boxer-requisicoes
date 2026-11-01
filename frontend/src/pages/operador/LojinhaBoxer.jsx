@@ -17,7 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import ConfigOrcamento, { campoDaConfig } from '../../components/operador/ConfigOrcamento';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
-import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora } from '../../components/operador/CamposCardOrcamento';
+import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, EtiquetasDoCard } from '../../components/operador/CamposCardOrcamento';
 
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
@@ -224,7 +224,7 @@ export default function LojinhaBoxer() {
                     <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem pedidos'}</p>
                     {col.status === 'entrada' && !busca && <button onClick={() => setNovo(true)} className="mt-1 text-xs text-[var(--c-destaque)] font-semibold">+ Novo pedido</button>}
                   </div>
-                ) : doStatus.map(p => <CardPedido key={p.id} p={p} carregar={carregar} onAbrir={() => setAbertoId(p.id)}
+                ) : doStatus.map(p => <CardPedido key={p.id} p={p} campos={cfg?.campos || []} carregar={carregar} onAbrir={() => setAbertoId(p.id)}
                     movendo={movendoId === p.id}
                     onArrastar={() => setArrastando(p)} onFimArraste={() => { setArrastando(null); setSoltando(null); }} />)}
               </Coluna>
@@ -434,7 +434,7 @@ function DadosPedido({ p, sempreProdutos = false }) {
 }
 
 // Card do quadro (enxuto): clique abre o card
-function CardPedido({ p, carregar, onAbrir, movendo = false, onArrastar, onFimArraste }) {
+function CardPedido({ p, campos = [], carregar, onAbrir, movendo = false, onArrastar, onFimArraste }) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
   const [excluindo, setExcluindo] = useState(false);
   const parar = (e) => e.stopPropagation();
@@ -461,6 +461,7 @@ function CardPedido({ p, carregar, onAbrir, movendo = false, onArrastar, onFimAr
         </div>
       </div>
       {p.zen_ordem_separacao_id && <div onClick={parar}><InfoLiberacao p={p} itens={itens} /></div>}
+      <EtiquetasDoCard campos={campos} valorDe={(id) => (p.campos || {})[id]} />
       <div onClick={parar}><FaixaFotosCard pedido={p} onVerTodas={onAbrir} /></div>
       <DadosPedido p={p} />
       {!p.zen_ordem_separacao_id && <div onClick={parar}><StatusZen p={p} carregar={carregar} /></div>}

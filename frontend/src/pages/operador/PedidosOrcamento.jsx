@@ -12,11 +12,11 @@ import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { podeEditarOrcamentos } from '../../utils/acessoOrcamentos';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
-import { carregarEstrutura, valorLista } from '../../components/operador/CamposCardOrcamento';
+import { carregarEstrutura, valorLista, EtiquetasDoCard } from '../../components/operador/CamposCardOrcamento';
 import CardAbertoOrcamento from '../../components/operador/CardAbertoOrcamento';
 import NovoCardOrcamento from '../../components/operador/NovoCardOrcamento';
 import { FaixaFotosCard } from '../../components/operador/FotosOrcamento';
-import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN, aplicarConfigOrcamento } from '../../utils/fasesOrcamento';
+import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN, aplicarConfigOrcamento, CONFIG_ORCAMENTO } from '../../utils/fasesOrcamento';
 import ConfigOrcamento from '../../components/operador/ConfigOrcamento';
 
 // Colunas: fases do Pipefy + Em Separação / Separado (utils/fasesOrcamento.js).
@@ -534,6 +534,11 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColu
       {!pedido.pipefy_card_id && (
         <span className="inline-block mr-1 text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 rounded px-1.5 py-0.5">Criado no B-Requisições</span>
       )}
+      <EtiquetasDoCard campos={CONFIG_ORCAMENTO.campos} valorDe={(id) => {
+        const ed = pedido.campos_editados || {};
+        if (id in ed) return ed[id];
+        return (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).find(c => c?.id === id)?.valor;
+      }} />
       {tagsZen}
       {alertas}
       <div onClick={parar}><FaixaFotosCard pedido={pedido} onVerTodas={() => setAberto(true)} /></div>
