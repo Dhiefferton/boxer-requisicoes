@@ -1,5 +1,6 @@
 ﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor, fornecedorZen } from '../controllers/fornecedoresController.js';
 import { Router } from 'express';
+import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro } from '../controllers/basesController.js';
 import bcrypt from 'bcryptjs';
 import { login, me, trocarSenha, alterarSenha, esqueciSenha, validarTokenSenha, redefinirSenha } from '../controllers/authController.js';
 import rateLimit from 'express-rate-limit';
@@ -169,6 +170,12 @@ router.post('/pedidos-orcamento/novo-card',     autenticar, exigirPerfil('admin'
 router.get('/pedidos-orcamento/cliente-zen',    autenticar, exigirPerfil('admin'), clienteZen);
 router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operador', 'admin'), criarPedido);
 // Configuração da tela de Orçamentos (colunas e campos) — só admin altera
+// Bases de registros (descrição + valor) — campo "Registro" do Orçamento e da Lojinha
+router.get('/bases',                    autenticar, listarBases);
+router.post('/bases',                   autenticar, exigirPerfil('admin'), criarBase);
+router.get('/bases/:id/registros',      autenticar, listarRegistros);
+router.post('/bases/:id/registros',     autenticar, criarRegistro);
+router.patch('/bases/registros/:id',    autenticar, exigirPerfil('admin'), editarRegistro);
 router.get('/pedidos-orcamento/config',         autenticar, exigirLeituraOrcamentos, verConfigOrcamento);
 router.post('/pedidos-orcamento/config',        autenticar, exigirPerfil('admin'), salvarConfigOrcamento);
 router.post('/pedidos-orcamento/config/campos/:id/opcoes', autenticar, exigirLeituraOrcamentos, adicionarOpcaoOrcamento);
