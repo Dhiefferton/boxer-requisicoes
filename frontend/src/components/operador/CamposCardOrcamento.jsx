@@ -63,6 +63,21 @@ export function Valor({ campo, valor }) {
   return <span className="whitespace-pre-wrap break-words">{lista.join(', ')}</span>;
 }
 
+// Etiquetas marcadas no card, para mostrar com o card fechado (campos "Etiquetas" do Configurar)
+export function EtiquetasDoCard({ campos, valorDe }) {
+  const marcadas = [];
+  for (const c of campos || []) {
+    if (c.tipo !== 'etiquetas') continue;
+    for (const o of valorLista(valorDe(c.pipefy_campo || `bx_${c.id}`))) marcadas.push({ k: `${c.id}-${o}`, o, cor: c.cores?.[o] || '#64748b' });
+  }
+  if (!marcadas.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {marcadas.map(m => <span key={m.k} className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: m.cor }}>{m.o}</span>)}
+    </div>
+  );
+}
+
 // Etiquetas com a cor configurada em Configurar
 export function Etiquetas({ lista, cores }) {
   return (
