@@ -15,8 +15,21 @@ const LISTAS = ['Modelos de máquina'];
  * Campo obrigatório agora? Sem condição: se marcado obrigatório. Com condição
  * ({ campo: id de outro campo, valor }): só quando o outro campo tem esse valor.
  */
+/** Campo visível agora? Com "visivel" ({ campo, valor }) só aparece quando o outro campo (também visível) tem esse valor. */
+export function visivelAgora(c, todos, valores, idCampo, n = 0) {
+  if (!c?.visivel?.campo || n > 10) return true;
+  const ref = (todos || []).find(x => Number(x.id) === Number(c.visivel.campo));
+  if (!ref) return true;
+  if (!visivelAgora(ref, todos, valores, idCampo, n + 1)) return false;
+  const v = String(valores?.[idCampo(ref)] ?? '').trim();
+  let lista = [v];
+  if (v.startsWith('[')) { try { const a = JSON.parse(v); if (Array.isArray(a)) lista = a; } catch {} }
+  return lista.map(x => String(x).trim()).includes(String(c.visivel.valor).trim());
+}
+
 export function exigidoAgora(c, todos, valores, idCampo) {
   if (!c.obrigatorio) return false;
+  if (!visivelAgora(c, todos, valores, idCampo)) return false;
   if (!c.condicao?.campo) return true;
   const ref = (todos || []).find(x => Number(x.id) === Number(c.condicao.campo));
   if (!ref) return true;
@@ -66,7 +79,8 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
           ALTER TABLE ${TC} ADD COLUMN IF NOT EXISTS destinos JSONB;
           ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS condicao JSONB;
           ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS cria_opcoes BOOLEAN NOT NULL DEFAULT FALSE;
-          ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS cores JSONB;`);
+          ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS cores JSONB;
+          ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS visivel JSONB;`);
         // Colunas do sistema que ainda não estão na tabela (primeira vez ou coluna nova no código)
         const tem = new Set((await query(`SELECT chave FROM ${TC}`)).rows.map(r => r.chave));
         for (const [i, c] of padrao.entries()) {
@@ -86,7 +100,7 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
     await garantirConfig();
     const [col, cam] = await Promise.all([
       query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados, destinos FROM ${TC} WHERE ativo ORDER BY ordem, chave`),
-      query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao, cria_opcoes, cores
+      query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao, cria_opcoes, cores, visivel
                FROM ${TF} WHERE ativo ORDER BY coluna, ordem, id`),
     ]);
     const dados = {
@@ -188,7 +202,9 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
           // Cor de cada opção (etiquetas): { opção: '#rrggbb' }
           cores: tipo === 'etiquetas' && c?.cores && typeof c.cores === 'object'
             ? Object.fromEntries(opcoes.filter(o => COR_OK.test(String(c.cores[o] || ''))).map(o => [o, c.cores[o]])) : null,
-          uid: String(c?.uid || ''), condicao: c?.condicao?.campo && c?.condicao?.valor ? { campo: String(c.condicao.campo), valor: limpar(c.condicao.valor, 120) } : null });
+          uid: String(c?.uid || ''), condicao: c?.condicao?.campo && c?.condicao?.valor ? { campo: String(c.condicao.campo), valor: limpar(c.condicao.valor, 120) } : null,
+          // Campo aparece só quando outro campo tem um valor (ex.: "+ Campos - Peça")
+          visivel: c?.visivel?.campo && c?.visivel?.valor ? { campo: String(c.visivel.campo), valor: limpar(c.visivel.valor, 120) } : null });
       }
   
       await transaction(async (cli) => {
@@ -224,8 +240,10 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
           const id = idPorUid[c.uid] || c.id;
           if (!id) continue;
           const ref = c.condicao ? (idPorUid[c.condicao.campo] || Number(String(c.condicao.campo).replace(/^id_/, '')) || null) : null;
-          await cli.query(`UPDATE ${TF} SET condicao = $1::jsonb, cria_opcoes = $3, cores = $4::jsonb WHERE id = $2`,
-            [ref && ref !== id ? JSON.stringify({ campo: ref, valor: c.condicao.valor }) : null, id, c.cria_opcoes, c.cores && Object.keys(c.cores).length ? JSON.stringify(c.cores) : null]);
+          const vis = c.visivel ? (idPorUid[c.visivel.campo] || Number(String(c.visivel.campo).replace(/^id_/, '')) || null) : null;
+          await cli.query(`UPDATE ${TF} SET condicao = $1::jsonb, cria_opcoes = $3, cores = $4::jsonb, visivel = $5::jsonb WHERE id = $2`,
+            [ref && ref !== id ? JSON.stringify({ campo: ref, valor: c.condicao.valor }) : null, id, c.cria_opcoes, c.cores && Object.keys(c.cores).length ? JSON.stringify(c.cores) : null,
+             vis && vis !== id ? JSON.stringify({ campo: vis, valor: c.visivel.valor }) : null]);
         }
       });
       cache = null;
