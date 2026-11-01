@@ -34,7 +34,7 @@ export const COLUNAS_PADRAO = [
 const PADRAO_POR_CHAVE = new Map(COLUNAS_PADRAO.map(c => [c.chave, c]));
 
 export const TIPOS_CAMPO = ['texto', 'longo', 'anexo', 'checkbox', 'responsavel', 'data', 'datahora', 'vencimento',
-  'etiquetas', 'email', 'telefone', 'lista', 'unica', 'numero', 'moeda', 'documento', 'conexao'];
+  'etiquetas', 'email', 'telefone', 'lista', 'unica', 'numero', 'moeda', 'documento', 'conexao', 'registro'];
 const LISTAS = ['Modelos de máquina'];
 
 let estrutura = null;
@@ -187,7 +187,8 @@ export async function salvarConfig(req, res, next) {
       const opcoes = Array.isArray(c?.opcoes) ? [...new Set(c.opcoes.map(o => limpar(o, 120)).filter(Boolean))].slice(0, 300) : [];
       camposOk.push({ id: Number(c?.id) || null, coluna, tipo, rotulo, descricao: limpar(c?.descricao, 300) || null,
         obrigatorio: !!c?.obrigatorio, opcoes, ordem: ordemPorColuna[coluna], pipefy_campo: limpar(c?.pipefy_campo, 80) || null,
-        lista: tipo === 'conexao' && !c?.pipefy_campo ? (LISTAS.includes(c?.lista) ? c.lista : LISTAS[0]) : null,
+        lista: tipo === 'conexao' && !c?.pipefy_campo ? (LISTAS.includes(c?.lista) ? c.lista : LISTAS[0])
+            : tipo === 'registro' ? (Number(c?.lista) > 0 ? String(Number(c.lista)) : null) : null, // registro: id da base
           // Obrigatório só quando outro campo tem um valor: { campo: uid do outro campo, valor }
           cria_opcoes: tipo === 'lista' && !!c?.cria_opcoes,
           // Cor de cada opção (etiquetas): { opção: '#rrggbb' }
