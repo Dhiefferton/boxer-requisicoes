@@ -12,7 +12,7 @@ import { X, Settings, ArrowRight, ArrowLeft, Save, ExternalLink, History, Ban, P
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 import { FotosCampo } from './FotosOrcamento';
-import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA, obrigatorioAgora } from './CamposCardOrcamento';
+import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA, obrigatorioAgora, visivelAgora } from './CamposCardOrcamento';
 import { COLUNAS_ORCAMENTO, STATUS_SO_ADMIN } from '../../utils/fasesOrcamento';
 
 const ehLargo = (c) => c.tipo === 'long_text' || c.tipo === 'attachment';
@@ -71,7 +71,7 @@ export default function CardAbertoOrcamento({
     .map(g => ({ ...g, campos: g.campos.filter(c => temValor(c.id) || (c.tipo === 'attachment' && fotosLocais(c.id))) }))
     .filter(g => g.campos.length)
     .sort((a, b) => ordemCol(a.chave) - ordemCol(b.chave));
-  const camposAtuais = atuais.flatMap(g => g.campos);
+  const camposAtuais = atuais.flatMap(g => g.campos).filter(c => visivelAgora(c, valorDe));
 
   async function salvar() {
     if (!sujo) return true;

@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react';
 import { X, Plus, Search, CheckCircle2 } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
-import { carregarEstrutura, Editor, valorLista, obrigatorioAgora } from './CamposCardOrcamento';
+import { carregarEstrutura, Editor, valorLista, obrigatorioAgora, visivelAgora } from './CamposCardOrcamento';
 import { CONFIG_ORCAMENTO } from '../../utils/fasesOrcamento';
 import { campoDaConfig } from './ConfigOrcamento';
 
@@ -121,7 +121,7 @@ export default function NovoCardOrcamento({ onFechar, onCriado }) {
               )}
             </div>
           )}
-          {campos?.filter(c => !DO_ZEN.includes(c.id)).map(c => (
+          {campos?.filter(c => !DO_ZEN.includes(c.id) && visivelAgora(c, (id) => valores[id])).map(c => (
             <div key={c.id}>
               <label className="block text-xs text-[var(--c-suave)] mb-1">{c.rotulo}{obrigatorioAgora(c, (id) => valores[id]) && <span className="text-red-400">*</span>}</label>
               <Editor campo={c} valor={valores[c.id] || ''} onChange={v => setValores(x => ({ ...x, [c.id]: v }))} />

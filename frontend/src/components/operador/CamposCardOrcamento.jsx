@@ -41,8 +41,19 @@ const ESCOLHA = ['select', 'radio_vertical', 'radio_horizontal'];
 export const SO_LEITURA = ['attachment', 'id'];
 
 // Obrigatório agora? (campo.quando = obrigatório só quando outro campo tiver o valor)
+/** Campo aparece agora? (Configurar → "Mostrar este campo: só quando …"), seguindo a cadeia de campos. */
+export function visivelAgora(campo, valorDe) {
+  let m = campo?.mostrar, n = 0;
+  while (m && n++ < 10) {
+    if (!valorLista(valorDe(m.id)).map(v => String(v).trim()).includes(String(m.valor).trim())) return false;
+    m = m.pai;
+  }
+  return true;
+}
+
 export function obrigatorioAgora(campo, valorDe) {
   if (!campo?.obrigatorio) return false;
+  if (!visivelAgora(campo, valorDe)) return false;
   if (!campo.quando) return true;
   return valorLista(valorDe(campo.quando.id)).map(v => String(v).trim()).includes(String(campo.quando.valor).trim());
 }
@@ -482,6 +493,21 @@ export function Editor({ campo, valor, onChange }) {
     );
   }
   if (campo.tipo === 'registro') return <SeletorRegistro campo={campo} valor={valor} onChange={onChange} />;
+  if ((campo.tipo === 'radio_vertical' || campo.tipo === 'radio_horizontal') && campo.opcoes?.length) {
+    const atual = valorLista(valor)[0] || '';
+    return (
+      <div className="space-y-1">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+          {campo.opcoes.map(o => (
+            <label key={o} className="flex items-center gap-1.5 text-xs text-[var(--c-texto)] cursor-pointer">
+              <input type="radio" checked={atual === o} onChange={() => onChange(o)} className="accent-[var(--c-destaque)]" /> {o}
+            </label>
+          ))}
+        </div>
+        {atual && <button type="button" onClick={() => onChange('')} className="text-[11px] text-[var(--c-suave)] hover:text-[var(--c-texto)]">Limpar opção selecionada</button>}
+      </div>
+    );
+  }
   if (ESCOLHA.includes(campo.tipo)) return <ListaBusca campo={campo} valor={valor} onChange={onChange} />;
   const texto = valorLista(valor).join(', ');
   if (campo.tipo === 'long_text') return <textarea rows={3} value={texto} onChange={e => onChange(e.target.value)} className={cls} />;
