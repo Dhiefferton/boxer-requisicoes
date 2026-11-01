@@ -283,7 +283,18 @@ function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = f
 
 function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColuna, registrarMover, onArrastar, onFimArraste }) {
   const [mudando, setMudando] = useState(false);
-  const itens = pedido.itens || [];
+  // Peça vinda do campo "Registro" gravada antes da correção: mostra descrição e valor do registro
+  const itens = (pedido.itens || []).map(it => {
+    const t = String(it?.descricao || '').trim();
+    if (it?.codigo || !t.startsWith('{')) return it;
+    try {
+      const r = JSON.parse(t);
+      if (!r?.descricao) return it;
+      const m = String(r.descricao).match(/^\s*([A-Za-z0-9./]*\d[A-Za-z0-9./]*)\s*-\s*(.*)$/s);
+      return { ...it, codigo: m ? m[1].trim() : null, descricao: m ? m[2].trim() : r.descricao,
+        valor_unitario: it.valor_unitario ?? (Number.isFinite(Number(r.valor)) ? Number(r.valor) : null) };
+    } catch { return it; }
+  });
   const totalItens = itens.reduce((t, it) => t + (Number(it.quantidade) || 0) * (Number(it.valor_unitario) || 0), 0);
   // Automáticos (sincronização a cada 30s): Separando -> Separado (reserva finalizada no Zen)
   // e -> Aprovado/Recusado (fase do card no Pipefy)
