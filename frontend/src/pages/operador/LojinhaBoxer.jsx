@@ -17,7 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import ConfigOrcamento, { campoDaConfig } from '../../components/operador/ConfigOrcamento';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
-import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, EtiquetasDoCard } from '../../components/operador/CamposCardOrcamento';
+import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard } from '../../components/operador/CamposCardOrcamento';
 
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
@@ -484,7 +484,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
   const sujo = Object.keys(rascunho).length > 0;
   const campos = cfg?.campos || [];
   const camposDe = (k) => campos.filter(c => c.coluna === k).map(campoDaConfig);
-  const camposAtuais = camposDe(atual);
+  const camposAtuais = camposDe(atual).filter(c => visivelAgora(c, valorDe));
   const idx = colunas.findIndex(c => c.status === atual);
   const anteriores = colunas.filter(c => c.status !== atual)
     .map(c => ({ col: c, campos: camposDe(c.status).filter(f => temValor(f.id) || (f.tipo === 'attachment' && temFoto(f.id))) }))
