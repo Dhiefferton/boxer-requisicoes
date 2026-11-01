@@ -122,6 +122,15 @@ export const recebimentoImportacaoService = {
   marcarItem: (itemId, dados)  => api.patch(`/recebimento-importacao/itens/${itemId}`, dados),
 };
 
+// Bases de registros (descrição + valor) — campo "Registro"
+export const basesService = {
+  listar:         ()               => api.get('/bases'),
+  criar:          (nome)           => api.post('/bases', { nome }),
+  registros:      (baseId)         => api.get(`/bases/${baseId}/registros`),
+  criarRegistro:  (baseId, dados)  => api.post(`/bases/${baseId}/registros`, dados),
+  editarRegistro: (id, dados)      => api.patch(`/bases/registros/${id}`, dados),
+};
+
 export const lojinhaService = {
   config:  ()          => api.get('/lojinha/config'),
   cliente: (documento) => api.get('/lojinha/cliente', { params: { documento }, timeout: 30000 }),
