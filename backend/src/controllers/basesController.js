@@ -28,7 +28,8 @@ function garantir() {
         criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-      CREATE INDEX IF NOT EXISTS idx_bx_base_registros_base ON bx_base_registros (base_id) WHERE ativo;`)
+      CREATE INDEX IF NOT EXISTS idx_bx_base_registros_base ON bx_base_registros (base_id) WHERE ativo;
+      ALTER TABLE bx_bases ADD COLUMN IF NOT EXISTS com_valor BOOLEAN NOT NULL DEFAULT TRUE;`)
       .catch(err => { estrutura = null; throw err; });
   }
   return estrutura;
@@ -49,22 +50,26 @@ const registro = (r, base) => ({ id: r.id, base_id: r.base_id, base: base ?? r.b
 export async function listarBases(req, res, next) {
   try {
     await garantir();
-    const r = await query(`SELECT b.id, b.nome, b.criado_em, COUNT(g.id)::int AS registros
+    const r = await query(`SELECT b.id, b.nome, b.com_valor, b.criado_em, COUNT(g.id)::int AS registros
       FROM bx_bases b LEFT JOIN bx_base_registros g ON g.base_id = b.id AND g.ativo
       WHERE b.ativo GROUP BY b.id ORDER BY b.nome`);
     res.json({ bases: r.rows });
   } catch (err) { next(err); }
 }
 
-// POST /bases { nome } (admin)
+// POST /bases { nome, com_valor } (admin) — com_valor=false: lista só com descrição
 export async function criarBase(req, res, next) {
   try {
     await garantir();
     const nome = limpar(req.body?.nome, 80);
     if (nome.length < 2) return res.status(400).json({ erro: 'Dê um nome para a base.' });
-    const ja = await query(`SELECT id, nome FROM bx_bases WHERE ativo AND LOWER(nome) = LOWER($1)`, [nome]);
-    if (ja.rows[0]) return res.json({ base: ja.rows[0] });
-    const r = await query(`INSERT INTO bx_bases (nome) VALUES ($1) RETURNING id, nome, criado_em`, [nome]);
+    const comValor = req.body?.com_valor !== false;
+    const ja = await query(`SELECT id, nome, com_valor FROM bx_bases WHERE ativo AND LOWER(nome) = LOWER($1)`, [nome]);
+    if (ja.rows[0]) {
+      if (ja.rows[0].com_valor !== comValor) return res.status(409).json({ erro: `Já existe "${ja.rows[0].nome}" como ${ja.rows[0].com_valor ? 'base com valor' : 'lista'}. Use outro nome.` });
+      return res.json({ base: ja.rows[0] });
+    }
+    const r = await query(`INSERT INTO bx_bases (nome, com_valor) VALUES ($1, $2) RETURNING id, nome, com_valor, criado_em`, [nome, comValor]);
     res.status(201).json({ base: r.rows[0] });
   } catch (err) { next(err); }
 }
@@ -84,10 +89,10 @@ export async function listarRegistros(req, res, next) {
 export async function criarRegistro(req, res, next) {
   try {
     await garantir();
-    const b = (await query(`SELECT id, nome FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
+    const b = (await query(`SELECT id, nome, com_valor FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!b) return res.status(404).json({ erro: 'Base não encontrada.' });
     const descricao = limpar(req.body?.descricao, 160);
-    const valor = lerValor(req.body?.valor);
+    const valor = b.com_valor ? lerValor(req.body?.valor) : 0; // lista: só descrição
     if (descricao.length < 2) return res.status(400).json({ erro: 'Digite a descrição.' });
     if (!Number.isFinite(valor) || valor < 0) return res.status(400).json({ erro: 'Valor inválido.' });
     const ja = (await query(`SELECT * FROM bx_base_registros WHERE base_id = $1 AND ativo AND LOWER(descricao) = LOWER($2)`, [b.id, descricao])).rows[0];
