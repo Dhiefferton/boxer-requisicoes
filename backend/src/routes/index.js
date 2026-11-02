@@ -1,6 +1,6 @@
 ﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor, fornecedorZen } from '../controllers/fornecedoresController.js';
 import { Router } from 'express';
-import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro } from '../controllers/basesController.js';
+import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro, excluirBase } from '../controllers/basesController.js';
 import bcrypt from 'bcryptjs';
 import { login, me, trocarSenha, alterarSenha, esqueciSenha, validarTokenSenha, redefinirSenha } from '../controllers/authController.js';
 import rateLimit from 'express-rate-limit';
@@ -173,6 +173,7 @@ router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operad
 // Bases de registros (descrição + valor) — campo "Registro" do Orçamento e da Lojinha
 router.get('/bases',                    autenticar, listarBases);
 router.post('/bases',                   autenticar, exigirPerfil('admin'), criarBase);
+router.delete('/bases/:id',             autenticar, exigirPerfil('admin'), excluirBase);
 router.get('/bases/:id/registros',      autenticar, listarRegistros);
 router.post('/bases/:id/registros',     autenticar, criarRegistro);
 router.patch('/bases/registros/:id',    autenticar, exigirPerfil('admin'), editarRegistro);
