@@ -117,3 +117,24 @@ export async function editarRegistro(req, res, next) {
     res.json({ registro: registro(r.rows[0], atual.base) });
   } catch (err) { next(err); }
 }
+
+// DELETE /bases/:id (admin) — tira a base/lista da tela (fica desativada; os cards que já usaram mantêm o texto)
+// Não deixa excluir se algum campo do Configurar ainda usa a base.
+export async function excluirBase(req, res, next) {
+  try {
+    await garantir();
+    const b = (await query(`SELECT id, nome FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
+    if (!b) return res.status(404).json({ erro: 'Base não encontrada.' });
+    const usos = [];
+    for (const [tab, tela] of [['orc_campos', 'Orçamento'], ['loj_campos', 'Lojinha']]) {
+      try {
+        const r = await query(`SELECT rotulo FROM ${tab} WHERE ativo AND ((tipo = 'registro' AND lista = $1) OR (tipo = 'conexao' AND lista = $2))`, [String(b.id), `base:${b.id}`]);
+        for (const x of r.rows) usos.push(`"${x.rotulo}" (${tela})`);
+      } catch { /* tabela ainda não existe */ }
+    }
+    if (usos.length) return res.status(409).json({ erro: `"${b.nome}" ainda é usada no campo ${usos.join(', ')}. Troque a base desse campo e salve antes de excluir.` });
+    await query(`UPDATE bx_bases SET ativo = FALSE WHERE id = $1`, [b.id]);
+    await query(`UPDATE bx_base_registros SET ativo = FALSE, atualizado_em = NOW() WHERE base_id = $1`, [b.id]);
+    res.json({ sucesso: true });
+  } catch (err) { next(err); }
+}
