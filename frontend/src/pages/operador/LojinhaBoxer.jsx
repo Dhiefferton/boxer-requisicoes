@@ -487,7 +487,8 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
   const camposAtuais = camposDe(atual).filter(c => visivelAgora(c, valorDe));
   const idx = colunas.findIndex(c => c.status === atual);
   const anteriores = colunas.filter(c => c.status !== atual)
-    .map(c => ({ col: c, campos: camposDe(c.status).filter(f => temValor(f.id) || (f.tipo === 'attachment' && temFoto(f.id))) }))
+    // Admin vê e edita todos os campos das outras fases; os demais veem só os preenchidos
+    .map(c => ({ col: c, campos: camposDe(c.status).filter(f => ehAdmin ? visivelAgora(f, valorDe) : temValor(f.id) || (f.tipo === 'attachment' && temFoto(f.id))) }))
     .filter(g => g.campos.length);
 
   useEffect(() => {
@@ -570,7 +571,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
             {anteriores.map(g => (
               <div key={g.col.status} className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4">
                 <div className="flex items-center gap-2 mb-3"><p className="text-sm font-bold text-[var(--c-texto)] flex-1">Fase</p><Pilula col={g.col} /></div>
-                <dl className="grid grid-cols-1 gap-y-3">{g.campos.map(c => blocoCampo(c, false))}</dl>
+                <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, ehAdmin))}</dl>
               </div>
             ))}
           </div>
