@@ -17,6 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import ConfigOrcamento, { campoDaConfig } from '../../components/operador/ConfigOrcamento';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
+import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnterior';
 import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro } from '../../components/operador/CamposCardOrcamento';
 
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -472,6 +473,10 @@ function CardPedido({ p, campos = [], carregar, onAbrir, movendo = false, onArra
 // ── Card aberto: dados e fases anteriores | fase atual | mover ──
 function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHistorico, onConfigurarMover = null }) {
   const [editandoFase, setEditandoFase] = useState(() => new Set()); // fases anteriores em edição (admin)
+  const [abertas, setAbertas] = useState(() => new Set()); // fases anteriores abertas (encolhidas por padrão)
+  // Só as fases por onde o card já passou (histórico do card; sem histórico, as colunas antes da atual)
+  const fasesPassadas = useFasesPassadas(() => lojinhaService.movimentos({ pedido: p.id }), `${p.id}-${p.status}`,
+    colunaDo(p), colunas.map(c => c.status), p.criado_em || p.created_at, (s) => (s === 'liberacao' ? 'entrada' : s));
   const [rascunho, setRascunho] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [movendo, setMovendo] = useState(false);
@@ -494,6 +499,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
       const todos = camposDe(c.status).filter(f => visivelAgora(f, valorDe));
       return { col: c, editando, todos, campos: editando ? todos : todos.filter(f => temValor(f.id) || (f.tipo === 'attachment' && temFoto(f.id))) };
     })
+    .filter(g => fasesPassadas.passou(g.col.status))
     .filter(g => g.campos.length || (ehAdmin && g.todos.length));
 
   useEffect(() => {
@@ -573,20 +579,19 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
               <DadosPedido p={p} sempreProdutos />
               <StatusZen p={p} carregar={carregar} />
             </div>
-            {anteriores.map(g => (
-              <div key={g.col.status} className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4">
-                <div className="flex items-center gap-2 mb-3"><p className="text-sm font-bold text-[var(--c-texto)] flex-1">Fase</p><Pilula col={g.col} />
-                  {ehAdmin && <button type="button" onClick={() => setEditandoFase(s => { const n = new Set(s); n.has(g.col.status) ? n.delete(g.col.status) : n.add(g.col.status); return n; })}
-                      title={editandoFase.has(g.col.status) ? 'Parar de editar' : 'Editar campos desta fase'}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border ${editandoFase.has(g.col.status) ? 'border-[var(--c-destaque)] text-[var(--c-destaque)] bg-[var(--c-destaque)]/10' : 'border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
-                      {editandoFase.has(g.col.status) ? <><Check size={11} /> Pronto</> : <><Pencil size={11} /> Editar</>}
-                    </button>}
-                </div>
-                {g.campos.length
-                  ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
-                  : <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido.</p>}
-              </div>
-            ))}
+            {anteriores.map(g => {
+              const aberta = abertas.has(g.col.status);
+              return (
+                <CaixaFase key={g.col.status} titulo="Fase" pilula={<Pilula col={g.col} />} tempo={fasesPassadas.tempo(g.col.status)}
+                  aberta={aberta} onAlternar={() => setAbertas(s => { const n = new Set(s); aberta ? n.delete(g.col.status) : n.add(g.col.status); return n; })}
+                  podeEditar={ehAdmin} editando={g.editando}
+                  onEditar={() => setEditandoFase(s => { const n = new Set(s); n.has(g.col.status) ? n.delete(g.col.status) : n.add(g.col.status); return n; })}>
+                  {g.campos.length
+                    ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
+                    : <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido.</p>}
+                </CaixaFase>
+              );
+            })}
           </div>
 
           {/* Meio: fase atual */}
