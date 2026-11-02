@@ -61,7 +61,8 @@ export function obrigatorioAgora(campo, valorDe) {
 export function Valor({ campo, valor }) {
   const lista = valorLista(valor);
   if (!lista.length) return <span className="text-[var(--c-suave)]">—</span>;
-  if (campo?.tipo === 'registro') { const r = lerRegistro(valor); return r ? <CartaoRegistro reg={r} /> : <span>{lista.join(', ')}</span>; }
+  // Registro (descrição e valor): mostra o cartão, mesmo quando o campo não está marcado como "registro"
+  { const r = lerRegistro(valor); if (r) return <CartaoRegistro reg={r} />; }
   if (campo?.tipo === 'attachment') {
     return (
       <div className="flex flex-col gap-0.5">
@@ -519,7 +520,9 @@ export function Editor({ campo, valor, onChange }) {
 // atual = grupo da coluna/fase em que o card está.
 export function montarGrupos(fases, pedido, statusAtual, faseAtualId) {
   // Campos do card que não estão na estrutura (ex.: campo removido do pipe)
-  const conhecidos = new Set((fases || []).flatMap(f => f.campos.map(c => c.id)));
+  // (inclui os campos do Configurar: senão eles se repetiam em "Outros campos" como texto cru)
+  const conhecidos = new Set([...(fases || []).flatMap(f => f.campos.map(c => c.id)),
+    ...(CONFIG_ORCAMENTO.campos || []).map(c => c.pipefy_campo || `bx_${c.id}`)]);
   const outros = (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [])
     .filter(c => c?.id && !conhecidos.has(c.id)).map(c => ({ id: c.id, rotulo: c.nome, tipo: 'short_text', opcoes: [] }));
   // A fase atual do card vem primeiro (são os campos a preencher agora)

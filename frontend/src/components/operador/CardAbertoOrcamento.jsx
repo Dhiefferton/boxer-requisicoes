@@ -68,7 +68,8 @@ export default function CardAbertoOrcamento({
   const atuais = grupos.filter(g => g.atual);
   const ordemCol = (k) => (k === 'inicio' ? -1 : k ? COLUNAS_ORCAMENTO.findIndex(c => c.status === k) : 999);
   const anteriores = grupos.filter(g => !g.atual)
-    .map(g => ({ ...g, campos: g.campos.filter(c => temValor(c.id) || (c.tipo === 'attachment' && fotosLocais(c.id))) }))
+    // Admin vê e edita todos os campos das outras fases; os demais veem só os preenchidos
+    .map(g => ({ ...g, campos: g.campos.filter(c => ehAdmin ? c.tipo !== 'id' && visivelAgora(c, valorDe) : temValor(c.id) || (c.tipo === 'attachment' && fotosLocais(c.id))) }))
     .filter(g => g.campos.length)
     .sort((a, b) => ordemCol(a.chave) - ordemCol(b.chave));
   const camposAtuais = atuais.flatMap(g => g.campos).filter(c => visivelAgora(c, valorDe));
@@ -181,7 +182,7 @@ export default function CardAbertoOrcamento({
                     <p className="text-sm font-bold text-[var(--c-texto)] flex-1">{g.chave === 'inicio' ? 'Formulário inicial' : col ? 'Fase' : g.nome}</p>
                     {col && <Pilula coluna={col} />}
                   </div>
-                  <dl className="grid grid-cols-1 gap-y-3">{g.campos.map(c => blocoCampo(c, false))}</dl>
+                  <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, ehAdmin))}</dl>
                 </div>
               );
             })}
