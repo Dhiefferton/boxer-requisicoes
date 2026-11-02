@@ -68,7 +68,7 @@ export default function PedidosOrcamento() {
   const [verMovimentacao, setVerMovimentacao] = useState(false);
   const [busca, setBusca] = useState('');
   const [novoCard, setNovoCard] = useState(false);
-  const [ocultarVazias, setOcultarVazias] = useState(() => { try { return localStorage.getItem('orc_ocultar_vazias') === '1'; } catch { return false; } });
+  const [ocultarVazias, setOcultarVazias] = useState(false); // botão "Esconder vazias" retirado: todas as colunas aparecem
   function alternarVazias() {
     setOcultarVazias(v => { try { localStorage.setItem('orc_ocultar_vazias', v ? '0' : '1'); } catch { /* sem storage */ } return !v; });
   }
@@ -168,27 +168,12 @@ export default function PedidosOrcamento() {
             </button>
           )}
           {usuario?.perfil === 'admin' && (
-            <button onClick={() => setVerConfig(true)} title="Configurar colunas e campos da tela"
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
-                bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
-              <Settings size={13} /> Configurar
-            </button>
-          )}
-          {usuario?.perfil === 'admin' && (
             <button onClick={() => setVerMovimentacao(true)} title="Relatório de movimentação"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
                 bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
               <Activity size={13} /> Movimentação
             </button>
           )}
-          <button onClick={alternarVazias} title={ocultarVazias ? 'Mostrar colunas vazias' : 'Esconder colunas vazias'}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]">
-            {ocultarVazias ? <Eye size={13} /> : <EyeOff size={13} />} {ocultarVazias ? 'Mostrar vazias' : 'Esconder vazias'}
-          </button>
-          <button onClick={carregar} disabled={loading} title="Recarregar"
-            className="p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)] transition-colors">
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          </button>
         </div>
       </div>
 

@@ -188,21 +188,11 @@ export default function LojinhaBoxer() {
             <Plus size={13} /> Novo pedido
           </button>
           {ehAdmin && (
-            <button onClick={() => setVerConfig(true)} title="Configurar colunas e campos da tela"
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
-              <Settings size={13} /> Configurar
-            </button>
-          )}
-          {ehAdmin && (
             <button onClick={() => setVerMov(true)} title="Relatório de movimentação"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
               <Activity size={13} /> Movimentação
             </button>
           )}
-          <button onClick={carregar} title="Recarregar"
-            className="p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)] transition-colors">
-            <RefreshCw size={16} className={!pedidos ? 'animate-spin' : ''} />
-          </button>
         </div>
       </div>
 
