@@ -14,6 +14,7 @@ import { Spinner } from '../ui';
 import { FotosCampo } from './FotosOrcamento';
 import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA, obrigatorioAgora, visivelAgora, lerRegistro } from './CamposCardOrcamento';
 import { COLUNAS_ORCAMENTO, STATUS_SO_ADMIN } from '../../utils/fasesOrcamento';
+import { useFasesPassadas, CaixaFase } from './FaseAnterior';
 
 const ehLargo = (c) => c.tipo === 'long_text' || c.tipo === 'attachment';
 
@@ -39,6 +40,16 @@ export default function CardAbertoOrcamento({
   const [fases, setFases] = useState(null);
   const [erro, setErro] = useState('');
   const [editandoFase, setEditandoFase] = useState(() => new Set()); // fases anteriores em edição (admin)
+  // Fases anteriores encolhidas por padrão (o Formulário inicial começa aberto)
+  const [abertas, setAbertas] = useState(() => new Set());
+  const [fechadas, setFechadas] = useState(() => new Set());
+  const alternarFase = (id, aberta) => {
+    setAbertas(s => { const n = new Set(s); aberta ? n.delete(id) : n.add(id); return n; });
+    setFechadas(s => { const n = new Set(s); aberta ? n.add(id) : n.delete(id); return n; });
+  };
+  // Só as fases por onde o card já passou (histórico do card; sem histórico, as colunas antes da atual)
+  const fasesPassadas = useFasesPassadas(ehAdmin ? () => pedidosOrcamentoService.movimentos({ pedido: pedido.id }) : null,
+    `${pedido.id}-${pedido.status}`, pedido.status, COLUNAS_ORCAMENTO.map(c => c.status), pedido.created_at);
   const [rascunho, setRascunho] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState(null);
@@ -76,6 +87,7 @@ export default function CardAbertoOrcamento({
         campos: editando ? g.campos.filter(c => c.tipo !== 'id' && visivelAgora(c, valorDe))
           : g.campos.filter(c => temValor(c.id) || (c.tipo === 'attachment' && fotosLocais(c.id))) };
     })
+    .filter(g => !g.chave || fasesPassadas.passou(g.chave))
     .filter(g => g.campos.length || (ehAdmin && String(g.faseId).startsWith('bx-') && g.todos.length))
     .sort((a, b) => ordemCol(a.chave) - ordemCol(b.chave));
   const camposAtuais = atuais.flatMap(g => g.campos).filter(c => visivelAgora(c, valorDe));
@@ -182,21 +194,17 @@ export default function CardAbertoOrcamento({
             {fases && !anteriores.length && <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido nas fases anteriores.</p>}
             {anteriores.map(g => {
               const col = g.chave && g.chave !== 'inicio' ? COLUNAS_ORCAMENTO.find(c => c.status === g.chave) : null;
+              const aberta = abertas.has(g.faseId) || (g.chave === 'inicio' && !fechadas.has(g.faseId));
               return (
-                <div key={g.faseId} className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <p className="text-sm font-bold text-[var(--c-texto)] flex-1">{g.chave === 'inicio' ? 'Formulário inicial' : col ? 'Fase' : g.nome}</p>
-                    {col && <Pilula coluna={col} />}
-                    {ehAdmin && <button type="button" onClick={() => setEditandoFase(s => { const n = new Set(s); n.has(g.faseId) ? n.delete(g.faseId) : n.add(g.faseId); return n; })}
-                      title={editandoFase.has(g.faseId) ? 'Parar de editar' : 'Editar campos desta fase'}
-                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border ${editandoFase.has(g.faseId) ? 'border-[var(--c-destaque)] text-[var(--c-destaque)] bg-[var(--c-destaque)]/10' : 'border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
-                      {editandoFase.has(g.faseId) ? <><Check size={11} /> Pronto</> : <><Pencil size={11} /> Editar</>}
-                    </button>}
-                  </div>
+                <CaixaFase key={g.faseId} titulo={g.chave === 'inicio' ? 'Formulário inicial' : col ? 'Fase' : g.nome}
+                  pilula={col && <Pilula coluna={col} />} tempo={g.chave && g.chave !== 'inicio' ? fasesPassadas.tempo(g.chave) : null}
+                  aberta={aberta} onAlternar={() => alternarFase(g.faseId, aberta)}
+                  podeEditar={ehAdmin} editando={g.editando}
+                  onEditar={() => setEditandoFase(s => { const n = new Set(s); n.has(g.faseId) ? n.delete(g.faseId) : n.add(g.faseId); return n; })}>
                   {g.campos.length
                     ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
                     : <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido.</p>}
-                </div>
+                </CaixaFase>
               );
             })}
           </div>
