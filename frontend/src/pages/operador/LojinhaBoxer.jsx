@@ -582,7 +582,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
             {anteriores.map(g => {
               const aberta = abertas.has(g.col.status);
               return (
-                <CaixaFase key={g.col.status} titulo="Fase" pilula={<Pilula col={g.col} />} tempo={fasesPassadas.tempo(g.col.status)}
+                <CaixaFase key={g.col.status} titulo="" pilula={<Pilula col={g.col} />} tempo={fasesPassadas.tempo(g.col.status)}
                   aberta={aberta} onAlternar={() => setAbertas(s => { const n = new Set(s); aberta ? n.delete(g.col.status) : n.add(g.col.status); return n; })}
                   podeEditar={ehAdmin} editando={g.editando}
                   onEditar={() => setEditandoFase(s => { const n = new Set(s); n.has(g.col.status) ? n.delete(g.col.status) : n.add(g.col.status); return n; })}>
