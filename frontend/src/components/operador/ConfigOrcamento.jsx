@@ -79,14 +79,33 @@ function BaseDoCampo({ valor, onChange, inp, semValor = false }) {
     } catch (e) { setErro(e.response?.data?.erro || 'Erro ao criar a base.'); }
     finally { setCriando(false); }
   }
+  const idSel = Number(String(valor || '').replace(/^base:/, '')) || 0;
+  const baseSel = (bases || []).find(b => b.id === idSel) || null;
+  async function excluir() {
+    if (!baseSel) return;
+    if (!confirm(`Excluir ${semValor ? 'a lista' : 'a base'} "${baseSel.nome}" e os ${baseSel.registros} registro(s) dela? Os cards que já usaram continuam com o que foi escolhido.`)) return;
+    setCriando(true); setErro('');
+    try {
+      await basesService.excluir(baseSel.id);
+      const r = await basesService.listar(); setBases(r.data.bases.filter(b => (b.com_valor !== false) !== semValor));
+      onChange(semValor ? 'Modelos de máquina' : null);
+    } catch (e) { setErro(e.response?.data?.erro || 'Erro ao excluir.'); }
+    finally { setCriando(false); }
+  }
   return (
     <div className="space-y-1.5">
       <label className="block text-[11px] text-[var(--c-suave)] space-y-1">{semValor ? 'Lista' : 'Base dos registros'}
+        <div className="flex gap-1.5">
         <select value={valor || ''} onChange={e => onChange(e.target.value || null)} className={inp}>
           <option value="">{bases ? (semValor ? 'Escolha a lista…' : 'Escolha a base…') : 'Carregando…'}</option>
           {semValor && <option value="Modelos de máquina">Modelos de máquina</option>}
           {(bases || []).map(b => <option key={b.id} value={semValor ? `base:${b.id}` : String(b.id)}>{b.nome} ({b.registros})</option>)}
         </select>
+        {baseSel && (
+          <button type="button" onClick={excluir} disabled={criando} title={`Excluir ${semValor ? 'a lista' : 'a base'} "${baseSel.nome}"`}
+            className="shrink-0 px-2.5 rounded-lg border border-[var(--c-borda)] text-[var(--c-suave)] hover:text-red-400 hover:border-red-400/50 disabled:opacity-40"><Trash2 size={13} /></button>
+        )}
+        </div>
       </label>
       <div className="flex gap-1.5">
         <input value={nova} onChange={e => setNova(e.target.value)} placeholder={semValor ? 'Nova lista (ex.: Forma de envios)' : 'Nova base (ex.: Peças em Geral)'} className={inp}
