@@ -8,11 +8,11 @@
 // Os campos ficam gravados só no B-Requisições (integração com o Pipefy desligada).
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { X, Settings, ArrowRight, ArrowLeft, Save, ExternalLink, History, Ban, PackageCheck, Scissors, RotateCcw } from 'lucide-react';
+import { X, Settings, ArrowRight, ArrowLeft, Save, ExternalLink, History, Ban, PackageCheck, Scissors, RotateCcw, Pencil, Check } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 import { FotosCampo } from './FotosOrcamento';
-import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA, obrigatorioAgora, visivelAgora } from './CamposCardOrcamento';
+import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA, obrigatorioAgora, visivelAgora, lerRegistro } from './CamposCardOrcamento';
 import { COLUNAS_ORCAMENTO, STATUS_SO_ADMIN } from '../../utils/fasesOrcamento';
 
 const ehLargo = (c) => c.tipo === 'long_text' || c.tipo === 'attachment';
@@ -38,6 +38,7 @@ export default function CardAbertoOrcamento({
 }) {
   const [fases, setFases] = useState(null);
   const [erro, setErro] = useState('');
+  const [editandoFase, setEditandoFase] = useState(() => new Set()); // fases anteriores em edição (admin)
   const [rascunho, setRascunho] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState(null);
@@ -67,10 +68,15 @@ export default function CardAbertoOrcamento({
   // Meio: grupos da coluna atual; esquerda: os outros, na ordem das colunas (Formulário inicial primeiro)
   const atuais = grupos.filter(g => g.atual);
   const ordemCol = (k) => (k === 'inicio' ? -1 : k ? COLUNAS_ORCAMENTO.findIndex(c => c.status === k) : 999);
+  // Fases anteriores: mostram os campos preenchidos; o admin clica em "Editar" na fase e edita todos os campos dela
   const anteriores = grupos.filter(g => !g.atual)
-    // Admin vê e edita todos os campos das outras fases; os demais veem só os preenchidos
-    .map(g => ({ ...g, campos: g.campos.filter(c => ehAdmin ? c.tipo !== 'id' && visivelAgora(c, valorDe) : temValor(c.id) || (c.tipo === 'attachment' && fotosLocais(c.id))) }))
-    .filter(g => g.campos.length)
+    .map(g => {
+      const editando = ehAdmin && editandoFase.has(g.faseId);
+      return { ...g, editando, todos: g.campos.filter(c => c.tipo !== 'id' && visivelAgora(c, valorDe)),
+        campos: editando ? g.campos.filter(c => c.tipo !== 'id' && visivelAgora(c, valorDe))
+          : g.campos.filter(c => temValor(c.id) || (c.tipo === 'attachment' && fotosLocais(c.id))) };
+    })
+    .filter(g => g.campos.length || (ehAdmin && String(g.faseId).startsWith('bx-') && g.todos.length))
     .sort((a, b) => ordemCol(a.chave) - ordemCol(b.chave));
   const camposAtuais = atuais.flatMap(g => g.campos).filter(c => visivelAgora(c, valorDe));
 
@@ -85,7 +91,7 @@ export default function CardAbertoOrcamento({
       if (pf?.so_local?.length) linhas.push({ ok: false, txt: `Só no B-Requisições: ${pf.so_local.join(', ')}.` });
       for (const e of pf?.erros || []) linhas.push({ ok: false, txt: `Pipefy recusou "${e.campo}": ${e.erro}. Ficou só no B-Requisições.` });
       setAviso(linhas.length ? linhas : [{ ok: true, txt: 'Campos salvos.' }]);
-      setRascunho({});
+      setRascunho({}); setEditandoFase(new Set());
       onAtualizar?.();
       return true;
     } catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar os campos.'); return false; }
@@ -131,7 +137,7 @@ export default function CardAbertoOrcamento({
       <dd className="text-xs text-[var(--c-texto)] mt-1">
         {c.tipo === 'attachment'
           ? <FotosCampo pedido={pedido} campo={c} valor={valorDe(c.id)} podeEnviar={podeEditar} onMudou={onAtualizar} />
-          : editavel && !SO_LEITURA.includes(c.tipo)
+          : editavel && !SO_LEITURA.includes(c.tipo) && !(c.tipo !== 'registro' && lerRegistro(valorDe(c.id)))
           ? <Editor campo={c} valor={valorDe(c.id)} onChange={v => setRascunho(r => ({ ...r, [c.id]: v }))} />
           : <Valor campo={c} valor={valorDe(c.id)} />}
       </dd>
@@ -181,8 +187,15 @@ export default function CardAbertoOrcamento({
                   <div className="flex items-center gap-2 mb-3">
                     <p className="text-sm font-bold text-[var(--c-texto)] flex-1">{g.chave === 'inicio' ? 'Formulário inicial' : col ? 'Fase' : g.nome}</p>
                     {col && <Pilula coluna={col} />}
+                    {ehAdmin && <button type="button" onClick={() => setEditandoFase(s => { const n = new Set(s); n.has(g.faseId) ? n.delete(g.faseId) : n.add(g.faseId); return n; })}
+                      title={editandoFase.has(g.faseId) ? 'Parar de editar' : 'Editar campos desta fase'}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border ${editandoFase.has(g.faseId) ? 'border-[var(--c-destaque)] text-[var(--c-destaque)] bg-[var(--c-destaque)]/10' : 'border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
+                      {editandoFase.has(g.faseId) ? <><Check size={11} /> Pronto</> : <><Pencil size={11} /> Editar</>}
+                    </button>}
                   </div>
-                  <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, ehAdmin))}</dl>
+                  {g.campos.length
+                    ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
+                    : <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido.</p>}
                 </div>
               );
             })}
