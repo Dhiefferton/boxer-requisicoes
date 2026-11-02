@@ -69,7 +69,7 @@ export function CaixaFase({ titulo, pilula, tempo, aberta, onAlternar, podeEdita
     <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4">
       <div className="flex items-center gap-2">
         <button type="button" onClick={onAlternar} className="flex-1 min-w-0 flex items-center gap-2 text-left" title={visivel ? 'Mostrar menos' : 'Mostrar mais'}>
-          <span className="text-sm font-bold text-[var(--c-texto)] truncate">{titulo}</span>
+          {titulo && <span className="text-sm font-bold text-[var(--c-texto)] truncate">{titulo}</span>}
           {pilula}
         </button>
         {podeEditar && (

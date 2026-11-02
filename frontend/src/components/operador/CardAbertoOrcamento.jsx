@@ -87,6 +87,7 @@ export default function CardAbertoOrcamento({
         campos: editando ? g.campos.filter(c => c.tipo !== 'id' && visivelAgora(c, valorDe))
           : g.campos.filter(c => temValor(c.id) || (c.tipo === 'attachment' && fotosLocais(c.id))) };
     })
+    .filter(g => g.faseId !== 'outros') // campos soltos (sem fase/coluna) não aparecem no card
     .filter(g => !g.chave || fasesPassadas.passou(g.chave))
     .filter(g => g.campos.length || (ehAdmin && String(g.faseId).startsWith('bx-') && g.todos.length))
     .sort((a, b) => ordemCol(a.chave) - ordemCol(b.chave));
@@ -196,7 +197,7 @@ export default function CardAbertoOrcamento({
               const col = g.chave && g.chave !== 'inicio' ? COLUNAS_ORCAMENTO.find(c => c.status === g.chave) : null;
               const aberta = abertas.has(g.faseId) || (g.chave === 'inicio' && !fechadas.has(g.faseId));
               return (
-                <CaixaFase key={g.faseId} titulo={g.chave === 'inicio' ? 'Formulário inicial' : col ? 'Fase' : g.nome}
+                <CaixaFase key={g.faseId} titulo={g.chave === 'inicio' ? 'Formulário inicial' : col ? '' : g.nome}
                   pilula={col && <Pilula coluna={col} />} tempo={g.chave && g.chave !== 'inicio' ? fasesPassadas.tempo(g.chave) : null}
                   aberta={aberta} onAlternar={() => alternarFase(g.faseId, aberta)}
                   podeEditar={ehAdmin} editando={g.editando}
