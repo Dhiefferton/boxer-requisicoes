@@ -125,7 +125,7 @@ export const recebimentoImportacaoService = {
 // Bases de registros (descrição + valor) — campo "Registro"
 export const basesService = {
   listar:         ()               => api.get('/bases'),
-  criar:          (nome)           => api.post('/bases', { nome }),
+  criar:          (nome, comValor = true) => api.post('/bases', { nome, com_valor: comValor }),
   registros:      (baseId)         => api.get(`/bases/${baseId}/registros`),
   criarRegistro:  (baseId, dados)  => api.post(`/bases/${baseId}/registros`, dados),
   editarRegistro: (id, dados)      => api.patch(`/bases/registros/${id}`, dados),
