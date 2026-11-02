@@ -62,39 +62,42 @@ function Sigla({ tipo }) {
 }
 
 // Base de registros do campo "Registro" (ex.: Peças em Geral) — escolhe uma existente ou cria
-function BaseDoCampo({ valor, onChange, inp }) {
+function BaseDoCampo({ valor, onChange, inp, semValor = false }) {
   const [bases, setBases] = useState(null);
   const [nova, setNova] = useState('');
   const [criando, setCriando] = useState(false);
   const [erro, setErro] = useState('');
-  useEffect(() => { basesService.listar().then(r => setBases(r.data.bases)).catch(e => setErro(e.response?.data?.erro || 'Não consegui carregar as bases.')); }, []);
+  useEffect(() => { basesService.listar().then(r => setBases(r.data.bases.filter(b => (b.com_valor !== false) !== semValor))).catch(e => setErro(e.response?.data?.erro || 'Não consegui carregar as bases.')); }, []);
   async function criar() {
     const nome = nova.replace(/\s+/g, ' ').trim();
     if (nome.length < 2) return;
     setCriando(true); setErro('');
     try {
-      const { data } = await basesService.criar(nome);
-      const r = await basesService.listar(); setBases(r.data.bases);
-      onChange(String(data.base.id)); setNova('');
+      const { data } = await basesService.criar(nome, !semValor);
+      const r = await basesService.listar(); setBases(r.data.bases.filter(b => (b.com_valor !== false) !== semValor));
+      onChange(semValor ? `base:${data.base.id}` : String(data.base.id)); setNova('');
     } catch (e) { setErro(e.response?.data?.erro || 'Erro ao criar a base.'); }
     finally { setCriando(false); }
   }
   return (
     <div className="space-y-1.5">
-      <label className="block text-[11px] text-[var(--c-suave)] space-y-1">Base dos registros
+      <label className="block text-[11px] text-[var(--c-suave)] space-y-1">{semValor ? 'Lista' : 'Base dos registros'}
         <select value={valor || ''} onChange={e => onChange(e.target.value || null)} className={inp}>
-          <option value="">{bases ? 'Escolha a base…' : 'Carregando…'}</option>
-          {(bases || []).map(b => <option key={b.id} value={String(b.id)}>{b.nome} ({b.registros})</option>)}
+          <option value="">{bases ? (semValor ? 'Escolha a lista…' : 'Escolha a base…') : 'Carregando…'}</option>
+          {semValor && <option value="Modelos de máquina">Modelos de máquina</option>}
+          {(bases || []).map(b => <option key={b.id} value={semValor ? `base:${b.id}` : String(b.id)}>{b.nome} ({b.registros})</option>)}
         </select>
       </label>
       <div className="flex gap-1.5">
-        <input value={nova} onChange={e => setNova(e.target.value)} placeholder="Nova base (ex.: Peças em Geral)" className={inp}
+        <input value={nova} onChange={e => setNova(e.target.value)} placeholder={semValor ? 'Nova lista (ex.: Forma de envios)' : 'Nova base (ex.: Peças em Geral)'} className={inp}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); criar(); } }} />
         <button type="button" onClick={criar} disabled={criando || nova.trim().length < 2}
           className="px-3 rounded-lg border border-[var(--c-borda)] bg-[var(--c-cartao)] text-xs font-semibold text-[var(--c-destaque-claro)] disabled:opacity-40">{criando ? '...' : 'Criar'}</button>
       </div>
       {erro && <p className="text-[11px] text-red-400">{erro}</p>}
-      <p className="text-[10px] text-[var(--c-suave)]">No card, quem preenche escolhe um registro (descrição e valor) desta base ou usa “+ Criar registro”. A mesma base pode ser usada em outros campos, no Orçamento e na Lojinha.</p>
+      <p className="text-[10px] text-[var(--c-suave)]">{semValor
+        ? 'No card, quem preenche escolhe um registro desta lista (só descrição) ou usa “+ Criar registro”. A mesma lista pode ser usada em outros campos, no Orçamento e na Lojinha.'
+        : 'No card, quem preenche escolhe um registro (descrição e valor) desta base ou usa “+ Criar registro”. A mesma base pode ser usada em outros campos, no Orçamento e na Lojinha.'}</p>
     </div>
   );
 }
@@ -109,7 +112,7 @@ function Previa({ campo }) {
   if (campo.tipo === 'checkbox' || campo.tipo === 'etiquetas') return <div className="flex items-center gap-2 text-[11px] text-[var(--c-suave)]"><span className="w-3.5 h-3.5 rounded border border-[var(--c-borda-forte)]" />{ops}</div>;
   if (campo.tipo === 'registro') return <div className="rounded-lg border border-[var(--c-borda)] p-2 text-[11px] text-[var(--c-suave)]"><span className="font-semibold text-[var(--c-texto)]">Descrição do registro</span> · Base · Valor R$</div>;
   if (campo.tipo === 'conexao' && campo.pipefy_campo) return <div className="text-xs font-semibold text-sky-400">Conexão do Pipefy</div>;
-  if (campo.tipo === 'conexao') return <div className="text-xs font-semibold text-[var(--c-destaque-claro)]">+ Selecionar em “{campo.lista || LISTAS[0]}”</div>;
+  if (campo.tipo === 'conexao') return <div className="text-xs font-semibold text-[var(--c-destaque-claro)]">+ Selecionar na lista{String(campo.lista || '').startsWith('base:') ? '' : ` “${campo.lista || LISTAS[0]}”`}</div>;
   return <div className="h-8 rounded-lg bg-[var(--c-fundo)] border border-[var(--c-borda)]" />;
 }
 
@@ -497,12 +500,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                   {campoAtual.pipefy_campo && <p className="text-[11px] text-sky-400">Campo que já existia na fase do Pipefy: o valor do card continua o mesmo. Nome, descrição, obrigatório, ordem e opções mudam só aqui no B-Requisições.</p>}
                   {campoAtual.tipo === 'registro' && <BaseDoCampo valor={campoAtual.lista} inp={inp} onChange={v => mudarCampo(campoAtual.uid, c => ({ ...c, lista: v }))} />}
                   {campoAtual.tipo === 'conexao' && !campoAtual.pipefy_campo && (
-                    <label className="block text-[11px] text-[var(--c-suave)] space-y-1">Lista do B-Requisições
-                      <select value={campoAtual.lista || LISTAS[0]} onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, lista: e.target.value }))} className={inp}>
-                        {LISTAS.map(l => <option key={l} value={l}>{l}</option>)}
-                      </select>
-                      <span className="block">Quem preenche escolhe um registro ou usa “+ Criar registro”.</span>
-                    </label>
+                    <BaseDoCampo semValor valor={campoAtual.lista || LISTAS[0]} inp={inp} onChange={v => mudarCampo(campoAtual.uid, c => ({ ...c, lista: v || LISTAS[0] }))} />
                   )}
                   <div className="flex justify-end pt-2 border-t border-[var(--c-borda)]">
                     <button onClick={() => setCampoSel(null)} className="mt-2 px-3 py-1.5 rounded-lg text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">Fechar</button>

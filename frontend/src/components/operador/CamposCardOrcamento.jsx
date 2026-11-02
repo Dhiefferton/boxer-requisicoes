@@ -134,9 +134,11 @@ function carregarRegistros(baseId, forcar = false) {
   }
   return registrosCache.get(baseId);
 }
-function SeletorRegistro({ campo, valor, onChange }) {
-  const baseId = Number(campo.lista) || 0;
-  const atual = lerRegistro(valor);
+// semValor: campo "Lista do B-Requisições" com lista salva (base:<id>) — grava só a descrição
+function SeletorRegistro({ campo, valor, onChange, semValor = false }) {
+  const baseId = Number(String(campo.lista || '').replace(/^base:/, '')) || 0;
+  const textoAtual = semValor ? (valorLista(valor)[0] || '') : '';
+  const atual = semValor ? (textoAtual ? { id: null, descricao: textoAtual } : null) : lerRegistro(valor);
   const caixa = useRef(null);
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
@@ -157,16 +159,16 @@ function SeletorRegistro({ campo, valor, onChange }) {
   if (!baseId) return <p className="text-[11px] text-amber-400">Escolha a base deste campo em Configurar.</p>;
   const filtrados = (lista || []).filter(r => normBusca(r.descricao).includes(normBusca(busca))).slice(0, 300);
   const escolher = (r) => {
-    onChange(r ? JSON.stringify({ id: r.id, base_id: r.base_id, base: r.base, descricao: r.descricao, valor: r.valor, criado_em: r.criado_em }) : '');
+    onChange(!r ? '' : semValor ? r.descricao : JSON.stringify({ id: r.id, base_id: r.base_id, base: r.base, descricao: r.descricao, valor: r.valor, criado_em: r.criado_em }));
     setAberto(false); setBusca(''); setNovo(null); setErro('');
   };
   async function criar() {
     const descricao = String(novo?.descricao || '').replace(/\s+/g, ' ').trim();
     if (descricao.length < 2) { setErro('Digite a descrição.'); return; }
-    if (String(novo?.valor ?? '').trim() === '') { setErro('Digite o valor.'); return; }
+    if (!semValor && String(novo?.valor ?? '').trim() === '') { setErro('Digite o valor.'); return; }
     setSalvando(true); setErro('');
     try {
-      const { data } = await basesService.criarRegistro(baseId, { descricao, valor: novo.valor });
+      const { data } = await basesService.criarRegistro(baseId, semValor ? { descricao } : { descricao, valor: novo.valor });
       setLista(await carregarRegistros(baseId, true));
       escolher(data.registro);
     } catch (e) {
@@ -177,12 +179,12 @@ function SeletorRegistro({ campo, valor, onChange }) {
   const inp = 'w-full py-1.5 rounded-lg text-xs bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]';
   return (
     <div ref={caixa} className="relative space-y-1.5">
-      {atual
+      {atual && !semValor
         ? <CartaoRegistro reg={atual} onTrocar={() => setAberto(a => !a)} onLimpar={() => escolher(null)} />
         : (
           <button type="button" onClick={() => setAberto(a => !a)}
             className="w-full flex items-center gap-2 text-left bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1.5 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]">
-            <span className="flex-1 text-[var(--c-suave)]">Selecione um registro…</span>
+            <span className={`flex-1 truncate ${atual ? 'text-[var(--c-texto)]' : 'text-[var(--c-suave)]'}`}>{atual ? atual.descricao : 'Selecione um registro…'}</span>
             <ChevronDown size={13} className="shrink-0 text-[var(--c-suave)]" />
           </button>
         )}
@@ -197,8 +199,8 @@ function SeletorRegistro({ campo, valor, onChange }) {
             <div className="rounded-lg border border-[var(--c-destaque)]/40 bg-[var(--c-destaque)]/5 p-2 space-y-1.5">
               <p className="text-[11px] font-semibold text-[var(--c-texto)]">Novo registro</p>
               <input autoFocus value={novo.descricao} onChange={e => setNovo(n => ({ ...n, descricao: e.target.value }))} placeholder="Descrição" maxLength={160} className={`${inp} px-2`} />
-              <input value={novo.valor} onChange={e => setNovo(n => ({ ...n, valor: e.target.value }))} placeholder="Valor (R$)" inputMode="decimal"
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); criar(); } if (e.key === 'Escape') setNovo(null); }} className={`${inp} px-2`} />
+              {!semValor && <input value={novo.valor} onChange={e => setNovo(n => ({ ...n, valor: e.target.value }))} placeholder="Valor (R$)" inputMode="decimal"
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); criar(); } if (e.key === 'Escape') setNovo(null); }} className={`${inp} px-2`} />}
               <div className="flex justify-end gap-1.5">
                 <button type="button" onClick={() => setNovo(null)} className="px-2 py-1 rounded-lg text-[11px] text-[var(--c-suave)] hover:text-[var(--c-texto)]">Cancelar</button>
                 <button type="button" onClick={criar} disabled={salvando}
@@ -218,12 +220,13 @@ function SeletorRegistro({ campo, valor, onChange }) {
           {erro && <p className="text-[11px] text-red-400">{erro}</p>}
           <div className="max-h-56 overflow-y-auto space-y-0.5">
             {!lista && !erro && <div className="flex justify-center py-3"><Spinner size={14} /></div>}
+            {semValor && atual && <button type="button" onClick={() => escolher(null)} className="w-full text-left px-2 py-1 rounded-lg text-[11px] text-[var(--c-suave)] hover:bg-[var(--c-borda)]/40">Limpar seleção</button>}
             {filtrados.map(r => (
               <button key={r.id} type="button" onClick={() => escolher(r)}
-                className={`w-full flex items-center gap-2 text-left px-2 py-1.5 rounded-lg text-xs hover:bg-[var(--c-borda)]/40 ${r.id === atual?.id ? 'text-[var(--c-destaque)] font-semibold' : 'text-[var(--c-texto)]'}`}>
-                {r.id === atual?.id && <Check size={12} />}
+                className={`w-full flex items-center gap-2 text-left px-2 py-1.5 rounded-lg text-xs hover:bg-[var(--c-borda)]/40 ${(semValor ? r.descricao === atual?.descricao : r.id === atual?.id) ? 'text-[var(--c-destaque)] font-semibold' : 'text-[var(--c-texto)]'}`}>
+                {(semValor ? r.descricao === atual?.descricao : r.id === atual?.id) && <Check size={12} />}
                 <span className="flex-1 min-w-0 truncate">{r.descricao}</span>
-                <span className="shrink-0 text-[var(--c-suave)]">{fmtMoeda(r.valor)}</span>
+                {!semValor && <span className="shrink-0 text-[var(--c-suave)]">{fmtMoeda(r.valor)}</span>}
               </button>
             ))}
             {lista && !filtrados.length && <p className="px-2 py-2 text-[11px] text-[var(--c-suave)]">{lista.length ? 'Nada encontrado. Use “Criar registro”.' : 'Base vazia. Use “Criar registro”.'}</p>}
@@ -494,6 +497,7 @@ export function Editor({ campo, valor, onChange }) {
     );
   }
   if (campo.tipo === 'registro') return <SeletorRegistro campo={campo} valor={valor} onChange={onChange} />;
+  if (/^base:\d+$/.test(String(campo.lista || ''))) return <SeletorRegistro campo={campo} valor={valor} onChange={onChange} semValor />;
   if ((campo.tipo === 'radio_vertical' || campo.tipo === 'radio_horizontal') && campo.opcoes?.length) {
     const atual = valorLista(valor)[0] || '';
     return (
