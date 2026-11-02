@@ -10,14 +10,14 @@
 // Ao salvar, o sistema cria o pedido no Zen até a ordem de separação.
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
-import { Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, User, BadgeCheck, AlertTriangle, ExternalLink, Settings, Activity, History, ArrowRight, ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Trash2, User, BadgeCheck, AlertTriangle, ExternalLink, Settings, Activity, History, ArrowRight, ArrowLeft, ChevronDown, ChevronRight, Pencil } from 'lucide-react';
 import { lojinhaService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import ConfigOrcamento, { campoDaConfig } from '../../components/operador/ConfigOrcamento';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
-import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard } from '../../components/operador/CamposCardOrcamento';
+import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro } from '../../components/operador/CamposCardOrcamento';
 
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
@@ -471,6 +471,7 @@ function CardPedido({ p, campos = [], carregar, onAbrir, movendo = false, onArra
 
 // ── Card aberto: dados e fases anteriores | fase atual | mover ──
 function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHistorico, onConfigurarMover = null }) {
+  const [editandoFase, setEditandoFase] = useState(() => new Set()); // fases anteriores em edição (admin)
   const [rascunho, setRascunho] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [movendo, setMovendo] = useState(false);
@@ -486,10 +487,14 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
   const camposDe = (k) => campos.filter(c => c.coluna === k).map(campoDaConfig);
   const camposAtuais = camposDe(atual).filter(c => visivelAgora(c, valorDe));
   const idx = colunas.findIndex(c => c.status === atual);
+  // Fases anteriores: mostram os campos preenchidos; o admin clica em "Editar" na fase e edita todos os campos dela
   const anteriores = colunas.filter(c => c.status !== atual)
-    // Admin vê e edita todos os campos das outras fases; os demais veem só os preenchidos
-    .map(c => ({ col: c, campos: camposDe(c.status).filter(f => ehAdmin ? visivelAgora(f, valorDe) : temValor(f.id) || (f.tipo === 'attachment' && temFoto(f.id))) }))
-    .filter(g => g.campos.length);
+    .map(c => {
+      const editando = ehAdmin && editandoFase.has(c.status);
+      const todos = camposDe(c.status).filter(f => visivelAgora(f, valorDe));
+      return { col: c, editando, todos, campos: editando ? todos : todos.filter(f => temValor(f.id) || (f.tipo === 'attachment' && temFoto(f.id))) };
+    })
+    .filter(g => g.campos.length || (ehAdmin && g.todos.length));
 
   useEffect(() => {
     const k = (e) => { if (e.key === 'Escape') fechar(); };
@@ -500,7 +505,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
   async function salvar() {
     if (!sujo) return true;
     setSalvando(true); setErro('');
-    try { await lojinhaService.editarCampos(p.id, rascunho); setRascunho({}); await carregar(); return true; }
+    try { await lojinhaService.editarCampos(p.id, rascunho); setRascunho({}); setEditandoFase(new Set()); await carregar(); return true; }
     catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar os campos.'); return false; }
     finally { setSalvando(false); }
   }
@@ -533,7 +538,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
       <dd className="text-xs text-[var(--c-texto)] mt-1">
         {c.tipo === 'attachment'
           ? <FotosCampo pedido={p} campo={c} valor={null} podeEnviar={editavel} onMudou={carregar} />
-          : editavel && !SO_LEITURA.includes(c.tipo)
+          : editavel && !SO_LEITURA.includes(c.tipo) && !(c.tipo !== 'registro' && lerRegistro(valorDe(c.id)))
           ? <Editor campo={c} valor={valorDe(c.id)} onChange={v => setRascunho(r => ({ ...r, [c.id]: v }))} />
           : <Valor campo={c} valor={valorDe(c.id)} />}
       </dd>
@@ -570,8 +575,16 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
             </div>
             {anteriores.map(g => (
               <div key={g.col.status} className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4">
-                <div className="flex items-center gap-2 mb-3"><p className="text-sm font-bold text-[var(--c-texto)] flex-1">Fase</p><Pilula col={g.col} /></div>
-                <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, ehAdmin))}</dl>
+                <div className="flex items-center gap-2 mb-3"><p className="text-sm font-bold text-[var(--c-texto)] flex-1">Fase</p><Pilula col={g.col} />
+                  {ehAdmin && <button type="button" onClick={() => setEditandoFase(s => { const n = new Set(s); n.has(g.col.status) ? n.delete(g.col.status) : n.add(g.col.status); return n; })}
+                      title={editandoFase.has(g.col.status) ? 'Parar de editar' : 'Editar campos desta fase'}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold border ${editandoFase.has(g.col.status) ? 'border-[var(--c-destaque)] text-[var(--c-destaque)] bg-[var(--c-destaque)]/10' : 'border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
+                      {editandoFase.has(g.col.status) ? <><Check size={11} /> Pronto</> : <><Pencil size={11} /> Editar</>}
+                    </button>}
+                </div>
+                {g.campos.length
+                  ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
+                  : <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido.</p>}
               </div>
             ))}
           </div>
