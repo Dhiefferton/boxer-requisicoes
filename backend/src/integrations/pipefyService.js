@@ -223,6 +223,7 @@ export async function listarCardsEntradaPipefy(jaExistem = new Set()) {
       }
     }`;
   const cards = [];
+  const nsExistentes = [];
   let after = null, faseNome = 'Entrada';
   for (let pagina = 0; pagina < 20; pagina++) {
     const data = await pipefyQueryPlanilhas(gql, { phaseId: String(ORCAMENTO_PHASE_ENTRADA), after });
@@ -231,7 +232,12 @@ export async function listarCardsEntradaPipefy(jaExistem = new Set()) {
     if (data?.phase?.name) faseNome = data.phase.name;
     if (!conn) break;
     for (const { node } of conn.edges || []) {
-      if (jaExistem.has(String(node.id))) continue; // já está no B-Requisições: nem processa
+      if (jaExistem.has(String(node.id))) {
+        // Já está no B-Requisições: só aproveita a NS de entrada (preenchida no Pipefy depois)
+        const ns = nsEntradaDosCampos((node.fields || []).map(f => ({ id: f.field?.id || null, nome: f.name, valor: f.value })));
+        if (ns) nsExistentes.push({ id: String(node.id), ns });
+        continue;
+      }
       cards.push({
         id: String(node.id), titulo: node.title, url: node.url, criadoEm: node.createdAt,
         campos: (node.fields || []).map(f => ({ id: f.field?.id || null, nome: f.name, valor: f.value, array_value: f.array_value })),
@@ -269,7 +275,7 @@ export async function listarCardsEntradaPipefy(jaExistem = new Set()) {
     }
     for (const f of card.campos) delete f.array_value;
   }
-  return { cards, faseNome, chamadas };
+  return { cards, faseNome, chamadas, nsExistentes };
 }
 
 export async function listarCardsDaFase(phaseId = ORCAMENTO_PHASE_REQUISITAR) {
@@ -317,6 +323,16 @@ function numeroBR(valor) {
 }
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+// NS de entrada: campo da fase ("NS Entrada"), do formulário inicial ("NS de entrada")
+// ou o campo "NS Entrada" criado no B-Requisições — o primeiro preenchido
+export function nsEntradaDosCampos(campos = []) {
+  const ids = ['ns_entrada_1', 'ns_entrada', 'ns_de_entrada'];
+  const cheio = (c) => valorTexto(c?.valor);
+  const c = ids.map(id => campos.find(x => x?.id === id && cheio(x))).find(Boolean)
+    || campos.find(x => /^ns (de )?entrada$/.test(norm(x?.nome)) && cheio(x));
+  return c ? valorTexto(c.valor) : null;
+}
 
 export function extrairDadosOrcamento(card) {
   const campos = card.campos || [];
@@ -379,10 +395,7 @@ export function extrairDadosOrcamento(card) {
     tecnico:         valorTexto((porId('t_cnico_1') || porNome(/^tecnico/))?.valor),
     frete_por_conta: valorTexto((porId('frete_por_conta') || porNome(/^frete por conta/))?.valor),
     entregue_por:    valorTexto((porId('entregue_por') || porNome(/^entregue por/))?.valor),
-    // NS de entrada: campo da fase ("NS Entrada") ou do formulário inicial ("NS de entrada").
-    // Vazios (card ainda na Entrada): o número do campo "ID" do Pipefy, que é o número do próprio card.
-    ns_entrada:      valorTexto([porId('ns_entrada_1'), porId('ns_entrada'), porId('ns_de_entrada'), porNome(/^ns (de )?entrada$/)].find(c => valorTexto(c?.valor))?.valor)
-                       || (card.id ? String(card.id) : null),
+    ns_entrada:      nsEntradaDosCampos(campos),
     itens,
   };
 }
