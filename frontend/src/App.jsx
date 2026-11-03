@@ -26,8 +26,8 @@ import Inventario       from './pages/operador/Inventario';
 import InventarioDetalhe from './pages/operador/InventarioDetalhe';
 import InventarioContagem from './pages/operador/InventarioContagem';
 import InventarioIndicadores from './pages/operador/InventarioIndicadores';
-import { podeVerOrcamentos } from './utils/acessoOrcamentos';
-import { podeVerInventario, podeRecontar } from './utils/acessoInventario';
+import { podeRecontar } from './utils/acessoInventario';
+import { veTela } from './utils/telas';
 import { Spinner } from './components/ui';
 
 function RotaProtegida({ children }) {
@@ -43,7 +43,8 @@ function RotaProtegida({ children }) {
   return <AppLayout>{children}</AppLayout>;
 }
 
-function RotaInventario({ children, recontagem }) {
+// Tela liberada para o usuário (perfil + telas escolhidas no cadastro do colaborador)
+function RotaTela({ tela, recontagem, children }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -52,51 +53,8 @@ function RotaInventario({ children, recontagem }) {
   );
   if (!usuario) return <Navigate to="/login" replace />;
   if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
-  if (!podeVerInventario(usuario)) return <Navigate to="/catalogo" replace />;
+  if (!veTela(usuario, tela)) return <Navigate to={tela === 'catalogo' ? '/minha-senha' : '/catalogo'} replace />;
   if (recontagem && !podeRecontar(usuario)) return <Navigate to="/inventario" replace />;
-  return <AppLayout>{children}</AppLayout>;
-}
-
-function RotaOrcamentos({ children }) {
-  const { usuario, carregando } = useAuth();
-  if (carregando) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Spinner size={32} className="text-[var(--c-destaque)]" />
-    </div>
-  );
-  if (!usuario) return <Navigate to="/login" replace />;
-  if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
-  if (!podeVerOrcamentos(usuario)) return <Navigate to="/catalogo" replace />;
-  return <AppLayout>{children}</AppLayout>;
-}
-
-function RotaPerfil({ perfis, children }) {
-  const { usuario, carregando } = useAuth();
-  if (carregando) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Spinner size={32} className="text-[var(--c-destaque)]" />
-    </div>
-  );
-  if (!usuario) return <Navigate to="/login" replace />;
-  if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
-  if (!perfis.includes(usuario.perfil)) return <Navigate to="/catalogo" replace />;
-  return <AppLayout>{children}</AppLayout>;
-}
-
-// Libera acesso pra admin (qualquer setor) OU usuários de um setor específico
-// (por nome do departamento, não por perfil).
-function RotaAdminOuSetor({ setores, perfis = ['admin'], children }) {
-  const { usuario, carregando } = useAuth();
-  if (carregando) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Spinner size={32} className="text-[var(--c-destaque)]" />
-    </div>
-  );
-  if (!usuario) return <Navigate to="/login" replace />;
-  if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
-  const setoresNormalizados = setores.map(s => s.trim().toLowerCase());
-  const liberado = perfis.includes(usuario.perfil) || setoresNormalizados.includes((usuario.departamento_nome || '').trim().toLowerCase());
-  if (!liberado) return <Navigate to="/catalogo" replace />;
   return <AppLayout>{children}</AppLayout>;
 }
 
@@ -110,61 +68,61 @@ export default function App() {
             <Route path="/trocar-senha" element={<TrocarSenha />} />
             <Route path="/redefinir-senha" element={<RedefinirSenha />} />
             <Route path="/catalogo" element={
-              <RotaProtegida><Catalogo /></RotaProtegida>
+              <RotaTela tela="catalogo"><Catalogo /></RotaTela>
             } />
             <Route path="/minha-senha" element={
               <RotaProtegida><MinhaSenha /></RotaProtegida>
             } />
             <Route path="/revisao" element={
-              <RotaProtegida><Revisao /></RotaProtegida>
+              <RotaTela tela="catalogo"><Revisao /></RotaTela>
             } />
             <Route path="/historico" element={
-              <RotaProtegida><Historico /></RotaProtegida>
+              <RotaTela tela="historico"><Historico /></RotaTela>
             } />
             <Route path="/operador" element={
-              <RotaPerfil perfis={['operador', 'admin']}><PainelOperador /></RotaPerfil>
+              <RotaTela tela="operador"><PainelOperador /></RotaTela>
             } />
             <Route path="/entradas" element={
-              <RotaPerfil perfis={['admin']}><RegistroEntradas /></RotaPerfil>
+              <RotaTela tela="entradas"><RegistroEntradas /></RotaTela>
             } />
             <Route path="/estoque" element={
-              <RotaPerfil perfis={['admin']}><Estoque /></RotaPerfil>
+              <RotaTela tela="estoque"><Estoque /></RotaTela>
             } />
             <Route path="/admin" element={
-              <RotaPerfil perfis={['admin']}><PainelAdmin /></RotaPerfil>
+              <RotaTela tela="admin"><PainelAdmin /></RotaTela>
             } />
             <Route path="/mrp" element={
-              <RotaPerfil perfis={['admin']}><MRP /></RotaPerfil>
+              <RotaTela tela="mrp"><MRP /></RotaTela>
             } />
             <Route path="/compras" element={
-              <RotaPerfil perfis={['admin']}><Compras /></RotaPerfil>
+              <RotaTela tela="compras"><Compras /></RotaTela>
             } />
             <Route path="/recebimento-importacao" element={
-              <RotaPerfil perfis={['operador', 'admin']}><RecebimentoImportacao /></RotaPerfil>
+              <RotaTela tela="recebimento_importacao"><RecebimentoImportacao /></RotaTela>
             } />
             <Route path="/lojinha" element={
-              <RotaAdminOuSetor perfis={['admin', 'operador']} setores={['Sac / Suporte']}><LojinhaBoxer /></RotaAdminOuSetor>
+              <RotaTela tela="lojinha"><LojinhaBoxer /></RotaTela>
             } />
             <Route path="/necessidade-pecas" element={
-              <RotaAdminOuSetor setores={['Sac / Suporte']}><NecessidadePecas /></RotaAdminOuSetor>
+              <RotaTela tela="necessidade_pecas"><NecessidadePecas /></RotaTela>
             } />
             <Route path="/pedidos-orcamento" element={
-              <RotaOrcamentos><PedidosOrcamento /></RotaOrcamentos>
+              <RotaTela tela="orcamentos"><PedidosOrcamento /></RotaTela>
             } />
             <Route path="/inventario" element={
-              <RotaInventario><Inventario /></RotaInventario>
+              <RotaTela tela="inventario"><Inventario /></RotaTela>
             } />
             <Route path="/inventario/indicadores" element={
-              <RotaInventario><InventarioIndicadores /></RotaInventario>
+              <RotaTela tela="inventario"><InventarioIndicadores /></RotaTela>
             } />
             <Route path="/inventario/:id" element={
-              <RotaInventario><InventarioDetalhe /></RotaInventario>
+              <RotaTela tela="inventario"><InventarioDetalhe /></RotaTela>
             } />
             <Route path="/inventario/:id/contar" element={
-              <RotaInventario><InventarioContagem /></RotaInventario>
+              <RotaTela tela="inventario"><InventarioContagem /></RotaTela>
             } />
             <Route path="/inventario/:id/recontar" element={
-              <RotaInventario recontagem><InventarioContagem key="recontagem" modo="recontagem" /></RotaInventario>
+              <RotaTela tela="inventario" recontagem><InventarioContagem key="recontagem" modo="recontagem" /></RotaTela>
             } />
             <Route path="/"  element={<Navigate to="/catalogo" replace />} />
             <Route path="*"  element={<Navigate to="/catalogo" replace />} />
