@@ -6,7 +6,7 @@
 // B-Requisições (não são enviadas para o Pipefy).
 // ============================================================
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { Camera, X, Paperclip, ImageOff, Trash2, Images } from 'lucide-react';
+import { Camera, X, Paperclip, ImageOff, Trash2, Images, FileText } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 
@@ -45,7 +45,7 @@ export function fotosDoCard(pedido, campoId = null) {
     for (const u of lista(valor)) if (/^https?:\/\//.test(u) && ehImagem(u)) pipefy.push({ tipo: 'pipefy', url: u, campo: c.id });
   }
   const locais = (Array.isArray(pedido?.fotos_locais) ? pedido.fotos_locais : [])
-    .filter(f => !campoId || f.campo === campoId).map(f => ({ tipo: 'local', id: f.id, campo: f.campo }));
+    .filter(f => !campoId || f.campo === campoId).map(f => ({ tipo: 'local', id: f.id, campo: f.campo, mime: f.mime || 'image/jpeg', nome: f.nome || '' }));
   return [...pipefy, ...locais];
 }
 
@@ -69,9 +69,32 @@ function ImagemAuth({ url, className = '', onClick, alt = '' }) {
 }
 
 // Miniatura de uma foto (Pipefy ou local)
+// Arquivo (PDF, Word…) adicionado no B-Requisições: abre numa aba nova
+export const ehArquivo = (foto) => foto?.tipo === 'local' && !String(foto.mime || 'image/').startsWith('image/');
+function extensao(foto) {
+  const n = String(foto.nome || '');
+  if (n.includes('.')) return n.split('.').pop().slice(0, 4).toUpperCase();
+  return /pdf/.test(foto.mime) ? 'PDF' : 'ARQ';
+}
+async function abrirArquivo(svc, foto) {
+  const aba = window.open('', '_blank');
+  try {
+    const { data } = await svc.imagem(urlLocal(foto.id, null, svc.base));
+    const url = URL.createObjectURL(data);
+    if (aba) aba.location.href = url; else window.open(url, '_blank');
+  } catch { if (aba) aba.close(); alert('Não consegui abrir o arquivo.'); }
+}
 function Miniatura({ foto, className, onClick }) {
   const svc = useContext(FotosCtx);
   const [falhou, setFalhou] = useState(false);
+  if (ehArquivo(foto)) {
+    return (
+      <button type="button" onClick={onClick || (() => abrirArquivo(svc, foto))} title={foto.nome || 'Abrir arquivo'}
+        className={`${className} flex flex-col items-center justify-center gap-0.5 text-[var(--c-texto)] hover:text-[var(--c-destaque)]`}>
+        <FileText size={16} /><span className="text-[9px] font-bold">{extensao(foto)}</span>
+      </button>
+    );
+  }
   if (foto.tipo === 'local') return <ImagemAuth url={urlLocal(foto.id, 'mini', svc.base)} className={className} onClick={onClick} />;
   if (falhou) return <a href={foto.url} target="_blank" rel="noreferrer" title="Abrir no Pipefy" className={`${className} flex items-center justify-center text-[var(--c-suave)]`}><ImageOff size={14} /></a>;
   return <img src={foto.url} alt="" loading="lazy" onError={() => setFalhou(true)} onClick={onClick} className={`${className} object-cover cursor-zoom-in`} />;
@@ -104,7 +127,11 @@ export function FotoAmpliada({ fotos, inicio = 0, onFechar, podeExcluir, onExclu
       </div>
       <div className="flex items-center gap-2 max-w-full" onClick={e => e.stopPropagation()}>
         <button disabled={i === 0} onClick={() => setI(n => n - 1)} className="px-2 py-6 text-white/70 hover:text-white disabled:opacity-20 text-2xl">‹</button>
-        {foto.tipo === 'local'
+        {ehArquivo(foto)
+          ? <button onClick={() => abrirArquivo(svc, foto)} className="flex flex-col items-center gap-2 px-10 py-8 rounded-lg bg-white/10 text-white hover:bg-white/15">
+              <FileText size={40} /><span className="text-sm">{foto.nome || 'Arquivo'}</span><span className="text-xs underline">Abrir arquivo</span>
+            </button>
+          : foto.tipo === 'local'
           ? <ImagemAuth url={urlLocal(foto.id, null, svc.base)} className="max-h-[80dvh] max-w-[85vw] !object-contain rounded-lg" />
           : <img src={foto.url} alt="" className="max-h-[80dvh] max-w-[85vw] object-contain rounded-lg" />}
         <button disabled={i === fotos.length - 1} onClick={() => setI(n => n + 1)} className="px-2 py-6 text-white/70 hover:text-white disabled:opacity-20 text-2xl">›</button>
@@ -114,6 +141,14 @@ export function FotoAmpliada({ fotos, inicio = 0, onFechar, podeExcluir, onExclu
 }
 
 // ── Reduz a foto no aparelho antes de enviar ────────────────
+function lerArquivo(arquivo) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result || '').replace(/^data:;base64,/, `data:${arquivo.type || 'application/octet-stream'};base64,`));
+    r.onerror = () => reject(new Error('Não consegui ler o arquivo.'));
+    r.readAsDataURL(arquivo);
+  });
+}
 function lerImagem(arquivo) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(arquivo);
@@ -146,15 +181,22 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
 
   async function enviar(arquivos) {
     setErro('');
-    const lista = [...(arquivos || [])].filter(a => a.type.startsWith('image/'));
+    const lista = [...(arquivos || [])];
     if (!lista.length) return;
+    const grande = lista.find(a => !a.type.startsWith('image/') && a.size > 2.5 * 1024 * 1024);
+    if (grande) { setErro(`"${grande.name}" passa de 2,5 MB.`); if (input.current) input.current.value = ''; return; }
     setEnviando(lista.length);
     try {
       for (const a of lista) {
-        const img = await lerImagem(a);
-        await svc.enviarFoto(pedido.id, {
-          campo_id: campo.id, imagem: reduzir(img, 1280, 0.75), miniatura: reduzir(img, 320, 0.7),
-        });
+        if (a.type.startsWith('image/')) {
+          const img = await lerImagem(a);
+          await svc.enviarFoto(pedido.id, {
+            campo_id: campo.id, imagem: reduzir(img, 1280, 0.75), miniatura: reduzir(img, 320, 0.7), nome: a.name,
+          });
+        } else {
+          // PDF, Word, Excel, texto: vai do jeito que está
+          await svc.enviarFoto(pedido.id, { campo_id: campo.id, imagem: await lerArquivo(a), miniatura: null, nome: a.name });
+        }
         setEnviando(n => n - 1);
       }
       onMudou?.();
@@ -162,7 +204,7 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
     finally { setEnviando(0); if (input.current) input.current.value = ''; if (camera.current) camera.current.value = ''; }
   }
   async function excluir(foto) {
-    if (!confirm('Excluir esta foto do B-Requisições?')) return;
+    if (!confirm(ehArquivo(foto) ? `Excluir o arquivo "${foto.nome || 'arquivo'}" do B-Requisições?` : 'Excluir esta foto do B-Requisições?')) return;
     try { await svc.excluirFoto(foto.id); setAmpliada(null); onMudou?.(); }
     catch (e) { alert(e.response?.data?.erro || 'Erro ao excluir a foto.'); }
   }
@@ -188,14 +230,14 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
                 className="w-16 h-16 rounded-lg border-2 border-dashed border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:border-[var(--c-destaque)] flex flex-col items-center justify-center gap-0.5 text-[10px]">
                 <Camera size={16} /> Câmera
               </button>
-              <button type="button" onClick={() => input.current?.click()} title="Escolher fotos da galeria (fica só no B-Requisições)"
-                className="w-16 h-16 rounded-lg border-2 border-dashed border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:border-[var(--c-destaque)] flex flex-col items-center justify-center gap-0.5 text-[10px]">
-                <Images size={16} /> Galeria
+              <button type="button" onClick={() => input.current?.click()} title="Escolher fotos ou arquivos — PDF, Word, Excel (fica só no B-Requisições)"
+                className="w-16 h-16 rounded-lg border-2 border-dashed border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:border-[var(--c-destaque)] flex flex-col items-center justify-center gap-0.5 text-[10px] text-center leading-tight">
+                <Images size={16} /> Galeria / arquivo
               </button>
             </>
           ))}
           <input ref={camera} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => enviar(e.target.files)} />
-          <input ref={input} type="file" accept="image/*" multiple className="hidden" onChange={e => enviar(e.target.files)} />
+          <input ref={input} type="file" accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" multiple className="hidden" onChange={e => enviar(e.target.files)} />
         </div>
       )}
       {!fotos.length && !podeEnviar && !outros.length && <span className="text-[var(--c-suave)]">—</span>}
