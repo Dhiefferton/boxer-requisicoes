@@ -32,7 +32,7 @@ import {
   gerarRelatorio, listarRelatorios, detalharRelatorio
 } from '../controllers/necessidadesPecasController.js';
 import {
-  listarPedidos, criarPedido, moverPedido, enviarFotoOrcamento, verFotoOrcamento, excluirFotoOrcamento, listarModelos, criarModelo, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, criarCardBoxer, clienteZen, listarMovimentos
+  listarPedidos, criarPedido, moverPedido, enviarFotoOrcamento, verFotoOrcamento, excluirFotoOrcamento, listarModelos, criarModelo, editarPedido, cancelarPedido, listarPipesPipefy, sincronizarPipefy, importarEntradaPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, criarCardBoxer, clienteZen, listarMovimentos
 } from '../controllers/pedidosOrcamentoController.js';
 import {
   listarInventarios, previaInventario, criarInventario, detalharInventario, meuInventario,
@@ -195,6 +195,7 @@ router.post('/pedidos-orcamento/:id/atualizar-itens-zen', autenticar, exigirPerf
 router.post('/pedidos-orcamento/:id/voltar-separacao', autenticar, exigirPerfil('admin'), voltarSeparacaoRota);
 router.get('/pedidos-orcamento/pipefy-pipes',   autenticar, exigirPerfil('admin'), listarPipesPipefy);
 router.post('/pedidos-orcamento/sincronizar-pipefy', autenticar, exigirPerfil('operador', 'admin'), sincronizarPipefy);
+router.post('/pedidos-orcamento/importar-entrada', autenticar, exigirPerfil('admin'), importarEntradaPipefy);
 
 // Em andamento e Aprovado: só admin edita/decide
 router.post('/necessidades-pecas/:id/iniciar-revisao', autenticar, exigirPerfil('admin'), iniciarRevisao);
