@@ -71,7 +71,7 @@ function textoBusca(o, prof = 0) {
   if (Array.isArray(o)) return o.map(x => textoBusca(x, prof + 1)).join(' ');
   return Object.entries(o).filter(([k]) => !IGNORAR_BUSCA.has(k)).map(([, v]) => textoBusca(v, prof + 1)).join(' ');
 }
-function combinaBusca(pedido, busca) {
+export function combinaBusca(pedido, busca) {
   const termos = semAcento(busca).split(/\s+/).filter(Boolean);
   if (!termos.length) return true;
   const texto = semAcento(textoBusca(pedido));
@@ -94,10 +94,10 @@ const SERVICO_CONFIG = { config: () => lojinhaService.quadroConfig(), salvarConf
 const buscarMovimentos = (params) => lojinhaService.movimentos(params);
 
 // Coluna do pedido na tela ('liberacao' aparece na Entrada)
-const colunaDo = (p) => (['entrada', 'liberacao'].includes(p.status) ? 'entrada' : p.status);
+export const colunaDo = (p) => (['entrada', 'liberacao'].includes(p.status) ? 'entrada' : p.status);
 
 // Colunas da tela: as da configuração (nome, cor, ordem, colunas novas) ou as padrão
-function montarColunas(cfg) {
+export function montarColunas(cfg) {
   if (!cfg?.colunas?.length) return COLUNAS.map(c => ({ ...c, admin: false, arquivada: false }));
   const padrao = new Map(COLUNAS.map(c => [c.status, c]));
   return cfg.colunas.map(c => ({
@@ -258,14 +258,14 @@ export default function LojinhaBoxer() {
   );
 }
 
-function Pilula({ col }) {
+export function Pilula({ col }) {
   if (!col) return null;
   return col.hex
     ? <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium" style={{ background: `${col.hex}26`, color: col.hex }}>{col.titulo}</span>
     : <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${col.badge || ''}`}>{col.titulo}</span>;
 }
 
-function Coluna({ col, total, arquivada = false, onConfigurar, arraste = null, onArrasteSobre, onArrasteSai, onSoltar, children }) {
+export function Coluna({ col, total, arquivada = false, onConfigurar, arraste = null, onArrasteSobre, onArrasteSai, onSoltar, children }) {
   const [aberta, setAberta] = useState(!arquivada);
   // Durante o arraste: coluna que aceita fica destacada; a que não aceita fica apagada
   const realce = arraste ? (arraste.pode ? (arraste.sobre ? 'ring-2 ring-[var(--c-destaque)] bg-[var(--c-destaque)]/5' : 'ring-1 ring-[var(--c-destaque)]/40') : 'opacity-40') : '';
@@ -346,7 +346,7 @@ function StatusZen({ p, carregar }) {
 }
 
 // Dados da coluna Liberação: Nº da ordem de separação e cards (7 itens por card)
-function InfoLiberacao({ p, itens }) {
+export function InfoLiberacao({ p, itens }) {
   const qtd = p.qtd_cards || Math.max(1, Math.ceil(itens.length / ITENS_POR_CARD));
   const grupos = Array.from({ length: qtd }, (_, i) => itens.slice(i * ITENS_POR_CARD, (i + 1) * ITENS_POR_CARD));
   return (
@@ -384,7 +384,7 @@ async function excluirPedido(p) {
 }
 
 // Dados fixos do pedido (cliente, envio, produtos e totais)
-function DadosPedido({ p, sempreProdutos = false }) {
+export function DadosPedido({ p, sempreProdutos = false }) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
   const [abertoProd, setAbertoProd] = useState(sempreProdutos);
   const desconto = valorDesconto(itens, p.assistente_autorizado);
