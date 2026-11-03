@@ -121,6 +121,10 @@ export function CartaoRegistro({ reg, onLimpar, onTrocar }) {
         <div className="min-w-0"><dt className="text-[10px] text-[var(--c-suave)]">Base</dt>
           <dd><span className="inline-block max-w-full truncate rounded px-1.5 py-0.5 text-[11px] font-semibold text-[var(--c-destaque)] bg-[var(--c-destaque)]/10">{reg.base || '—'}</span></dd></div>
         <div><dt className="text-[10px] text-[var(--c-suave)]">Valor</dt><dd className="font-semibold text-[var(--c-texto)]">{fmtMoeda(reg.valor)}</dd></div>
+        {(reg.extras || []).map((x, i) => (
+          <div key={i} className="min-w-0"><dt className="text-[10px] text-[var(--c-suave)]">{x.nome}</dt>
+            <dd className="text-[var(--c-texto)] break-words">{x.tipo === 'moeda' ? fmtMoeda(String(x.valor).replace(',', '.')) : x.tipo === 'data' ? String(x.valor).slice(0, 10).split('-').reverse().join('/') : x.valor}</dd></div>
+        ))}
         {reg.criado_em && <div className="col-span-2"><dt className="text-[10px] text-[var(--c-suave)]">Criado em</dt><dd className="text-[var(--c-texto)]">{fmtDataLonga(reg.criado_em)}</dd></div>}
       </dl>
     </div>
@@ -157,9 +161,9 @@ function SeletorRegistro({ campo, valor, onChange, semValor = false }) {
     return () => document.removeEventListener('mousedown', fora);
   }, [aberto]);
   if (!baseId) return <p className="text-[11px] text-amber-400">Escolha a base deste campo em Configurar.</p>;
-  const filtrados = (lista || []).filter(r => normBusca(r.descricao).includes(normBusca(busca))).slice(0, 300);
+  const filtrados = (lista || []).filter(r => normBusca(`${r.descricao} ${(r.extras || []).map(x => x.valor).join(' ')}`).includes(normBusca(busca))).slice(0, 300);
   const escolher = (r) => {
-    onChange(!r ? '' : semValor ? r.descricao : JSON.stringify({ id: r.id, base_id: r.base_id, base: r.base, descricao: r.descricao, valor: r.valor, criado_em: r.criado_em }));
+    onChange(!r ? '' : semValor ? r.descricao : JSON.stringify({ id: r.id, base_id: r.base_id, base: r.base, descricao: r.descricao, valor: r.valor, criado_em: r.criado_em, ...(r.extras?.length ? { extras: r.extras } : {}) }));
     setAberto(false); setBusca(''); setNovo(null); setErro('');
   };
   async function criar() {

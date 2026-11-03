@@ -140,7 +140,7 @@ function BaseDoCampo({ valor, onChange, inp, semValor = false }) {
       {erro && <p className="text-[11px] text-red-400">{erro}</p>}
       <p className="text-[10px] text-[var(--c-suave)]">{semValor
         ? 'No card, quem preenche escolhe um registro desta lista (só descrição) ou usa “+ Criar registro”. A mesma lista pode ser usada em outros campos, no Orçamento e na Lojinha.'
-        : 'No card, quem preenche escolhe um registro (descrição e valor) desta base ou usa “+ Criar registro”. A mesma base pode ser usada em outros campos, no Orçamento e na Lojinha.'}</p>
+        : 'No card, quem preenche escolhe um registro (descrição e valor) desta base ou usa “+ Criar registro”. A mesma base pode ser usada em outros campos, no Orçamento e na Lojinha.'} Colunas, registros e valores: tela Databases.</p>
     </div>
   );
 }
