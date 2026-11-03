@@ -122,6 +122,20 @@ router.get('/debug-mov-orcamento', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// Ex: GET /api/erp/debug-ns-orcamento?secret=... — NS de entrada dos últimos cards vindos do Pipefy (só leitura)
+router.get('/debug-ns-orcamento', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const r = (await query(`SELECT id, status, pipefy_card_id, ns_entrada,
+        (SELECT json_agg(json_build_object('id', e->>'id', 'nome', e->>'nome', 'valor', e->>'valor'))
+           FROM jsonb_array_elements(CASE WHEN jsonb_typeof(pipefy_campos) = 'array' THEN pipefy_campos ELSE '[]'::jsonb END) e
+          WHERE e->>'id' ILIKE 'ns%' OR e->>'nome' ILIKE '%ns%entrada%' OR e->>'nome' = 'ID') AS campos_ns
+       FROM pedidos_orcamento WHERE pipefy_card_id IS NOT NULL ORDER BY id DESC LIMIT 8`)).rows;
+    const t = (await query(`SELECT COUNT(*)::int AS total, COUNT(NULLIF(ns_entrada::text, ''))::int AS com_ns FROM pedidos_orcamento WHERE pipefy_card_id IS NOT NULL`)).rows[0];
+    res.json({ ...t, cards: r });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // Ex: GET /api/erp/debug-corrigir-orcamento?secret=...&id=796&status=orcando
 // Ajuste pontual: coloca o card na coluna informada e limpa o erro do Zen (registra no histórico)
 router.get('/debug-corrigir-orcamento', async (req, res) => {
