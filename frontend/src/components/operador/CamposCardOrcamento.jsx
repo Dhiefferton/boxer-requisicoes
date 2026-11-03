@@ -514,7 +514,8 @@ export function Editor({ campo, valor, onChange }) {
     );
   }
   if (ESCOLHA.includes(campo.tipo)) return <ListaBusca campo={campo} valor={valor} onChange={onChange} />;
-  const texto = valorLista(valor).join(', ');
+  // Texto do jeito que foi digitado (sem cortar espaço do fim enquanto digita); lista do Pipefy vira texto
+  const texto = typeof valor === 'string' && !valor.trim().startsWith('[') ? valor : valorLista(valor).join(', ');
   if (campo.tipo === 'long_text') return <textarea rows={3} value={texto} onChange={e => onChange(e.target.value)} className={cls} />;
   return <input value={texto} onChange={e => onChange(e.target.value)} className={cls} />;
 }

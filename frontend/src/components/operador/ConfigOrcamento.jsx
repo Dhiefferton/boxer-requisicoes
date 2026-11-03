@@ -81,6 +81,23 @@ function BaseDoCampo({ valor, onChange, inp, semValor = false }) {
   }
   const idSel = Number(String(valor || '').replace(/^base:/, '')) || 0;
   const baseSel = (bases || []).find(b => b.id === idSel) || null;
+  // Trazer do Pipefy a base de peças (descrição e preço), em partes até terminar
+  const [trazendo, setTrazendo] = useState('');
+  async function trazerPipefy() {
+    if (!confirm('Trazer do Pipefy a base de peças (descrição e preço)?\n\nSó lê o Pipefy. Se a base já foi trazida antes, os registros são atualizados.')) return;
+    setErro(''); setTrazendo('Lendo o Pipefy…');
+    try {
+      let cursor = null, baseId = baseSel?.pipefy_tabela ? baseSel.id : null, r;
+      do {
+        ({ data: r } = await basesService.importarPipefy(cursor, baseId));
+        baseId = r.base.id; cursor = r.cursor;
+        setTrazendo(`${r.total} registro(s) em "${r.base.nome}"…`);
+      } while (!r.terminou);
+      const l = await basesService.listar(); setBases(l.data.bases.filter(b => (b.com_valor !== false) !== semValor));
+      onChange(String(r.base.id));
+      setTrazendo(`Pronto: ${r.total} registro(s) em "${r.base.nome}".`);
+    } catch (e) { setErro(e.response?.data?.erro || 'Erro ao trazer do Pipefy.'); setTrazendo(''); }
+  }
   async function excluir() {
     if (!baseSel) return;
     if (!confirm(`Excluir ${semValor ? 'a lista' : 'a base'} "${baseSel.nome}" e os ${baseSel.registros} registro(s) dela? Os cards que já usaram continuam com o que foi escolhido.`)) return;
@@ -113,6 +130,13 @@ function BaseDoCampo({ valor, onChange, inp, semValor = false }) {
         <button type="button" onClick={criar} disabled={criando || nova.trim().length < 2}
           className="px-3 rounded-lg border border-[var(--c-borda)] bg-[var(--c-cartao)] text-xs font-semibold text-[var(--c-destaque-claro)] disabled:opacity-40">{criando ? '...' : 'Criar'}</button>
       </div>
+      {!semValor && (
+        <button type="button" onClick={trazerPipefy} disabled={!!trazendo && !trazendo.startsWith('Pronto')}
+          className="w-full px-3 py-1.5 rounded-lg border border-[var(--c-borda)] bg-[var(--c-cartao)] text-xs font-semibold text-[var(--c-destaque-claro)] disabled:opacity-50">
+          {trazendo && !trazendo.startsWith('Pronto') ? trazendo : 'Trazer base de peças do Pipefy (descrição e preço)'}
+        </button>
+      )}
+      {trazendo.startsWith('Pronto') && <p className="text-[11px] text-green-400">{trazendo}</p>}
       {erro && <p className="text-[11px] text-red-400">{erro}</p>}
       <p className="text-[10px] text-[var(--c-suave)]">{semValor
         ? 'No card, quem preenche escolhe um registro desta lista (só descrição) ou usa “+ Criar registro”. A mesma lista pode ser usada em outros campos, no Orçamento e na Lojinha.'
