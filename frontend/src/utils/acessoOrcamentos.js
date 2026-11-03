@@ -10,11 +10,13 @@ export const ORCAMENTOS_SOMENTE_LEITURA = [
   'daiani.silva@boxersoldas.com.br',
 ];
 
+// Também respeita as telas escolhidas no cadastro do colaborador (utils/telas.js)
+import { mexeTela, veTela } from './telas';
+
 export function podeEditarOrcamentos(usuario) {
-  return ['admin', 'operador'].includes(usuario?.perfil);
+  return mexeTela(usuario, 'orcamentos');
 }
 
 export function podeVerOrcamentos(usuario) {
-  return podeEditarOrcamentos(usuario)
-    || ORCAMENTOS_SOMENTE_LEITURA.includes(String(usuario?.email || '').trim().toLowerCase());
+  return veTela(usuario, 'orcamentos');
 }

@@ -15,7 +15,8 @@ export const INVENTARIO_COLABORADORES = [
 export const RECONTAGEM_EMAILS = ['alexsander.lucas@boxer.com.br'];
 export const podeRecontar = (usuario) => RECONTAGEM_EMAILS.includes(String(usuario?.email || '').trim().toLowerCase());
 
+// Também respeita as telas escolhidas no cadastro do colaborador (utils/telas.js)
+import { veTela } from './telas';
 export function podeVerInventario(usuario) {
-  return ['admin', 'operador'].includes(usuario?.perfil)
-    || INVENTARIO_COLABORADORES.includes(String(usuario?.email || '').trim().toLowerCase());
+  return veTela(usuario, 'inventario');
 }
