@@ -66,6 +66,18 @@ export default function PedidosOrcamento() {
   const [sincronizando, setSincronizando] = useState(false);
   const [msgSync, setMsgSync] = useState('');
   const [verMovimentacao, setVerMovimentacao] = useState(false);
+  // "Trazer do Pipefy": lê só a fase Entrada do Pipefy (em lote) e cria aqui os cards que faltam
+  const [trazendo, setTrazendo] = useState(false);
+  const [avisoPipefy, setAvisoPipefy] = useState('');
+  async function trazerDoPipefy() {
+    setTrazendo(true); setAvisoPipefy('');
+    try {
+      const { data } = await pedidosOrcamentoService.importarEntrada();
+      setAvisoPipefy(data.novos ? `${data.novos} card${data.novos > 1 ? 's' : ''} novo${data.novos > 1 ? 's' : ''} na Entrada` : 'Nenhum card novo na Entrada do Pipefy');
+      if (data.novos) await carregar();
+    } catch (e) { setAvisoPipefy(e.response?.data?.erro || 'Não consegui ler o Pipefy agora.'); }
+    finally { setTrazendo(false); setTimeout(() => setAvisoPipefy(''), 8000); }
+  }
   const [busca, setBusca] = useState('');
   const [novoCard, setNovoCard] = useState(false);
   const [ocultarVazias, setOcultarVazias] = useState(false); // botão "Esconder vazias" retirado: todas as colunas aparecem
@@ -165,6 +177,14 @@ export default function PedidosOrcamento() {
             <button onClick={() => setNovoCard(true)} title="Criar card aqui no B-Requisições"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-destaque)] text-white hover:bg-[var(--c-destaque-h)]">
               <Plus size={13} /> Novo card
+            </button>
+          )}
+          {usuario?.perfil === 'admin' && avisoPipefy && <span className="text-[11px] text-[var(--c-suave)]">{avisoPipefy}</span>}
+          {usuario?.perfil === 'admin' && (
+            <button onClick={trazerDoPipefy} disabled={trazendo} title="Traz para a coluna Entrada os cards novos da fase Entrada do Pipefy (só leitura, uma consulta em lote)"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
+                bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors disabled:opacity-50">
+              {trazendo ? <RefreshCw size={13} className="animate-spin" /> : <DownloadCloud size={13} />} {trazendo ? 'Trazendo…' : 'Trazer do Pipefy'}
             </button>
           )}
           {usuario?.perfil === 'admin' && (
