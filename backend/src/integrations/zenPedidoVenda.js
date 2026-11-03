@@ -142,7 +142,7 @@ function campoPipefy(pedido, id, nomeRe) {
 }
 
 function montarObservacoes(pedido) {
-  const ns      = pedido.ns_entrada || campoPipefy(pedido, 'ns_entrada_1', /^ns entrada$/i);
+  const ns      = pedido.ns_entrada || campoPipefy(pedido, 'ns_entrada_1', /^ns entrada$/i) || campoPipefy(pedido, 'ns_entrada', /^ns de entrada$/i);
   const remessa = campoPipefy(pedido, 'remessa_de_conserto_n', /^remessa de conserto/i);
   const linhas = [];
   if (ns)      linhas.push(`NS DE ENTRADA: ${ns}`);
