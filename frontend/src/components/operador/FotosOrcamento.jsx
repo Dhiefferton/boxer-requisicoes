@@ -6,7 +6,7 @@
 // B-Requisições (não são enviadas para o Pipefy).
 // ============================================================
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { Camera, X, Paperclip, ImageOff, Trash2 } from 'lucide-react';
+import { Camera, X, Paperclip, ImageOff, Trash2, Images } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 
@@ -139,7 +139,8 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
   const [ampliada, setAmpliada] = useState(null);
   const [enviando, setEnviando] = useState(0);
   const [erro, setErro] = useState('');
-  const input = useRef(null);
+  const input = useRef(null);   // galeria (várias fotos)
+  const camera = useRef(null);  // câmera do celular direto
   const fotos = fotosDoCard(pedido, campo.id);
   const outros = lista(valor).filter(u => /^https?:\/\//.test(u) && !ehImagem(u));
 
@@ -158,7 +159,7 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
       }
       onMudou?.();
     } catch (e) { setErro(e.response?.data?.erro || e.message || 'Erro ao enviar a foto.'); onMudou?.(); }
-    finally { setEnviando(0); if (input.current) input.current.value = ''; }
+    finally { setEnviando(0); if (input.current) input.current.value = ''; if (camera.current) camera.current.value = ''; }
   }
   async function excluir(foto) {
     if (!confirm('Excluir esta foto do B-Requisições?')) return;
@@ -176,12 +177,24 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
               {f.tipo === 'local' && <span title="Adicionada no B-Requisições" className="absolute bottom-0.5 left-0.5 text-[8px] font-bold px-1 rounded bg-[var(--c-destaque)] text-white">B-REQ</span>}
             </div>
           ))}
-          {podeEnviar && (
-            <button onClick={() => input.current?.click()} disabled={enviando > 0} title="Adicionar foto (fica só no B-Requisições)"
-              className="w-16 h-16 rounded-lg border-2 border-dashed border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:border-[var(--c-destaque)] flex flex-col items-center justify-center gap-0.5 text-[10px] disabled:opacity-50">
-              {enviando > 0 ? <><Spinner size={14} /> {enviando}</> : <><Camera size={16} /> Foto</>}
-            </button>
-          )}
+          {podeEnviar && (enviando > 0 ? (
+            <div className="w-16 h-16 rounded-lg border-2 border-dashed border-[var(--c-borda)] text-[var(--c-suave)] flex flex-col items-center justify-center gap-0.5 text-[10px]">
+              <Spinner size={14} /> {enviando}
+            </div>
+          ) : (
+            <>
+              {/* Câmera: no celular abre a câmera direto (no computador abre a escolha de arquivo) */}
+              <button type="button" onClick={() => camera.current?.click()} title="Tirar foto com a câmera (fica só no B-Requisições)"
+                className="w-16 h-16 rounded-lg border-2 border-dashed border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:border-[var(--c-destaque)] flex flex-col items-center justify-center gap-0.5 text-[10px]">
+                <Camera size={16} /> Câmera
+              </button>
+              <button type="button" onClick={() => input.current?.click()} title="Escolher fotos da galeria (fica só no B-Requisições)"
+                className="w-16 h-16 rounded-lg border-2 border-dashed border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-destaque)] hover:border-[var(--c-destaque)] flex flex-col items-center justify-center gap-0.5 text-[10px]">
+                <Images size={16} /> Galeria
+              </button>
+            </>
+          ))}
+          <input ref={camera} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => enviar(e.target.files)} />
           <input ref={input} type="file" accept="image/*" multiple className="hidden" onChange={e => enviar(e.target.files)} />
         </div>
       )}
