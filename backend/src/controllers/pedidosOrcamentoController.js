@@ -10,7 +10,7 @@ import { query } from '../config/db.js';
 import {
   pipefyQuery, listarCardsDaFase, extrairDadosOrcamento, listarCardsNovosOrcamento,
   buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO, estruturaPipeOrcamento, CAMPO_DOC_CLIENTE,
-  atualizarCamposCardPipefy, TIPOS_EDITAVEIS_PIPEFY, PIPEFY_ATIVO,
+  atualizarCamposCardPipefy, TIPOS_EDITAVEIS_PIPEFY, PIPEFY_ATIVO, listarCardsEntradaPipefy,
 } from '../integrations/pipefyService.js';
 import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
@@ -771,6 +771,45 @@ export async function listarPipesPipefy(req, res, next) {
     const data = await pipefyQuery(gql);
     res.json(data);
   } catch (err) { next(err); }
+}
+
+// POST /pedidos-orcamento/importar-entrada (admin) — botão "Trazer do Pipefy" da tela Orçamentos.
+// Lê só a fase "Entrada" do Pipefy (consulta; o pipe não é alterado) e cria aqui, na coluna
+// Entrada, os cards que ainda não existem. Os que já existem não são lidos de novo nem alterados.
+let importandoEntrada = null;
+export async function importarEntradaPipefy(req, res, next) {
+  if (importandoEntrada) return res.status(409).json({ erro: 'Já tem uma importação em andamento. Aguarde alguns segundos.' });
+  importandoEntrada = (async () => {
+    await garantirColunas();
+    const ja = new Set((await query(`SELECT pipefy_card_id FROM pedidos_orcamento WHERE pipefy_card_id IS NOT NULL`)).rows.map(r => String(r.pipefy_card_id)));
+    const { cards, faseNome, chamadas } = await listarCardsEntradaPipefy(ja);
+    let novos = 0;
+    for (const card of cards) {
+      const d = extrairDadosOrcamento(card);
+      const r = await query(
+        `INSERT INTO pedidos_orcamento
+           (referencia, pipefy_card_id, pipefy_campos, pipefy_url, pipefy_sincronizado_em, pipefy_fase, status,
+            cliente_nome, cliente_cnpj, tecnico, frete_por_conta, entregue_por, ns_entrada, itens, criado_por, created_at)
+         VALUES ($1, $2, $3::jsonb, $4, NOW(), $5, 'entrada', $6, $7, $8, $9, $10, $11, $12::jsonb, $13, COALESCE($14::timestamptz, NOW()))
+         ON CONFLICT (pipefy_card_id) WHERE pipefy_card_id IS NOT NULL DO NOTHING
+         RETURNING id`,
+        [(d.cliente_nome || card.titulo || `Card ${card.id}`).slice(0, 255), card.id, JSON.stringify(card.campos), card.url || null,
+         faseNome, d.cliente_nome, d.cliente_cnpj, d.tecnico, d.frete_por_conta, d.entregue_por, d.ns_entrada,
+         JSON.stringify(d.itens), req.usuario.id, card.criadoEm || null]);
+      if (r.rows[0]) {
+        novos++;
+        await registrarMovimento(r.rows[0].id, 'importado', {
+          para: 'entrada', usuario: req.usuario, origem: 'usuario',
+          descricao: `Card trazido do Pipefy (fase "${faseNome}") pelo botão "Trazer do Pipefy"`,
+          detalhes: { pipefy_card_id: card.id },
+        });
+      }
+    }
+    return { sucesso: true, novos, novos_no_pipefy: cards.length, chamadas_pipefy: chamadas };
+  })();
+  try { res.json(await importandoEntrada); }
+  catch (err) { next(err); }
+  finally { importandoEntrada = null; }
 }
 
 // POST /pedidos-orcamento/sincronizar-pipefy — chamado automaticamente pela tela (ver sincronizarPipefy abaixo)
