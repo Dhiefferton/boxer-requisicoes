@@ -10,6 +10,7 @@ import { Plus, Ship, Plane, Check, X, RefreshCw, Ban, Package, FileDown } from '
 import * as XLSX from 'xlsx';
 import { necessidadesPecasService, materiaisService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { temBotao } from '../../utils/telas';
 import { Spinner } from '../../components/ui';
 
 function formatarData(iso) {
@@ -48,7 +49,7 @@ export default function NecessidadePecas() {
   // Em andamento e Aprovado (revisar, editar, aprovar, recusar, enviar)
   // são restritas a admin.
   const { usuario } = useAuth();
-  const podeRevisar = usuario?.perfil === 'admin';
+  const podeRevisar = temBotao(usuario, 'nec_revisar');
 
   const [itens,       setItens]       = useState([]);
   const [loading,     setLoading]     = useState(true);

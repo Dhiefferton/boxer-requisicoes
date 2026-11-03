@@ -14,6 +14,7 @@ import { Search, Check, RefreshCw, Truck, Package, Mail, Building2, Plus, X, Tra
 import { lojinhaService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
+import { podeNaTela } from '../../utils/telas';
 import ConfigOrcamento, { campoDaConfig } from '../../components/operador/ConfigOrcamento';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
@@ -109,7 +110,8 @@ function montarColunas(cfg) {
 
 export default function LojinhaBoxer() {
   const { usuario } = useAuth();
-  const ehAdmin = usuario?.perfil === 'admin';
+  // Botões liberados para o colaborador (Admin > Usuários > Editar); admin tem todos
+  const botoes = podeNaTela(usuario, 'lojinha');
   const [config, setConfig] = useState({ tipos_envio: ['Sedex', 'PAC', 'Próprio', 'Transportadora'], transportadoras: [], avisos_uf: {}, vendedoras: [], erro_vendedoras: null });
   const [pedidos, setPedidos] = useState(null);
   const [novo, setNovo] = useState(false);
@@ -150,7 +152,7 @@ export default function LojinhaBoxer() {
     const atual = colunas.find(c => c.status === colunaDo(p));
     if (col.status === colunaDo(p) || col.status === 'entrada') return false;
     if (Array.isArray(atual?.destinos) && !atual.destinos.includes(col.status)) return false;
-    if (!ehAdmin && (col.admin || atual?.admin)) return false;
+    if (!botoes.mover_admin && (col.admin || atual?.admin)) return false;
     return true;
   }
   async function soltar(col) {
@@ -187,7 +189,7 @@ export default function LojinhaBoxer() {
               bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 transition-colors">
             <Plus size={13} /> Novo pedido
           </button>
-          {ehAdmin && (
+          {botoes.movimentacao && (
             <button onClick={() => setVerMov(true)} title="Relatório de movimentação"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
               <Activity size={13} /> Movimentação
@@ -206,7 +208,7 @@ export default function LojinhaBoxer() {
             const doStatus = lista.filter(p => col.inclui.includes(p.status) && combinaBusca(p, busca));
             return (
               <Coluna key={col.status} col={col} total={doStatus.length} arquivada={col.arquivada && !busca}
-                onConfigurar={ehAdmin ? () => setVerConfig(col.status) : undefined}
+                onConfigurar={botoes.configurar ? () => setVerConfig(col.status) : undefined}
                 arraste={arrastando ? { pode: podeSoltar(arrastando, col), sobre: soltando === col.status } : null}
                 onArrasteSobre={() => setSoltando(col.status)} onArrasteSai={() => setSoltando(s => (s === col.status ? null : s))}
                 onSoltar={() => soltar(col)}>
@@ -225,12 +227,12 @@ export default function LojinhaBoxer() {
       )}
 
       {aberto && (
-        <CardAbertoLojinha p={aberto} cfg={cfg} colunas={colunas} ehAdmin={ehAdmin} carregar={carregar}
+        <CardAbertoLojinha p={aberto} cfg={cfg} colunas={colunas} botoes={botoes} carregar={carregar}
           onFechar={() => setAbertoId(null)}
-          onConfigurarMover={ehAdmin ? () => { setAbertoId(null); setVerConfig(colunaDo(aberto)); } : null}
+          onConfigurarMover={botoes.configurar ? () => { setAbertoId(null); setVerConfig(colunaDo(aberto)); } : null}
           onHistorico={() => setHistorico({ id: aberto.id, nome: `Pedido ${aberto.numero_pedido} — ${aberto.cliente_nome}` })} />
       )}
-      {verConfig && ehAdmin && (
+      {verConfig && botoes.configurar && (
         <ConfigOrcamento servico={SERVICO_CONFIG} titulo="Configurações — Lojinha Boxer" semInicio
           colunaInicial={typeof verConfig === 'string' ? verConfig : null}
           onFechar={() => setVerConfig(false)} onSalvo={(data) => setCfg(data)} />
@@ -461,7 +463,7 @@ function CardPedido({ p, campos = [], carregar, onAbrir, movendo = false, onArra
 }
 
 // ── Card aberto: dados e fases anteriores | fase atual | mover ──
-function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHistorico, onConfigurarMover = null }) {
+function CardAbertoLojinha({ p, cfg, colunas, botoes = {}, carregar, onFechar, onHistorico, onConfigurarMover = null }) {
   const [editandoFase, setEditandoFase] = useState(() => new Set()); // fases anteriores em edição (admin)
   const [abertas, setAbertas] = useState(() => new Set()); // fases anteriores abertas (encolhidas por padrão)
   // Só as fases por onde o card já passou (histórico do card; sem histórico, as colunas antes da atual)
@@ -485,12 +487,12 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
   // Fases anteriores: mostram os campos preenchidos; o admin clica em "Editar" na fase e edita todos os campos dela
   const anteriores = colunas.filter(c => c.status !== atual)
     .map(c => {
-      const editando = ehAdmin && editandoFase.has(c.status);
+      const editando = botoes.editar_fase && editandoFase.has(c.status);
       const todos = camposDe(c.status).filter(f => visivelAgora(f, valorDe));
       return { col: c, editando, todos, campos: editando ? todos : todos.filter(f => temValor(f.id) || (f.tipo === 'attachment' && temFoto(f.id))) };
     })
     .filter(g => fasesPassadas.passou(g.col.status))
-    .filter(g => g.campos.length || (ehAdmin && g.todos.length));
+    .filter(g => g.campos.length || (botoes.editar_fase && g.todos.length));
 
   useEffect(() => {
     const k = (e) => { if (e.key === 'Escape') fechar(); };
@@ -523,7 +525,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
   // Mover: a próxima coluna em destaque e as outras (Entrada é automática, via Zen)
   const podeMover = !!p.zen_ordem_separacao_id;
   const permitido = (c) => !Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status);
-  const destinos = colunas.filter(c => c.status !== atual && c.status !== 'entrada' && permitido(c) && !(c.admin && !ehAdmin) && !(colAtual?.admin && !ehAdmin));
+  const destinos = colunas.filter(c => c.status !== atual && c.status !== 'entrada' && permitido(c) && !(c.admin && !botoes.mover_admin) && !(colAtual?.admin && !botoes.mover_admin));
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
 
@@ -574,7 +576,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
               return (
                 <CaixaFase key={g.col.status} titulo="" pilula={<Pilula col={g.col} />} tempo={fasesPassadas.tempo(g.col.status)}
                   aberta={aberta} onAlternar={() => setAbertas(s => { const n = new Set(s); aberta ? n.delete(g.col.status) : n.add(g.col.status); return n; })}
-                  podeEditar={ehAdmin} editando={g.editando}
+                  podeEditar={botoes.editar_fase} editando={g.editando}
                   onEditar={() => setEditandoFase(s => { const n = new Set(s); n.has(g.col.status) ? n.delete(g.col.status) : n.add(g.col.status); return n; })}>
                   {g.campos.length
                     ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
@@ -595,7 +597,7 @@ function CardAbertoLojinha({ p, cfg, colunas, ehAdmin, carregar, onFechar, onHis
             {erro && <p className="text-xs text-red-400">{erro}</p>}
             {camposAtuais.length
               ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, true))}</dl>
-              : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.{ehAdmin ? ' Crie em Configurar (engrenagem da coluna).' : ''}</p>}
+              : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.{botoes.configurar ? ' Crie em Configurar (engrenagem da coluna).' : ''}</p>}
             {sujo && (
               <div className="sticky bottom-0 flex items-center justify-end gap-2 py-2 bg-[var(--c-fundo)] border-t border-[var(--c-borda)]">
                 <p className="flex-1 text-[11px] text-amber-400">Alterações não salvas.</p>

@@ -6,7 +6,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, FileSpreadsheet, RotateCcw, Check, ScanLine, Search, X, Ban, RefreshCw } from 'lucide-react';
 import { inventarioService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { podeRecontar } from '../../utils/acessoInventario';
+import { podeRecontar, podeFinalizar } from '../../utils/acessoInventario';
+import { temBotao } from '../../utils/telas';
 import { Spinner } from '../../components/ui';
 import { Kpi, TagCurva, TagStatus, fmtData, fmtHora, fmtDataHora, fmtNum, fmtPct, fmtTempo } from '../../components/inventario/util';
 
@@ -140,14 +141,14 @@ export default function InventarioDetalhe() {
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-500/15 text-purple-300 disabled:opacity-40">
               <RotateCcw size={14} /> Pedir recontagem ({contagem.divergente})
             </button>
-            {(usuario?.perfil === 'admin' || podeRecontar(usuario)) && (
+            {(podeFinalizar(usuario)) && (
             <button disabled={ocupado} onClick={() => acao(() => inventarioService.finalizar(inv.id),
               contagem.pendente ? `Ainda há ${contagem.pendente} itens pendentes. Finalizar mesmo assim?` : 'Finalizar o inventário?')}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
               <Check size={14} /> Finalizar inventário
             </button>
             )}
-            {usuario?.perfil === 'admin' && (
+            {temBotao(usuario, 'inv_cancelar') && (
               <button disabled={ocupado} onClick={() => acao(() => inventarioService.cancelar(inv.id), 'Cancelar este inventário? As contagens ficam guardadas, mas ele sai dos indicadores.')}
                 className="p-2 rounded-xl text-red-400 hover:bg-red-500/10" title="Cancelar inventário"><Ban size={15} /></button>
             )}
@@ -216,14 +217,14 @@ export default function InventarioDetalhe() {
                           </span>
                         )}
                         {i.ajuste_zen_em ? (
-                          <button disabled={!(usuario?.perfil === 'admin' || podeRecontar(usuario))}
+                          <button disabled={!(podeFinalizar(usuario))}
                             onClick={() => confirm('Desmarcar o ajuste no Zen deste item?') && acao(() => inventarioService.ajusteZen(inv.id, i.id, false))}
                             title={`Ajustado por ${i.ajuste_zen_por_nome || '—'} em ${fmtDataHora(i.ajuste_zen_em)}`}
                             className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-green-500/15 text-green-400 disabled:cursor-default">
                             <Check size={11} /> Ajustado no Zen
                           </button>
                         ) : (i.status === 'divergente' || i.recontado_em) && (
-                          usuario?.perfil === 'admin' || podeRecontar(usuario) ? (
+                          podeFinalizar(usuario) ? (
                             <button onClick={() => acao(() => inventarioService.ajusteZen(inv.id, i.id, true))}
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border border-[var(--c-borda)] text-[11px] text-[var(--c-suave)] hover:border-green-500 hover:text-green-400">
                               <Check size={11} /> Marcar ajustado

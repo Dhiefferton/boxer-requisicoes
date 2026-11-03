@@ -11,6 +11,7 @@ import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { podeEditarOrcamentos } from '../../utils/acessoOrcamentos';
+import { podeNaTela } from '../../utils/telas';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { carregarEstrutura, valorLista, EtiquetasDoCard } from '../../components/operador/CamposCardOrcamento';
 import CardAbertoOrcamento from '../../components/operador/CardAbertoOrcamento';
@@ -61,6 +62,8 @@ function formatarData(iso) {
 export default function PedidosOrcamento() {
   const { usuario } = useAuth();
   const podeEditar = podeEditarOrcamentos(usuario); // senão: somente visualização
+  // Botões liberados para o colaborador (Admin > Usuários > Editar); admin tem todos
+  const botoes = podeNaTela(usuario, 'orcamentos');
   const [pedidos, setPedidos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sincronizando, setSincronizando] = useState(false);
@@ -173,21 +176,21 @@ export default function PedidosOrcamento() {
               className="w-56 sm:w-64 pl-8 pr-7 py-2 rounded-xl text-xs bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
             {busca && <button onClick={() => setBusca('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
           </div>
-          {usuario?.perfil === 'admin' && (
+          {botoes.novo_card && (
             <button onClick={() => setNovoCard(true)} title="Criar card aqui no B-Requisições"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-destaque)] text-white hover:bg-[var(--c-destaque-h)]">
               <Plus size={13} /> Novo card
             </button>
           )}
-          {usuario?.perfil === 'admin' && avisoPipefy && <span className="text-[11px] text-[var(--c-suave)]">{avisoPipefy}</span>}
-          {usuario?.perfil === 'admin' && (
+          {botoes.trazer_pipefy && avisoPipefy && <span className="text-[11px] text-[var(--c-suave)]">{avisoPipefy}</span>}
+          {botoes.trazer_pipefy && (
             <button onClick={trazerDoPipefy} disabled={trazendo} title="Traz para a coluna Entrada os cards novos da fase Entrada do Pipefy (só leitura, uma consulta em lote)"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
                 bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors disabled:opacity-50">
               {trazendo ? <RefreshCw size={13} className="animate-spin" /> : <DownloadCloud size={13} />} {trazendo ? 'Trazendo…' : 'Trazer do Pipefy'}
             </button>
           )}
-          {usuario?.perfil === 'admin' && (
+          {botoes.movimentacao && (
             <button onClick={() => setVerMovimentacao(true)} title="Relatório de movimentação"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold
                 bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
@@ -197,11 +200,11 @@ export default function PedidosOrcamento() {
         </div>
       </div>
 
-      {verConfig && usuario?.perfil === 'admin' && (
+      {verConfig && botoes.configurar && (
         <ConfigOrcamento colunaInicial={typeof verConfig === 'string' ? verConfig : null} onFechar={() => setVerConfig(false)} onSalvo={(data) => { aplicarConfigOrcamento(data); setVersaoConfig(v => v + 1); }} />
       )}
-      {verMovimentacao && usuario?.perfil === 'admin' && <PainelMovimentacao onFechar={() => setVerMovimentacao(false)} />}
-      {novoCard && usuario?.perfil === 'admin' && <NovoCardOrcamento onFechar={() => setNovoCard(false)} onCriado={() => { setNovoCard(false); carregar(); }} />}
+      {verMovimentacao && botoes.movimentacao && <PainelMovimentacao onFechar={() => setVerMovimentacao(false)} />}
+      {novoCard && botoes.novo_card && <NovoCardOrcamento onFechar={() => setNovoCard(false)} onCriado={() => { setNovoCard(false); carregar(); }} />}
 
       {msgSync && <p className="text-xs text-amber-400 bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl px-3 py-2">{msgSync}</p>}
 
@@ -216,7 +219,7 @@ export default function PedidosOrcamento() {
             if ((ocultarVazias || status === 'solicitacao') && !itens.length) return null;
             return (
               <Coluna key={`${status}${busca ? '-busca' : ''}`} titulo={titulo} cor={cor} badge={badge} hex={hex} total={itens.length} arquivada={arquivada && !busca} soAdmin={admin}
-                onConfigurar={usuario?.perfil === 'admin' ? () => setVerConfig(status) : undefined}
+                onConfigurar={botoes.configurar ? () => setVerConfig(status) : undefined}
                 arraste={arrastando ? { pode: podeSoltar(arrastando, status), sobre: soltando === status } : null}
                 onArrasteSobre={() => setSoltando(status)} onArrasteSai={() => setSoltando(s => (s === status ? null : s))}
                 onSoltar={() => soltar(status)}>
@@ -226,7 +229,7 @@ export default function PedidosOrcamento() {
                   </div>
                 ) : (
                   itens.map(pedido => (
-                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} podeEditar={podeEditar} ehAdmin={usuario?.perfil === 'admin'} onConfigurarColuna={(k) => setVerConfig(k)}
+                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} podeEditar={podeEditar} botoes={botoes} onConfigurarColuna={(k) => setVerConfig(k)}
                       registrarMover={(fn) => { moverDoCard.current[pedido.id] = fn; }}
                       onArrastar={() => setArrastando(pedido)} onFimArraste={() => { setArrastando(null); setSoltando(null); }} />
                   ))
@@ -286,7 +289,7 @@ function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = f
   );
 }
 
-function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColuna, registrarMover, onArrastar, onFimArraste }) {
+function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColuna, registrarMover, onArrastar, onFimArraste }) {
   const [mudando, setMudando] = useState(false);
   // Peça vinda do campo "Registro" gravada antes da correção: mostra descrição e valor do registro
   const itens = (pedido.itens || []).map(it => {
@@ -512,7 +515,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColu
 
   // Ações do Zen (card aberto, lado direito)
   const acoesZen = [];
-  if (podeEditar && ehAdmin && podeAtualizarItens && (itensAlterados || !precisaRetirar)) {
+  if (podeEditar && botoes.pecas_zen && podeAtualizarItens && (itensAlterados || !precisaRetirar)) {
     acoesZen.push({ id: 'zen', onClick: atualizarItensZen, ocupado: atualizandoItens, alerta: itensAlterados,
       texto: itensAlterados ? 'Atualizar peças no Zen' : 'Peças no Zen', textoOcupado: 'Atualizando no Zen…' });
   }
@@ -526,8 +529,8 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColu
 
   return (
     <>
-    <div onClick={() => setAberto(true)} title={ehAdmin ? 'Abrir card (segure e arraste para mudar de coluna)' : 'Abrir card'}
-      draggable={ehAdmin && !movendoPara}
+    <div onClick={() => setAberto(true)} title={botoes.mover ? 'Abrir card (segure e arraste para mudar de coluna)' : 'Abrir card'}
+      draggable={botoes.mover && !movendoPara}
       onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(pedido.id)); onArrastar?.(); }}
       onDragEnd={() => onFimArraste?.()}
       className={`${movendoPara ? 'opacity-50 pointer-events-none ' : ''}p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors`}>
@@ -579,7 +582,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColu
     </div>
 
     {aberto && (
-      <CardAbertoOrcamento pedido={pedido} ehAdmin={ehAdmin} podeEditar={podeEditar}
+      <CardAbertoOrcamento pedido={pedido} botoes={botoes} podeEditar={podeEditar}
         onFechar={() => setAberto(false)} onAtualizar={onAtualizar}
         resumo={(tagsZen || alertas) && (
           <div className="space-y-2">
@@ -590,10 +593,10 @@ function CardPedido({ pedido, onAtualizar, podeEditar, ehAdmin, onConfigurarColu
         moverPara={moverPara} avancar={avancar} proxima={proxima} mudando={mudando} movendoPara={movendoPara}
         podeAvancar={podeAvancar} motivoSemAvancar={motivoSemAvancar}
         cancelar={cancelar} cancelando={cancelando} acoesZen={acoesZen}
-        onConfigurarMover={ehAdmin && onConfigurarColuna ? () => { setAberto(false); onConfigurarColuna(pedido.status); } : null}
-        onHistorico={ehAdmin ? () => setVerHistorico(true) : null} />
+        onConfigurarMover={botoes.configurar && onConfigurarColuna ? () => { setAberto(false); onConfigurarColuna(pedido.status); } : null}
+        onHistorico={botoes.historico ? () => setVerHistorico(true) : null} />
     )}
-    {ehAdmin && verHistorico && (
+    {botoes.historico && verHistorico && (
       <PainelMovimentacao pedidoInicial={{ id: pedido.id, nome: pedido.cliente_nome || pedido.referencia }}
         onFechar={() => setVerHistorico(false)} />
     )}

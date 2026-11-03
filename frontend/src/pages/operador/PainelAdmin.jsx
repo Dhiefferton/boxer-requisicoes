@@ -13,7 +13,7 @@ function mascaraDocumento(v) {
   return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
 }
 import { Button, Spinner } from '../../components/ui';
-import { TELAS, NIVEIS, nomeNivel } from '../../utils/telas';
+import { TELAS, NIVEIS, nomeNivel, BOTOES, botaoPadrao } from '../../utils/telas';
 
 // ── Telas do colaborador (no Editar usuário) ──────────────────
 // Por tela: padrão do perfil / sem acesso / só ver / ver e mexer. Admin vê e mexe em tudo.
@@ -26,17 +26,28 @@ function TelasDoColaborador({ formEdit, setFormEdit, editando, departamentos }) 
     if (valor) t[chave] = valor; else delete t[chave];
     return { ...f, telas: t };
   });
+  const botoes = telas._botoes || {};
+  const ligado = (chave) => (typeof botoes[chave] === 'boolean' ? botoes[chave] : botaoPadrao(simulado, chave));
+  // Marcar/desmarcar: igual ao padrão volta a "sem escolha"
+  const alternarBotao = (chave) => setFormEdit(f => {
+    const t = { ...(f.telas || {}) };
+    const b = { ...(t._botoes || {}) };
+    const novo = !ligado(chave);
+    if (novo === botaoPadrao(simulado, chave)) delete b[chave]; else b[chave] = novo;
+    if (Object.keys(b).length) t._botoes = b; else delete t._botoes;
+    return { ...f, telas: t };
+  });
   const cor = (v) => v === 'editar' ? 'text-green-400' : v === 'ver' ? 'text-amber-400' : 'text-[var(--c-suave)]';
   return (
     <div className="rounded-xl border border-[var(--c-borda)] p-3 space-y-2">
       <div className="flex items-center gap-2">
-        <p className="text-xs font-semibold text-[var(--c-texto)] flex-1">Telas que pode ver e mexer</p>
+        <p className="text-xs font-semibold text-[var(--c-texto)] flex-1">Telas e botões que pode ver e mexer</p>
         {Object.keys(telas).length > 0 && formEdit.perfil !== 'admin' && (
           <button type="button" onClick={() => setFormEdit(f => ({ ...f, telas: {} }))} className="text-[11px] text-[var(--c-suave)] hover:text-[var(--c-texto)]">Voltar tudo ao padrão</button>
         )}
       </div>
       {formEdit.perfil === 'admin' ? (
-        <p className="text-[11px] text-[var(--c-suave)]">Admin vê e mexe em todas as telas.</p>
+        <p className="text-[11px] text-[var(--c-suave)]">Admin vê e mexe em todas as telas e tem todos os botões.</p>
       ) : (
         <>
           <p className="text-[11px] text-[var(--c-suave)]">"Padrão" segue o perfil e o setor (como era antes). A mudança vale em até 30 segundos.</p>
@@ -44,14 +55,29 @@ function TelasDoColaborador({ formEdit, setFormEdit, editando, departamentos }) 
             {TELAS.map(t => {
               const padrao = t.legado(simulado);
               const atual = telas[t.chave] || '';
+              const dela = BOTOES.filter(b => b.tela === t.chave);
               return (
-                <div key={t.chave} className="flex items-center gap-2 py-1.5">
+                <div key={t.chave} className="py-1.5">
+                <div className="flex items-center gap-2">
                   <span className="flex-1 min-w-0 text-xs text-[var(--c-texto)] truncate">{t.nome}</span>
                   <select value={atual} onChange={e => mudar(t.chave, e.target.value)}
                     className={`w-40 shrink-0 bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-[var(--c-destaque)] ${cor(atual || padrao)}`}>
                     <option value="">Padrão ({nomeNivel(padrao)})</option>
                     {NIVEIS.map(n => <option key={n.valor} value={n.valor}>{n.nome}</option>)}
                   </select>
+                </div>
+                {dela.length > 0 && (atual || padrao) !== 'nenhum' && (
+                  <div className="mt-1.5 ml-2 pl-2 border-l border-[var(--c-borda)] space-y-1">
+                    <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Botões</p>
+                    {dela.map(b => (
+                      <label key={b.chave} className="flex items-center gap-2 text-[11px] text-[var(--c-texto)] cursor-pointer">
+                        <input type="checkbox" checked={ligado(b.chave)} onChange={() => alternarBotao(b.chave)} className="accent-[var(--c-destaque)]" />
+                        <span className="flex-1">{b.nome}</span>
+                        {typeof botoes[b.chave] !== 'boolean' && <span className="text-[10px] text-[var(--c-suave)]">padrão</span>}
+                      </label>
+                    ))}
+                  </div>
+                )}
                 </div>
               );
             })}
@@ -266,7 +292,8 @@ function AbaUsuarios() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-[var(--c-texto)] truncate">{u.nome}</p>
                 <p className="text-xs text-[var(--c-suave)] break-all">{u.email} · <span className="capitalize">{u.perfil}</span>{u.departamento_nome ? ` · ${u.departamento_nome}` : ''}
-                  {u.perfil !== 'admin' && u.telas && Object.keys(u.telas).length > 0 && <span className="ml-1.5 text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-destaque)]/10 text-[var(--c-destaque)]">{Object.keys(u.telas).length} tela(s) personalizada(s)</span>}</p>
+                  {u.perfil !== 'admin' && Object.keys(u.telas || {}).filter(k => k !== '_botoes').length > 0 && <span className="ml-1.5 text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-destaque)]/10 text-[var(--c-destaque)]">{Object.keys(u.telas).filter(k => k !== '_botoes').length} tela(s) personalizada(s)</span>}
+                  {u.perfil !== 'admin' && Object.keys(u.telas?._botoes || {}).length > 0 && <span className="ml-1.5 text-[10px] font-semibold rounded px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400">{Object.keys(u.telas._botoes).length} botão(ões) personalizado(s)</span>}</p>
               </div>
               <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto">
                 <button onClick={() => abrirEdicao(u)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--c-destaque)]/10 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/20 transition-colors">
