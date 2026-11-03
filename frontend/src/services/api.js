@@ -79,6 +79,7 @@ export const pedidosOrcamentoService = {
   retirarRecusadas: (id)         => api.post(`/pedidos-orcamento/${id}/retirar-recusadas`),
   atualizarItensZen: (id)        => api.post(`/pedidos-orcamento/${id}/atualizar-itens-zen`, {}, { timeout: 120000 }),
   sincronizarPipefy: ()          => api.post('/pedidos-orcamento/sincronizar-pipefy', {}, { timeout: 120000 }),
+  importarEntrada:  ()           => api.post('/pedidos-orcamento/importar-entrada', {}, { timeout: 120000 }),
   movimentos: (params)           => api.get('/pedidos-orcamento/movimentos', { params, timeout: 30000 }),
   estrutura: ()                  => api.get('/pedidos-orcamento/estrutura', { timeout: 30000 }),
   editarCampos: (id, campos)     => api.patch(`/pedidos-orcamento/${id}/campos`, { campos }),
