@@ -32,7 +32,7 @@ function Pilula({ coluna, grande = false }) {
 }
 
 export default function CardAbertoOrcamento({
-  pedido, ehAdmin, podeEditar, onFechar, onAtualizar, resumo,
+  pedido, botoes = {}, podeEditar, onFechar, onAtualizar, resumo,
   // ações do card (mesmas regras do quadro)
   moverPara, avancar, proxima: proximaProp, mudando, movendoPara, podeAvancar, motivoSemAvancar,
   cancelar, cancelando, acoesZen, onHistorico, onConfigurarMover = null,
@@ -48,7 +48,7 @@ export default function CardAbertoOrcamento({
     setFechadas(s => { const n = new Set(s); aberta ? n.add(id) : n.delete(id); return n; });
   };
   // Só as fases por onde o card já passou (histórico do card; sem histórico, as colunas antes da atual)
-  const fasesPassadas = useFasesPassadas(ehAdmin ? () => pedidosOrcamentoService.movimentos({ pedido: pedido.id }) : null,
+  const fasesPassadas = useFasesPassadas(botoes.historico || botoes.movimentacao ? () => pedidosOrcamentoService.movimentos({ pedido: pedido.id }) : null,
     `${pedido.id}-${pedido.status}`, pedido.status, COLUNAS_ORCAMENTO.map(c => c.status), pedido.created_at);
   const [rascunho, setRascunho] = useState({});
   const [salvando, setSalvando] = useState(false);
@@ -82,14 +82,14 @@ export default function CardAbertoOrcamento({
   // Fases anteriores: mostram os campos preenchidos; o admin clica em "Editar" na fase e edita todos os campos dela
   const anteriores = grupos.filter(g => !g.atual)
     .map(g => {
-      const editando = ehAdmin && editandoFase.has(g.faseId);
+      const editando = botoes.editar_fase && editandoFase.has(g.faseId);
       return { ...g, editando, todos: g.campos.filter(c => c.tipo !== 'id' && visivelAgora(c, valorDe)),
         campos: editando ? g.campos.filter(c => c.tipo !== 'id' && visivelAgora(c, valorDe))
           : g.campos.filter(c => temValor(c.id) || (c.tipo === 'attachment' && fotosLocais(c.id))) };
     })
     .filter(g => g.faseId !== 'outros') // campos soltos (sem fase/coluna) não aparecem no card
     .filter(g => !g.chave || fasesPassadas.passou(g.chave))
-    .filter(g => g.campos.length || (ehAdmin && String(g.faseId).startsWith('bx-') && g.todos.length))
+    .filter(g => g.campos.length || (botoes.editar_fase && String(g.faseId).startsWith('bx-') && g.todos.length))
     .sort((a, b) => ordemCol(a.chave) - ordemCol(b.chave));
   const camposAtuais = atuais.flatMap(g => g.campos).filter(c => visivelAgora(c, valorDe));
 
@@ -126,7 +126,7 @@ export default function CardAbertoOrcamento({
   // Configurar → "Pode mover cards desta coluna para" (sem lista = todas)
   const permitido = (c) => !Array.isArray(colunaAtual?.destinos) || colunaAtual.destinos.includes(c.status);
   if (proxima && !permitido(proxima)) proxima = null;
-  const destinos = ehAdmin
+  const destinos = botoes.mover
     ? COLUNAS_ORCAMENTO.filter(c => c.status !== pedido.status && permitido(c))
     : [];
   const destaque = proxima
@@ -134,7 +134,7 @@ export default function CardAbertoOrcamento({
     : destinos.find(c => COLUNAS_ORCAMENTO.indexOf(c) > idxAtual) || null;
   const outros = destinos.filter(c => c !== destaque && c.status !== proxima?.status);
   const ocupado = mudando || movendoPara || salvando;
-  const podeMoverAqui = !(STATUS_SO_ADMIN.includes(pedido.status) && !ehAdmin);
+  const podeMoverAqui = !(STATUS_SO_ADMIN.includes(pedido.status) && !botoes.mover);
 
   const blocoCampo = (c, editavel) => (
     <div key={c.id} className="min-w-0">
@@ -200,7 +200,7 @@ export default function CardAbertoOrcamento({
                 <CaixaFase key={g.faseId} titulo={g.chave === 'inicio' ? 'Formulário inicial' : col ? '' : g.nome}
                   pilula={col && <Pilula coluna={col} />} tempo={g.chave && g.chave !== 'inicio' ? fasesPassadas.tempo(g.chave) : null}
                   aberta={aberta} onAlternar={() => alternarFase(g.faseId, aberta)}
-                  podeEditar={ehAdmin} editando={g.editando}
+                  podeEditar={botoes.editar_fase} editando={g.editando}
                   onEditar={() => setEditandoFase(s => { const n = new Set(s); n.has(g.faseId) ? n.delete(g.faseId) : n.add(g.faseId); return n; })}>
                   {g.campos.length
                     ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
@@ -231,7 +231,7 @@ export default function CardAbertoOrcamento({
               </div>
             )}
             {fases && (camposAtuais.length
-              ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, ehAdmin))}</dl>
+              ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, botoes.campos))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.</p>)}
 
             {sujo && (
@@ -268,10 +268,10 @@ export default function CardAbertoOrcamento({
                 {outros.map(c => botaoMover(c))}
               </div>
             )}
-            {!ehAdmin && !proxima && (
-              <p className="text-[11px] text-[var(--c-suave)]">Só o administrador move este card.</p>
+            {!botoes.mover && !proxima && (
+              <p className="text-[11px] text-[var(--c-suave)]">Mover este card não está liberado para você.</p>
             )}
-            {ehAdmin && !proxima && !destaque && !outros.length && (
+            {botoes.mover && !proxima && !destaque && !outros.length && (
               <p className="text-[11px] text-[var(--c-suave)]">Esta coluna não tem para onde mover.</p>
             )}
             {onConfigurarMover && (
