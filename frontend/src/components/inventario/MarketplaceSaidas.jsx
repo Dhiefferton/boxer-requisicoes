@@ -13,6 +13,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cart
 import { FileDown, RefreshCw, Search, CalendarClock, Zap, X } from 'lucide-react';
 import { marketplaceService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { temBotao } from '../../utils/telas';
 import { Spinner } from '../ui';
 import { Kpi, fmtNum, fmtData, fmtDataHora } from './util';
 
@@ -46,7 +47,7 @@ const combina = (p, busca) => {
 
 export default function MarketplaceSaidas() {
   const { usuario } = useAuth();
-  const admin = usuario?.perfil === 'admin';
+  const admin = temBotao(usuario, 'inv_marketplace');
   const [canal, setCanal] = useState('');
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
