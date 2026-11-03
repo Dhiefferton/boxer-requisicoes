@@ -63,6 +63,16 @@ function garantirColunas() {
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
       await garantirTabelaMovimentos();
+      // NS de entrada: cards trazidos do Pipefy antes da correção (campo "NS de entrada";
+      // vazio = número do card no Pipefy, que é o campo "ID" do card)
+      await query(`
+        UPDATE pedidos_orcamento p SET ns_entrada = x.v
+          FROM (SELECT id, COALESCE((SELECT e->>'valor' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(pipefy_campos) = 'array' THEN pipefy_campos ELSE '[]'::jsonb END) e
+                             WHERE e->>'id' IN ('ns_entrada_1', 'ns_entrada', 'ns_de_entrada') AND COALESCE(e->>'valor', '') <> ''
+                             ORDER BY array_position(ARRAY['ns_entrada_1', 'ns_entrada', 'ns_de_entrada'], e->>'id') LIMIT 1),
+                           NULLIF(pipefy_card_id::text, '')) AS v
+                  FROM pedidos_orcamento WHERE COALESCE(ns_entrada::text, '') = '' AND pipefy_card_id IS NOT NULL) x
+         WHERE x.id = p.id AND x.v IS NOT NULL`).catch(e => console.error('⚠️ NS de entrada (cards antigos):', e.message));
       // Fotos anexadas no B-Requisições (ficam só aqui, não vão para o Pipefy)
       await query(`
         CREATE TABLE IF NOT EXISTS orc_fotos (
