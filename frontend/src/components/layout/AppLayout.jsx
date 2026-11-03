@@ -7,8 +7,8 @@ import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, Mo
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
-import { podeVerOrcamentos } from '../../utils/acessoOrcamentos';
-import { podeVerInventario } from '../../utils/acessoInventario';
+import { veTela, nivelTela, telaDaRota } from '../../utils/telas';
+import { useLocation } from 'react-router-dom';
 import BotaoTema from '../ui/BotaoTema';
 
 export default function AppLayout({ children }) {
@@ -25,29 +25,26 @@ export default function AppLayout({ children }) {
 
   function handleLogout() { logout(); navigate('/login'); }
 
+  // Menu: telas liberadas pelo perfil e pelas telas escolhidas no cadastro do colaborador
   const navItems = [
-    { to: '/catalogo',  icon: Package,        label: 'Catálogo',   perfis: ['colaborador', 'operador', 'admin'] },
-    { to: '/historico', icon: ClipboardList,   label: 'Histórico',  perfis: ['colaborador', 'operador', 'admin'] },
-    { to: '/operador',  icon: LayoutDashboard, label: 'Operador',   perfis: ['operador', 'admin'] },
-    { to: '/inventario', icon: ClipboardCheck, label: 'Inventário', perfis: ['operador', 'admin'], permitir: podeVerInventario },
-    { to: '/entradas',  icon: PackagePlus,     label: 'Entradas',   perfis: ['admin'] },
-    { to: '/estoque',   icon: Boxes,           label: 'Estoque',    perfis: ['admin'] },
-    { to: '/admin',     icon: ShieldCheck,     label: 'Admin',      perfis: ['admin'] },
-    { to: '/mrp',       icon: BarChart2,       label: 'MRP',        perfis: ['admin'] },
-    { to: '/compras',   icon: FileText,        label: 'Compras',    perfis: ['admin'] },
-    { to: '/necessidade-pecas', icon: Package, label: 'Nec. Peças', perfis: ['admin'], setores: ['Sac / Suporte'] },
-    { to: '/recebimento-importacao', icon: Camera, label: 'Recebimento/Importação', perfis: ['operador', 'admin'] },
-    { to: '/lojinha', icon: Store, label: 'Lojinha Boxer', perfis: ['operador', 'admin'], setores: ['Sac / Suporte'] },
-    { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', perfis: ['operador', 'admin'], permitir: podeVerOrcamentos },
-  ].filter(item => {
-    if (item.perfis.includes(usuario?.perfil)) return true;
-    if (item.permitir?.(usuario)) return true;
-    if (item.setores) {
-      const setoresNormalizados = item.setores.map(s => s.trim().toLowerCase());
-      return setoresNormalizados.includes((usuario?.departamento_nome || '').trim().toLowerCase());
-    }
-    return false;
-  });
+    { to: '/catalogo',  icon: Package,        label: 'Catálogo',   tela: 'catalogo' },
+    { to: '/historico', icon: ClipboardList,   label: 'Histórico',  tela: 'historico' },
+    { to: '/operador',  icon: LayoutDashboard, label: 'Operador',   tela: 'operador' },
+    { to: '/inventario', icon: ClipboardCheck, label: 'Inventário', tela: 'inventario' },
+    { to: '/entradas',  icon: PackagePlus,     label: 'Entradas',   tela: 'entradas' },
+    { to: '/estoque',   icon: Boxes,           label: 'Estoque',    tela: 'estoque' },
+    { to: '/admin',     icon: ShieldCheck,     label: 'Admin',      tela: 'admin' },
+    { to: '/mrp',       icon: BarChart2,       label: 'MRP',        tela: 'mrp' },
+    { to: '/compras',   icon: FileText,        label: 'Compras',    tela: 'compras' },
+    { to: '/necessidade-pecas', icon: Package, label: 'Nec. Peças', tela: 'necessidade_pecas' },
+    { to: '/recebimento-importacao', icon: Camera, label: 'Recebimento/Importação', tela: 'recebimento_importacao' },
+    { to: '/lojinha', icon: Store, label: 'Lojinha Boxer', tela: 'lojinha' },
+    { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', tela: 'orcamentos' },
+  ].filter(item => veTela(usuario, item.tela));
+  // Tela aberta com "Só ver": aviso no topo (o servidor bloqueia salvar/mover/criar/excluir)
+  const { pathname } = useLocation();
+  const telaAtual = telaDaRota(pathname);
+  const soVer = telaAtual && nivelTela(usuario, telaAtual) === 'ver';
 
   // Nav inferior (celular): até 5 atalhos; com mais telas, 4 atalhos + "Mais" (abre o menu)
   const temCarrinho = usuario?.perfil === 'colaborador';
@@ -193,7 +190,10 @@ export default function AppLayout({ children }) {
         )}
       </header>
 
-      <main className="flex-1 w-full min-w-0 px-3 sm:px-4 md:px-6 py-4 sm:py-6">{children}</main>
+      <main className="flex-1 w-full min-w-0 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
+        {soVer && <p className="mb-3 text-xs rounded-xl px-3 py-2 border border-amber-500/30 bg-amber-500/10 text-amber-400">Você só pode visualizar esta tela. Para alterar algo, peça a liberação ao administrador.</p>}
+        {children}
+      </main>
 
       {/* Nav inferior mobile */}
       <nav className="md:hidden sticky bottom-0 z-40 bg-[var(--c-fundo)]/95 backdrop-blur border-t border-[var(--c-borda)] pb-[env(safe-area-inset-bottom)]">
