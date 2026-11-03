@@ -33,7 +33,11 @@ function garantir() {
       ALTER TABLE bx_bases ADD COLUMN IF NOT EXISTS com_valor BOOLEAN NOT NULL DEFAULT TRUE;
       ALTER TABLE bx_bases ADD COLUMN IF NOT EXISTS pipefy_tabela VARCHAR(30);
       ALTER TABLE bx_base_registros ADD COLUMN IF NOT EXISTS pipefy_id VARCHAR(30);
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_bx_base_registros_pipefy ON bx_base_registros (base_id, pipefy_id) WHERE pipefy_id IS NOT NULL;`)
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_bx_base_registros_pipefy ON bx_base_registros (base_id, pipefy_id) WHERE pipefy_id IS NOT NULL;
+      -- Tela Databases: colunas próprias de cada database e os valores delas em cada registro
+      ALTER TABLE bx_bases ADD COLUMN IF NOT EXISTS colunas JSONB NOT NULL DEFAULT '[]'::jsonb;
+      ALTER TABLE bx_base_registros ADD COLUMN IF NOT EXISTS dados JSONB NOT NULL DEFAULT '{}'::jsonb;
+      ALTER TABLE bx_base_registros ALTER COLUMN descricao TYPE VARCHAR(300);`)
       .catch(err => { estrutura = null; throw err; });
   }
   return estrutura;
@@ -47,14 +51,40 @@ function lerValor(v) {
   const n = Number(s);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN;
 }
-const registro = (r, base) => ({ id: r.id, base_id: r.base_id, base: base ?? r.base ?? null, descricao: r.descricao,
-  valor: Number(r.valor), criado_em: r.criado_em, criado_por_nome: r.criado_por_nome || null });
+// Colunas próprias da database (além de Descrição e Valor)
+const TIPOS_COLUNA = ['texto', 'numero', 'moeda', 'data', 'opcoes'];
+function normalizarColunas(lista) {
+  if (!Array.isArray(lista)) return [];
+  const vistos = new Set();
+  return lista.slice(0, 40).map((c, i) => {
+    let id = String(c?.id || '').trim();
+    if (!/^c[a-z0-9]{1,16}$/.test(id) || vistos.has(id)) id = `c${Date.now().toString(36)}${i}`;
+    vistos.add(id);
+    const tipo = TIPOS_COLUNA.includes(c?.tipo) ? c.tipo : 'texto';
+    const opcoes = tipo === 'opcoes' && Array.isArray(c?.opcoes) ? [...new Set(c.opcoes.map(o => limpar(o, 80)).filter(Boolean))].slice(0, 200) : [];
+    return { id, nome: limpar(c?.nome, 60) || `Coluna ${i + 1}`, tipo, opcoes };
+  });
+}
+function limparDados(dados, colunas) {
+  const out = {};
+  if (!dados || typeof dados !== 'object') return out;
+  for (const c of colunas || []) {
+    const v = dados[c.id];
+    if (v === undefined || v === null || String(v).trim() === '') continue;
+    out[c.id] = String(v).slice(0, 1000);
+  }
+  return out;
+}
+const registro = (r, base, colunas = null) => ({ id: r.id, base_id: r.base_id, base: base ?? r.base ?? null, descricao: r.descricao,
+  valor: Number(r.valor), criado_em: r.criado_em, criado_por_nome: r.criado_por_nome || null, dados: r.dados || {},
+  // colunas próprias com valor (para mostrar no card)
+  extras: (colunas || []).filter(c => r.dados?.[c.id] != null && r.dados[c.id] !== '').map(c => ({ nome: c.nome, tipo: c.tipo, valor: r.dados[c.id] })) });
 
 // GET /bases
 export async function listarBases(req, res, next) {
   try {
     await garantir();
-    const r = await query(`SELECT b.id, b.nome, b.com_valor, b.pipefy_tabela, b.criado_em, COUNT(g.id)::int AS registros
+    const r = await query(`SELECT b.id, b.nome, b.com_valor, b.pipefy_tabela, b.colunas, b.criado_em, COUNT(g.id)::int AS registros
       FROM bx_bases b LEFT JOIN bx_base_registros g ON g.base_id = b.id AND g.ativo
       WHERE b.ativo GROUP BY b.id ORDER BY b.nome`);
     res.json({ bases: r.rows });
@@ -82,10 +112,10 @@ export async function criarBase(req, res, next) {
 export async function listarRegistros(req, res, next) {
   try {
     await garantir();
-    const b = (await query(`SELECT id, nome FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
+    const b = (await query(`SELECT id, nome, com_valor, colunas, pipefy_tabela FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!b) return res.status(404).json({ erro: 'Base não encontrada.' });
     const r = await query(`SELECT * FROM bx_base_registros WHERE base_id = $1 AND ativo ORDER BY descricao LIMIT 10000`, [b.id]);
-    res.json({ base: b, registros: r.rows.map(x => registro(x, b.nome)) });
+    res.json({ base: b, registros: r.rows.map(x => registro(x, b.nome, b.colunas)) });
   } catch (err) { next(err); }
 }
 
@@ -93,17 +123,18 @@ export async function listarRegistros(req, res, next) {
 export async function criarRegistro(req, res, next) {
   try {
     await garantir();
-    const b = (await query(`SELECT id, nome, com_valor FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
+    const b = (await query(`SELECT id, nome, com_valor, colunas FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!b) return res.status(404).json({ erro: 'Base não encontrada.' });
-    const descricao = limpar(req.body?.descricao, 160);
+    const descricao = limpar(req.body?.descricao, 300);
+    const dados = limparDados(req.body?.dados, b.colunas);
     const valor = b.com_valor ? lerValor(req.body?.valor) : 0; // lista: só descrição
     if (descricao.length < 2) return res.status(400).json({ erro: 'Digite a descrição.' });
     if (!Number.isFinite(valor) || valor < 0) return res.status(400).json({ erro: 'Valor inválido.' });
     const ja = (await query(`SELECT * FROM bx_base_registros WHERE base_id = $1 AND ativo AND LOWER(descricao) = LOWER($2)`, [b.id, descricao])).rows[0];
-    if (ja) return res.status(409).json({ erro: `Já existe "${ja.descricao}" nesta base.`, registro: registro(ja, b.nome) });
-    const r = await query(`INSERT INTO bx_base_registros (base_id, descricao, valor, criado_por_nome) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [b.id, descricao, valor, req.usuario?.nome || null]);
-    res.status(201).json({ registro: registro(r.rows[0], b.nome) });
+    if (ja) return res.status(409).json({ erro: `Já existe "${ja.descricao}" nesta base.`, registro: registro(ja, b.nome, b.colunas) });
+    const r = await query(`INSERT INTO bx_base_registros (base_id, descricao, valor, criado_por_nome, dados) VALUES ($1,$2,$3,$4,$5::jsonb) RETURNING *`,
+      [b.id, descricao, valor, req.usuario?.nome || null, JSON.stringify(dados)]);
+    res.status(201).json({ registro: registro(r.rows[0], b.nome, b.colunas) });
   } catch (err) { next(err); }
 }
 
@@ -111,14 +142,18 @@ export async function criarRegistro(req, res, next) {
 export async function editarRegistro(req, res, next) {
   try {
     await garantir();
-    const atual = (await query(`SELECT g.*, b.nome AS base FROM bx_base_registros g JOIN bx_bases b ON b.id = g.base_id WHERE g.id = $1 AND g.ativo`, [Number(req.params.id) || 0])).rows[0];
+    const atual = (await query(`SELECT g.*, b.nome AS base, b.colunas AS base_colunas, b.com_valor FROM bx_base_registros g JOIN bx_bases b ON b.id = g.base_id WHERE g.id = $1 AND g.ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!atual) return res.status(404).json({ erro: 'Registro não encontrado.' });
-    const descricao = req.body?.descricao !== undefined ? limpar(req.body.descricao, 160) : atual.descricao;
+    const descricao = req.body?.descricao !== undefined ? limpar(req.body.descricao, 300) : atual.descricao;
+    const dados = req.body?.dados !== undefined ? limparDados({ ...(atual.dados || {}), ...req.body.dados }, atual.base_colunas) : (atual.dados || {});
     const valor = req.body?.valor !== undefined ? lerValor(req.body.valor) : Number(atual.valor);
     if (descricao.length < 2) return res.status(400).json({ erro: 'Digite a descrição.' });
     if (!Number.isFinite(valor) || valor < 0) return res.status(400).json({ erro: 'Valor inválido.' });
-    const r = await query(`UPDATE bx_base_registros SET descricao = $2, valor = $3, atualizado_em = NOW() WHERE id = $1 RETURNING *`, [atual.id, descricao, valor]);
-    res.json({ registro: registro(r.rows[0], atual.base) });
+    const dup = (await query(`SELECT id FROM bx_base_registros WHERE base_id = $1 AND ativo AND id <> $2 AND LOWER(descricao) = LOWER($3)`, [atual.base_id, atual.id, descricao])).rows[0];
+    if (dup) return res.status(409).json({ erro: `Já existe "${descricao}" nesta database.` });
+    const r = await query(`UPDATE bx_base_registros SET descricao = $2, valor = $3, dados = $4::jsonb, atualizado_em = NOW() WHERE id = $1 RETURNING *`,
+      [atual.id, descricao, atual.com_valor ? valor : 0, JSON.stringify(dados)]);
+    res.json({ registro: registro(r.rows[0], atual.base, atual.base_colunas) });
   } catch (err) { next(err); }
 }
 
@@ -174,13 +209,12 @@ function registroDoPipefy(node) {
   const valor = preco ? lerValor(preco.value) : 0;
   return { pipefy_id: String(node.id), descricao, valor: Number.isFinite(valor) ? valor : 0 };
 }
-// POST /bases/importar-pipefy { cursor?, base_id? } (admin)
-export async function importarBasePipefy(req, res, next) {
-  try {
+/** Copia uma parte (até 400 registros) da database para a base do B-Requisições. */
+export async function importarPecasPipefy({ cursor = null, baseId = null } = {}) {
     await garantir();
     let base = null, tabela = null;
-    if (req.body?.base_id) {
-      base = (await query(`SELECT id, nome, pipefy_tabela FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.body.base_id)])).rows[0] || null;
+    if (baseId) {
+      base = (await query(`SELECT id, nome, pipefy_tabela FROM bx_bases WHERE id = $1 AND ativo`, [Number(baseId)])).rows[0] || null;
       if (base?.pipefy_tabela) tabela = { id: base.pipefy_tabela, nome: base.nome };
     }
     if (!tabela) tabela = await tabelaDasPecas();
@@ -192,7 +226,7 @@ export async function importarBasePipefy(req, res, next) {
     }
     const gql = `query($id: ID!, $after: String) { table_records(table_id: $id, first: 50, after: $after) {
       pageInfo { hasNextPage endCursor } edges { node { id title record_fields { name value field { id type } } } } } }`;
-    let after = req.body?.cursor || null, fim = false, trazidos = 0;
+    let after = cursor || null, fim = false, trazidos = 0;
     for (let i = 0; i < PAGINAS_POR_VEZ; i++) {
       const d = await pipefyQueryPlanilhas(gql, { id: tabela.id, after });
       const conn = d?.table_records;
@@ -210,10 +244,71 @@ export async function importarBasePipefy(req, res, next) {
       after = conn.pageInfo.endCursor;
     }
     const total = (await query(`SELECT COUNT(*)::int AS n FROM bx_base_registros WHERE base_id = $1 AND ativo`, [base.id])).rows[0].n;
-    res.json({ base: { id: base.id, nome: base.nome }, trazidos, total, cursor: fim ? null : after, terminou: fim });
+    return { base: { id: base.id, nome: base.nome }, trazidos, total, cursor: fim ? null : after, terminou: fim };
+}
+// POST /bases/importar-pipefy { cursor?, base_id? } (admin)
+export async function importarBasePipefy(req, res) {
+  try {
+    res.json(await importarPecasPipefy({ cursor: req.body?.cursor || null, baseId: req.body?.base_id || null }));
   } catch (err) {
     if (err.status) return res.status(err.status).json({ erro: err.message });
     console.error('[Bases] Pipefy:', err.message);
     res.status(502).json({ erro: `Não consegui ler a base no Pipefy: ${err.message}` });
   }
+}
+
+// ── Tela Databases ──────────────────────────────────────────
+// PATCH /bases/:id { nome?, com_valor?, colunas? } — renomeia e põe/tira colunas
+export async function editarBase(req, res, next) {
+  try {
+    await garantir();
+    const b = (await query(`SELECT * FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
+    if (!b) return res.status(404).json({ erro: 'Database não encontrada.' });
+    const nome = req.body?.nome !== undefined ? limpar(req.body.nome, 80) : b.nome;
+    if (nome.length < 2) return res.status(400).json({ erro: 'Dê um nome para a database.' });
+    const dup = (await query(`SELECT id FROM bx_bases WHERE ativo AND id <> $1 AND LOWER(nome) = LOWER($2)`, [b.id, nome])).rows[0];
+    if (dup) return res.status(409).json({ erro: `Já existe uma database "${nome}".` });
+    const comValor = req.body?.com_valor !== undefined ? req.body.com_valor !== false : b.com_valor;
+    const colunas = req.body?.colunas !== undefined ? normalizarColunas(req.body.colunas) : b.colunas;
+    const r = await query(`UPDATE bx_bases SET nome = $2, com_valor = $3, colunas = $4::jsonb WHERE id = $1 RETURNING id, nome, com_valor, colunas, pipefy_tabela`,
+      [b.id, nome, comValor, JSON.stringify(colunas)]);
+    res.json({ base: r.rows[0] });
+  } catch (err) { next(err); }
+}
+
+// DELETE /bases/registros/:id — tira o registro da database (os cards que já usaram mantêm o que foi escolhido)
+export async function excluirRegistro(req, res, next) {
+  try {
+    await garantir();
+    const r = await query(`UPDATE bx_base_registros SET ativo = FALSE, atualizado_em = NOW() WHERE id = $1 AND ativo RETURNING id`, [Number(req.params.id) || 0]);
+    if (!r.rows[0]) return res.status(404).json({ erro: 'Registro não encontrado.' });
+    res.json({ sucesso: true });
+  } catch (err) { next(err); }
+}
+
+// POST /bases/:id/importar { linhas: [{ descricao, valor, dados }] } — colar/importar planilha (até 2000 por vez)
+export async function importarRegistros(req, res, next) {
+  try {
+    await garantir();
+    const b = (await query(`SELECT id, nome, com_valor, colunas FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
+    if (!b) return res.status(404).json({ erro: 'Database não encontrada.' });
+    const linhas = Array.isArray(req.body?.linhas) ? req.body.linhas.slice(0, 2000) : [];
+    let novos = 0, atualizados = 0, ignorados = 0;
+    for (const l of linhas) {
+      const descricao = limpar(l?.descricao, 300);
+      const valor = b.com_valor ? lerValor(l?.valor ?? 0) : 0;
+      if (descricao.length < 2 || !Number.isFinite(valor) || valor < 0) { ignorados++; continue; }
+      const dados = limparDados(l?.dados, b.colunas);
+      const ja = (await query(`SELECT id, dados FROM bx_base_registros WHERE base_id = $1 AND ativo AND LOWER(descricao) = LOWER($2)`, [b.id, descricao])).rows[0];
+      if (ja) {
+        await query(`UPDATE bx_base_registros SET valor = $2, dados = $3::jsonb, atualizado_em = NOW() WHERE id = $1`, [ja.id, valor, JSON.stringify({ ...(ja.dados || {}), ...dados })]);
+        atualizados++;
+      } else {
+        await query(`INSERT INTO bx_base_registros (base_id, descricao, valor, criado_por_nome, dados) VALUES ($1,$2,$3,$4,$5::jsonb)`,
+          [b.id, descricao, valor, req.usuario?.nome || null, JSON.stringify(dados)]);
+        novos++;
+      }
+    }
+    res.json({ novos, atualizados, ignorados });
+  } catch (err) { next(err); }
 }
