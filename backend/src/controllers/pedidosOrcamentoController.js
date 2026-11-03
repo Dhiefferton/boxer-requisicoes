@@ -18,6 +18,7 @@ import {
 } from '../integrations/zenPedidoVenda.js';
 import { lerConfigOrcamento, idCampoConfig } from './configOrcamentoController.js';
 import { exigidoAgora } from './configQuadro.js';
+import { temBotao } from '../middlewares/telas.js';
 
 const BASE_SELECT = `
   SELECT
@@ -374,8 +375,8 @@ export async function moverPedido(req, res, next) {
     );
     const pedido = atual.rows[0];
     if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    if (req.usuario?.perfil !== 'admin' && (soAdmin(status) || soAdmin(pedido.status))) {
-      return res.status(403).json({ erro: 'Só o administrador move cards nessa coluna.' });
+    if (!temBotao(req.usuario, 'orc_mover') && (soAdmin(status) || soAdmin(pedido.status))) {
+      return res.status(403).json({ erro: 'Mover cards nessa coluna não está liberado para você (Admin > Usuários).' });
     }
     // Para onde a coluna atual pode mover (Configurar → "Pode mover cards desta coluna para")
     const destinosCol = colCfg.get(pedido.status)?.destinos;

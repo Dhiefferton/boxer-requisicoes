@@ -46,6 +46,7 @@ async function registrarMovLoj(pedido, tipo, { de = null, para = null, descricao
 import { criarPedidoLojinhaZen, listarVendedorasZen } from '../integrations/zenLojinha.js';
 import { criarCardsLojinha, excluirCardLojinha, fasesDosCards, cardsDoPedidoLojinha } from '../integrations/pipefyLojinha.js';
 import { buscarPedidoLI } from '../integrations/lojaIntegrada.js';
+import { temBotao } from '../middlewares/telas.js';
 
 const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
 const SETORES = ['sac / suporte'];
@@ -443,8 +444,8 @@ export async function moverPedidoLojinha(req, res, next) {
     if (!p.zen_ordem_separacao_id) return res.status(409).json({ erro: 'O pedido ainda não tem ordem de separação no Zen.' });
     const atual = ['entrada', 'liberacao'].includes(p.status) ? 'entrada' : p.status;
     if (status === atual) return res.json({ pedido: p });
-    if (req.usuario?.perfil !== 'admin' && (col.get(status)?.so_admin || col.get(atual)?.so_admin)) {
-      return res.status(403).json({ erro: 'Só o administrador move pedidos nessa coluna.' });
+    if (!temBotao(req.usuario, 'loj_mover_admin') && (col.get(status)?.so_admin || col.get(atual)?.so_admin)) {
+      return res.status(403).json({ erro: 'Mover pedidos nessa coluna não está liberado para você (Admin > Usuários).' });
     }
     // Para onde a coluna atual pode mover (Configurar → "Pode mover cards desta coluna para")
     const destinosCol = col.get(atual)?.destinos;

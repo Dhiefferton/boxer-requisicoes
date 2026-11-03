@@ -18,6 +18,7 @@ import { query } from '../config/db.js';
 import { getToken } from '../integrations/erpZen.js';
 import { buscaEstoque, stockPorFiltro, ENDERECO_MAQ_ID } from '../jobs/syncErpEstoque.js';
 import { CURVAS_ABC } from '../jobs/curvasAbc.js';
+import { temBotao } from '../middlewares/telas.js';
 
 export const SALDO_MAXIMO = 30;
 const PAUSA_SEG = 600;               // intervalo maior que isso = pausa
@@ -411,7 +412,9 @@ export async function detalharInventario(req, res, next) {
 // Quem pode recontar: só admin (Matheus Sabino já é admin)
 // Recontagem: só o Alexsander (pedido do Dhiefferton, 23/10/2026)
 const RECONTAGEM_EMAILS = ['alexsander.lucas@boxer.com.br'];
-const podeRecontar = (u) => RECONTAGEM_EMAILS.includes(String(u?.email || '').trim().toLowerCase());
+// Recontagem e finalizar: liberados por colaborador em Admin > Usuários (padrão: só o Alexsander)
+const podeRecontar = (u) => temBotao(u, 'inv_recontagem');
+const podeFinalizar = (u) => temBotao(u, 'inv_finalizar');
 
 // GET /inventarios/:id/meu — dados leves para a tela do celular
 export async function meuInventario(req, res, next) {
@@ -421,7 +424,7 @@ export async function meuInventario(req, res, next) {
     // Recontagem fica numa tela à parte, só para admin. Na contagem normal (coletor)
     // os itens marcados para recontagem não aparecem.
     const recontagem = req.query.modo === 'recontagem';
-    if (recontagem && !podeRecontar(req.usuario)) return res.status(403).json({ erro: 'A recontagem é só para o Alexsander.' });
+    if (recontagem && !podeRecontar(req.usuario)) return res.status(403).json({ erro: 'A recontagem não está liberada para você (Admin > Usuários).' });
     const inv = await query(`SELECT id, status, criado_em, local FROM inventarios WHERE id = $1`, [id]);
     if (!inv.rows[0]) return res.status(404).json({ erro: 'Inventário não encontrado.' });
     const resumo = (await resumoInventarios([id]))[id];
@@ -517,7 +520,7 @@ export async function contarItem(req, res, next) {
     const item = it.rows[0];
     if (!item) return res.status(404).json({ erro: 'Item não encontrado.' });
     if (item.status === 'recontagem' && !podeRecontar(req.usuario)) {
-      return res.status(403).json({ erro: 'Este item está em recontagem — só administradores recontam.' });
+      return res.status(403).json({ erro: 'Este item está em recontagem — a recontagem não está liberada para você.' });
     }
 
     // Saldo: o mesmo do catálogo (Partes e Peças / Máquinas) — quantidade_erp,
@@ -595,8 +598,8 @@ export async function finalizarInventario(req, res, next) {
     await garantirEstrutura();
     // Finalizar é decisão de quem acerta as divergências (admin / Alexsander), não do contador.
     // Acabar a contagem não finaliza: o inventário fica em andamento até alguém autorizado finalizar.
-    if (req.usuario?.perfil !== 'admin' && !podeRecontar(req.usuario)) {
-      return res.status(403).json({ erro: 'Só o administrador (ou o Alexsander) finaliza o inventário, depois de acertar as divergências.' });
+    if (!podeFinalizar(req.usuario)) {
+      return res.status(403).json({ erro: 'Finalizar o inventário não está liberado para você (Admin > Usuários).' });
     }
     const r = await query(
       `UPDATE inventarios SET status = 'finalizado', finalizado_em = NOW(), finalizado_por_nome = $2
@@ -634,7 +637,7 @@ export async function marcarPlanilha(req, res, next) {
 export async function marcarAjusteZen(req, res, next) {
   try {
     await garantirEstrutura();
-    if (req.usuario?.perfil !== 'admin' && !podeRecontar(req.usuario)) return res.status(403).json({ erro: 'Só administradores e o Alexsander marcam o ajuste no Zen.' });
+    if (!podeFinalizar(req.usuario)) return res.status(403).json({ erro: 'Marcar o ajuste no Zen não está liberado para você (Admin > Usuários).' });
     const ajustado = req.body?.ajustado !== false;
     const r = await query(
       `UPDATE inventario_itens
