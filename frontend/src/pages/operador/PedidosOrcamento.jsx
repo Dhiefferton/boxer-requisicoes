@@ -76,8 +76,9 @@ export default function PedidosOrcamento() {
     setTrazendo(true); setAvisoPipefy('');
     try {
       const { data } = await pedidosOrcamentoService.importarEntrada();
-      setAvisoPipefy(data.novos ? `${data.novos} card${data.novos > 1 ? 's' : ''} novo${data.novos > 1 ? 's' : ''} na Entrada` : 'Nenhum card novo na Entrada do Pipefy');
-      if (data.novos) await carregar();
+      const ns = data.ns_atualizadas ? ` · NS de entrada atualizada em ${data.ns_atualizadas} card${data.ns_atualizadas > 1 ? 's' : ''}` : '';
+      setAvisoPipefy((data.novos ? `${data.novos} card${data.novos > 1 ? 's' : ''} novo${data.novos > 1 ? 's' : ''} na Entrada` : 'Nenhum card novo na Entrada do Pipefy') + ns);
+      if (data.novos || data.ns_atualizadas) await carregar();
     } catch (e) { setAvisoPipefy(e.response?.data?.erro || 'Não consegui ler o Pipefy agora.'); }
     finally { setTrazendo(false); setTimeout(() => setAvisoPipefy(''), 8000); }
   }
