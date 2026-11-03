@@ -154,6 +154,21 @@ export const lojinhaService = {
   excluir: (id)        => api.delete(`/lojinha/pedidos/${id}`, { timeout: 120000 }),
 };
 
+// Logística CIF (Enviar) — continuação da Lojinha
+export const cifService = {
+  pedidos:     ()             => api.get('/logistica-cif/pedidos'),
+  mover:       (id, status)   => api.post(`/logistica-cif/pedidos/${id}/mover`, { status }),
+  editarCampos: (id, campos)  => api.post(`/logistica-cif/pedidos/${id}/campos`, { campos }),
+  quadroConfig:       ()      => api.get('/logistica-cif/quadro-config', { timeout: 30000 }),
+  lojinhaConfig:      ()      => api.get('/logistica-cif/lojinha-config', { timeout: 30000 }), // campos da Lojinha (só consulta)
+  salvarQuadroConfig: (dados) => api.post('/logistica-cif/quadro-config', dados, { timeout: 60000 }),
+  criarOpcao:  (campoId, opcao) => api.post(`/logistica-cif/quadro-config/campos/${campoId}/opcoes`, { opcao }),
+  imagem:      (url)          => api.get(url, { responseType: 'blob', timeout: 30000 }),
+  enviarFoto:  (id, dados)    => api.post(`/logistica-cif/pedidos/${id}/fotos`, dados, { timeout: 60000 }),
+  excluirFoto: (fotoId)       => api.delete(`/logistica-cif/fotos/${fotoId}`),
+  movimentos:  (params)       => api.get('/logistica-cif/movimentos', { params, timeout: 30000 }),
+};
+
 export const requisicoesService = {
   criar:       (dados)           => api.post('/requisicoes', dados),
   listar:      (params)          => api.get('/requisicoes', { params }),
