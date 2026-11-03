@@ -20,6 +20,7 @@ import MRP             from './pages/operador/MRP';
 import Compras         from './pages/operador/Compras';
 import NecessidadePecas from './pages/operador/NecessidadePecas';
 import LojinhaBoxer from './pages/operador/LojinhaBoxer';
+import LogisticaCif from './pages/operador/LogisticaCif';
 import RecebimentoImportacao from './pages/operador/RecebimentoImportacao';
 import PedidosOrcamento from './pages/operador/PedidosOrcamento';
 import Inventario       from './pages/operador/Inventario';
@@ -99,6 +100,9 @@ export default function App() {
             } />
             <Route path="/recebimento-importacao" element={
               <RotaTela tela="recebimento_importacao"><RecebimentoImportacao /></RotaTela>
+            } />
+            <Route path="/logistica-cif" element={
+              <RotaTela tela="logistica_cif"><LogisticaCif /></RotaTela>
             } />
             <Route path="/lojinha" element={
               <RotaTela tela="lojinha"><LojinhaBoxer /></RotaTela>
