@@ -32,7 +32,7 @@ const BASE_SELECT = `
     p.campos_editados, p.pipefy_fase,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome,
-    (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id) ORDER BY f.id), '[]'::json)
+    (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome) ORDER BY f.id), '[]'::json)
        FROM orc_fotos f WHERE f.pedido_id = p.id) AS fotos_locais
   FROM pedidos_orcamento p
   LEFT JOIN usuarios u ON u.id = p.criado_por
@@ -88,7 +88,9 @@ function garantirColunas() {
           usuario_nome VARCHAR(120),
           created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
-        CREATE INDEX IF NOT EXISTS idx_orc_fotos_pedido ON orc_fotos (pedido_id);`);
+        CREATE INDEX IF NOT EXISTS idx_orc_fotos_pedido ON orc_fotos (pedido_id);
+        ALTER TABLE orc_fotos ADD COLUMN IF NOT EXISTS nome VARCHAR(200);
+        ALTER TABLE orc_fotos ALTER COLUMN mime TYPE VARCHAR(120);`);
       // "Concluído - Não Liberado" é a fase depois da manutenção (conserto
       // pronto, aguardando liberação) — não é recusa. Cards que tiveram a
       // aprovação trocada por "Não liberado" voltam para a aprovação do Pipefy.
@@ -1412,12 +1414,17 @@ export async function cancelarPedido(req, res, next) {
 }
 
 // ── Fotos do card (só no B-Requisições) ─────────────────────
+// Fotos e arquivos (PDF, Word, Excel, texto) anexados no card
+const MIMES_ANEXO = /^(image\/(?:jpeg|png|webp|gif)|application\/pdf|application\/msword|application\/vnd\.ms-excel|application\/vnd\.openxmlformats-officedocument\.[\w.]+|text\/(?:plain|csv))$/;
+const MAX_ARQUIVO = 2.5 * 1024 * 1024;
 function dataUrlParaBuffer(dataUrl) {
-  const m = String(dataUrl || '').match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
-  if (!m) return null;
+  const m = String(dataUrl || '').match(/^data:([\w.+-]+\/[\w.+-]+);base64,(.+)$/s);
+  if (!m || !MIMES_ANEXO.test(m[1])) return null;
   const buf = Buffer.from(m[2], 'base64');
   return buf.length ? { mime: m[1], buf } : null;
 }
+const nomeAnexo = (n) => String(n || '').replace(/[\r\n"\\/]/g, ' ').trim().slice(0, 200) || null;
+const limiteAnexo = (img) => (img.mime.startsWith('image/') ? 1200 * 1024 : MAX_ARQUIVO);
 
 // POST /pedidos-orcamento/:id/fotos  { campo_id, imagem, miniatura } (data URLs já reduzidas no aparelho)
 export async function enviarFotoOrcamento(req, res, next) {
@@ -1428,14 +1435,14 @@ export async function enviarFotoOrcamento(req, res, next) {
     const img = dataUrlParaBuffer(req.body?.imagem);
     const mini = dataUrlParaBuffer(req.body?.miniatura);
     if (!campo) return res.status(400).json({ erro: 'Campo da foto não informado.' });
-    if (!img) return res.status(400).json({ erro: 'Foto inválida.' });
-    if (img.buf.length > 1200 * 1024) return res.status(413).json({ erro: 'Foto muito grande.' });
+    if (!img) return res.status(400).json({ erro: 'Arquivo inválido. Envie foto, PDF, Word, Excel ou texto.' });
+    if (img.buf.length > limiteAnexo(img)) return res.status(413).json({ erro: img.mime.startsWith('image/') ? 'Foto muito grande.' : 'Arquivo muito grande (máximo 2,5 MB).' });
     const p = await query(`SELECT id FROM pedidos_orcamento WHERE id = $1`, [id]);
     if (!p.rows[0]) return res.status(404).json({ erro: 'Pedido não encontrado.' });
     const r = await query(
-      `INSERT INTO orc_fotos (pedido_id, campo_id, imagem, miniatura, mime, usuario_id, usuario_nome)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-      [id, campo, img.buf, mini?.buf || null, img.mime, req.usuario?.id || null, req.usuario?.nome || null]);
+      `INSERT INTO orc_fotos (pedido_id, campo_id, imagem, miniatura, mime, usuario_id, usuario_nome, nome)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [id, campo, img.buf, mini?.buf || null, img.mime, req.usuario?.id || null, req.usuario?.nome || null, nomeAnexo(req.body?.nome)]);
     await registrarMovimento(id, 'foto_adicionada', {
       usuario: req.usuario, descricao: `Foto adicionada no B-Requisições (${campo})`, detalhes: { foto_id: r.rows[0].id, campo },
     });
@@ -1447,10 +1454,11 @@ export async function enviarFotoOrcamento(req, res, next) {
 export async function verFotoOrcamento(req, res, next) {
   try {
     await garantirColunas();
-    const r = await query(`SELECT imagem, miniatura, mime FROM orc_fotos WHERE id = $1`, [parseInt(req.params.fotoId) || 0]);
+    const r = await query(`SELECT imagem, miniatura, mime, nome FROM orc_fotos WHERE id = $1`, [parseInt(req.params.fotoId) || 0]);
     const f = r.rows[0];
     if (!f) return res.status(404).json({ erro: 'Foto não encontrada.' });
     res.set('Content-Type', f.mime || 'image/jpeg');
+    if (f.nome) res.set('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(f.nome)}`);
     res.set('Cache-Control', 'private, max-age=86400');
     res.send(req.query.tam === 'mini' && f.miniatura ? f.miniatura : f.imagem);
   } catch (err) { next(err); }

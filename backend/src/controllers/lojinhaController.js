@@ -112,6 +112,8 @@ function garantirEstrutura() {
         created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_loj_fotos_pedido ON loj_fotos (pedido_id);
+      ALTER TABLE loj_fotos ADD COLUMN IF NOT EXISTS nome VARCHAR(200);
+      ALTER TABLE loj_fotos ALTER COLUMN mime TYPE VARCHAR(120);
       CREATE TABLE IF NOT EXISTS loj_movimentos (
         id           SERIAL PRIMARY KEY,
         pedido_id    INTEGER,
@@ -475,7 +477,7 @@ export async function listarPedidosLojinha(req, res, next) {
     await garantirEstrutura();
     await sincronizarFasesPipefy().catch(e => console.error('[Lojinha] sync:', e.message));
     const r = await query(
-      `SELECT t.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id) ORDER BY f.id), '[]'::json)
+      `SELECT t.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome) ORDER BY f.id), '[]'::json)
                       FROM loj_fotos f WHERE f.pedido_id = t.id) AS fotos_locais
          FROM ((SELECT * FROM lojinha_boxer_pedidos WHERE status <> 'finalizado')
                UNION ALL
@@ -627,12 +629,17 @@ export async function editarCamposLojinha(req, res, next) {
 }
 
 // ── Fotos do pedido ─────────────────────────────────────────
+// Fotos e arquivos (PDF, Word, Excel, texto) anexados no card
+const MIMES_ANEXO = /^(image\/(?:jpeg|png|webp|gif)|application\/pdf|application\/msword|application\/vnd\.ms-excel|application\/vnd\.openxmlformats-officedocument\.[\w.]+|text\/(?:plain|csv))$/;
+const MAX_ARQUIVO = 2.5 * 1024 * 1024;
 function dataUrlParaBuffer(dataUrl) {
-  const m = String(dataUrl || '').match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
-  if (!m) return null;
+  const m = String(dataUrl || '').match(/^data:([\w.+-]+\/[\w.+-]+);base64,(.+)$/s);
+  if (!m || !MIMES_ANEXO.test(m[1])) return null;
   const buf = Buffer.from(m[2], 'base64');
   return buf.length ? { mime: m[1], buf } : null;
 }
+const nomeAnexo = (n) => String(n || '').replace(/[\r\n"\\/]/g, ' ').trim().slice(0, 200) || null;
+const limiteAnexo = (img) => (img.mime.startsWith('image/') ? 1200 * 1024 : MAX_ARQUIVO);
 // POST /lojinha/pedidos/:id/fotos { campo_id, imagem, miniatura }
 export async function enviarFotoLojinha(req, res, next) {
   try {
@@ -642,14 +649,14 @@ export async function enviarFotoLojinha(req, res, next) {
     const img = dataUrlParaBuffer(req.body?.imagem);
     const mini = dataUrlParaBuffer(req.body?.miniatura);
     if (!campo) return res.status(400).json({ erro: 'Campo da foto não informado.' });
-    if (!img) return res.status(400).json({ erro: 'Foto inválida.' });
-    if (img.buf.length > 1200 * 1024) return res.status(413).json({ erro: 'Foto muito grande.' });
+    if (!img) return res.status(400).json({ erro: 'Arquivo inválido. Envie foto, PDF, Word, Excel ou texto.' });
+    if (img.buf.length > limiteAnexo(img)) return res.status(413).json({ erro: img.mime.startsWith('image/') ? 'Foto muito grande.' : 'Arquivo muito grande (máximo 2,5 MB).' });
     const p = (await query(`SELECT id, numero_pedido, cliente_nome FROM lojinha_boxer_pedidos WHERE id = $1`, [id])).rows[0];
     if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
     const r = await query(
-      `INSERT INTO loj_fotos (pedido_id, campo_id, imagem, miniatura, mime, usuario_id, usuario_nome)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-      [id, campo, img.buf, mini?.buf || null, img.mime, req.usuario?.id || null, req.usuario?.nome || null]);
+      `INSERT INTO loj_fotos (pedido_id, campo_id, imagem, miniatura, mime, usuario_id, usuario_nome, nome)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [id, campo, img.buf, mini?.buf || null, img.mime, req.usuario?.id || null, req.usuario?.nome || null, nomeAnexo(req.body?.nome)]);
     await registrarMovLoj(p, 'foto_adicionada', { usuario: req.usuario, descricao: 'Foto adicionada', detalhes: { foto_id: r.rows[0].id, campo } });
     res.status(201).json({ id: r.rows[0].id });
   } catch (err) { next(err); }
@@ -658,9 +665,10 @@ export async function enviarFotoLojinha(req, res, next) {
 export async function verFotoLojinha(req, res, next) {
   try {
     await garantirEstrutura();
-    const f = (await query(`SELECT imagem, miniatura, mime FROM loj_fotos WHERE id = $1`, [parseInt(req.params.fotoId) || 0])).rows[0];
+    const f = (await query(`SELECT imagem, miniatura, mime, nome FROM loj_fotos WHERE id = $1`, [parseInt(req.params.fotoId) || 0])).rows[0];
     if (!f) return res.status(404).json({ erro: 'Foto não encontrada.' });
     res.set('Content-Type', f.mime || 'image/jpeg');
+    if (f.nome) res.set('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(f.nome)}`);
     res.set('Cache-Control', 'private, max-age=86400');
     res.send(req.query.tam === 'mini' && f.miniatura ? f.miniatura : f.imagem);
   } catch (err) { next(err); }
