@@ -43,6 +43,7 @@ import {
 import {
   acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, moverPedidoLojinha, editarCamposLojinha, enviarFotoLojinha, verFotoLojinha, excluirFotoLojinha, listarMovimentosLojinha, verConfigLojinha, salvarConfigLojinha, adicionarOpcaoLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
 } from '../controllers/lojinhaController.js';
+import { acessoCif, listarPedidosCif, moverPedidoCif, editarCamposCif, verConfigCif, salvarConfigCif, adicionarOpcaoCif } from '../controllers/logisticaCifController.js';
 import {
   listarNotas as listarNotasRecImp, detalharNota as detalharNotaRecImp, verFoto as verFotoRecImp,
   fotoCatalogo as fotoCatalogoRecImp, enviarFoto as enviarFotoRecImp, excluirFoto as excluirFotoRecImp,
@@ -260,6 +261,20 @@ router.get('/lojinha/quadro-config',        ...loja, verConfigLojinha);
 router.post('/lojinha/quadro-config',       ...loja, exigirPerfil('admin'), salvarConfigLojinha);
 router.post('/lojinha/quadro-config/campos/:id/opcoes', ...loja, adicionarOpcaoLojinha);
 router.delete('/lojinha/pedidos/:id', ...loja, excluirPedidoLojinha);
+
+// ── Logística CIF (Enviar) — continuação da Lojinha (pedido Finalizado entra aqui)
+const cif = [autenticar, acessoCif];
+router.get('/logistica-cif/pedidos',              ...cif, listarPedidosCif);
+router.post('/logistica-cif/pedidos/:id/mover',   ...cif, moverPedidoCif);
+router.post('/logistica-cif/pedidos/:id/campos',  ...cif, editarCamposCif);
+router.post('/logistica-cif/pedidos/:id/fotos',   ...cif, enviarFotoLojinha);
+router.get('/logistica-cif/fotos/:fotoId',        ...cif, verFotoLojinha);
+router.delete('/logistica-cif/fotos/:fotoId',     ...cif, excluirFotoLojinha);
+router.get('/logistica-cif/movimentos',           ...cif, listarMovimentosLojinha);
+router.get('/logistica-cif/quadro-config',        ...cif, verConfigCif);
+router.get('/logistica-cif/lojinha-config',       ...cif, verConfigLojinha);   // campos da Lojinha, só para mostrar no card
+router.post('/logistica-cif/quadro-config',       ...cif, exigirPerfil('admin'), salvarConfigCif);
+router.post('/logistica-cif/quadro-config/campos/:id/opcoes', ...cif, adicionarOpcaoCif);
 
 // ── Recebimento/Importação (fotos das peças das NFs de importação)
 const recImp = [autenticar, exigirPerfil('operador', 'admin')];
