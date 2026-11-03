@@ -6,6 +6,7 @@
 // (Configurar) aponta para uma base; no card escolhe-se um registro dela.
 // ============================================================
 import { query } from '../config/db.js';
+import { pipefyQueryPlanilhas } from '../integrations/pipefyService.js';
 
 let estrutura = null;
 function garantir() {
@@ -29,7 +30,10 @@ function garantir() {
         atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_bx_base_registros_base ON bx_base_registros (base_id) WHERE ativo;
-      ALTER TABLE bx_bases ADD COLUMN IF NOT EXISTS com_valor BOOLEAN NOT NULL DEFAULT TRUE;`)
+      ALTER TABLE bx_bases ADD COLUMN IF NOT EXISTS com_valor BOOLEAN NOT NULL DEFAULT TRUE;
+      ALTER TABLE bx_bases ADD COLUMN IF NOT EXISTS pipefy_tabela VARCHAR(30);
+      ALTER TABLE bx_base_registros ADD COLUMN IF NOT EXISTS pipefy_id VARCHAR(30);
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_bx_base_registros_pipefy ON bx_base_registros (base_id, pipefy_id) WHERE pipefy_id IS NOT NULL;`)
       .catch(err => { estrutura = null; throw err; });
   }
   return estrutura;
@@ -50,7 +54,7 @@ const registro = (r, base) => ({ id: r.id, base_id: r.base_id, base: base ?? r.b
 export async function listarBases(req, res, next) {
   try {
     await garantir();
-    const r = await query(`SELECT b.id, b.nome, b.com_valor, b.criado_em, COUNT(g.id)::int AS registros
+    const r = await query(`SELECT b.id, b.nome, b.com_valor, b.pipefy_tabela, b.criado_em, COUNT(g.id)::int AS registros
       FROM bx_bases b LEFT JOIN bx_base_registros g ON g.base_id = b.id AND g.ativo
       WHERE b.ativo GROUP BY b.id ORDER BY b.nome`);
     res.json({ bases: r.rows });
@@ -80,7 +84,7 @@ export async function listarRegistros(req, res, next) {
     await garantir();
     const b = (await query(`SELECT id, nome FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!b) return res.status(404).json({ erro: 'Base não encontrada.' });
-    const r = await query(`SELECT * FROM bx_base_registros WHERE base_id = $1 AND ativo ORDER BY descricao LIMIT 2000`, [b.id]);
+    const r = await query(`SELECT * FROM bx_base_registros WHERE base_id = $1 AND ativo ORDER BY descricao LIMIT 10000`, [b.id]);
     res.json({ base: b, registros: r.rows.map(x => registro(x, b.nome)) });
   } catch (err) { next(err); }
 }
@@ -126,7 +130,7 @@ export async function excluirBase(req, res, next) {
     const b = (await query(`SELECT id, nome FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!b) return res.status(404).json({ erro: 'Base não encontrada.' });
     const usos = [];
-    for (const [tab, tela] of [['orc_campos', 'Orçamento'], ['loj_campos', 'Lojinha']]) {
+    for (const [tab, tela] of [['orc_campos', 'Orçamento'], ['loj_campos', 'Lojinha'], ['cif_campos', 'Logística CIF']]) {
       try {
         const r = await query(`SELECT rotulo FROM ${tab} WHERE ativo AND ((tipo = 'registro' AND lista = $1) OR (tipo = 'conexao' AND lista = $2))`, [String(b.id), `base:${b.id}`]);
         for (const x of r.rows) usos.push(`"${x.rotulo}" (${tela})`);
@@ -137,4 +141,70 @@ export async function excluirBase(req, res, next) {
     await query(`UPDATE bx_base_registros SET ativo = FALSE, atualizado_em = NOW() WHERE base_id = $1`, [b.id]);
     res.json({ sucesso: true });
   } catch (err) { next(err); }
+}
+
+// ── Trazer do Pipefy a base de peças (descrição e preço) — só leitura no Pipefy ──
+// A tabela é a ligada ao campo "Peça 1" da fase Orçando. Vem em partes (cursor):
+// a tela chama de novo até terminar. Registros já trazidos são atualizados.
+const FASE_ORCANDO = process.env.PIPEFY_ORCAMENTO_PHASE_ORCANDO_ID || '309113140';
+const CAMPO_PECA = 'pe_a_1_1';
+const PAGINAS_POR_VEZ = 8; // 8 x 50 registros por chamada
+async function tabelaDasPecas() {
+  if (process.env.PIPEFY_TABELA_PECAS) return { id: process.env.PIPEFY_TABELA_PECAS, nome: 'Peças' };
+  const d = await pipefyQueryPlanilhas(`query($id: ID!) { phase(id: $id) { fields { id label connectedRepo { __typename ... on Table { id name } } } } }`, { id: FASE_ORCANDO });
+  const f = (d?.phase?.fields || []).find(x => x.id === CAMPO_PECA) || (d?.phase?.fields || []).find(x => x.connectedRepo?.__typename === 'Table' && /pe[cç]a/i.test(x.label));
+  if (!f?.connectedRepo?.id) throw Object.assign(new Error('Não achei no Pipefy a base ligada ao campo "Peça 1" (fase Orçando).'), { status: 400 });
+  return { id: String(f.connectedRepo.id), nome: f.connectedRepo.name || 'Peças' };
+}
+function registroDoPipefy(node) {
+  const campos = node.record_fields || [];
+  const preco = campos.find(c => c.field?.type === 'currency') || campos.find(c => /pre[cç]o|valor/i.test(c.name || ''));
+  const codigo = campos.find(c => /^c[oó]d(igo)?\b/i.test(c.name || ''))?.value;
+  let descricao = limpar(node.title, 160);
+  if (codigo && !descricao.startsWith(String(codigo).trim())) descricao = limpar(`${String(codigo).trim()} - ${descricao}`, 160);
+  const valor = preco ? lerValor(preco.value) : 0;
+  return { pipefy_id: String(node.id), descricao, valor: Number.isFinite(valor) ? valor : 0 };
+}
+// POST /bases/importar-pipefy { cursor?, base_id? } (admin)
+export async function importarBasePipefy(req, res, next) {
+  try {
+    await garantir();
+    let base = null, tabela = null;
+    if (req.body?.base_id) {
+      base = (await query(`SELECT id, nome, pipefy_tabela FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.body.base_id)])).rows[0] || null;
+      if (base?.pipefy_tabela) tabela = { id: base.pipefy_tabela, nome: base.nome };
+    }
+    if (!tabela) tabela = await tabelaDasPecas();
+    if (!base) {
+      const nome = limpar(`${tabela.nome} (Pipefy)`, 80);
+      base = (await query(`SELECT id, nome, pipefy_tabela FROM bx_bases WHERE ativo AND (pipefy_tabela = $1 OR LOWER(nome) = LOWER($2)) ORDER BY id LIMIT 1`, [tabela.id, nome])).rows[0]
+        || (await query(`INSERT INTO bx_bases (nome, com_valor, pipefy_tabela) VALUES ($1, TRUE, $2) RETURNING id, nome, pipefy_tabela`, [nome, tabela.id])).rows[0];
+      if (!base.pipefy_tabela) await query(`UPDATE bx_bases SET pipefy_tabela = $1, com_valor = TRUE WHERE id = $2`, [tabela.id, base.id]);
+    }
+    const gql = `query($id: ID!, $after: String) { table_records(table_id: $id, first: 50, after: $after) {
+      pageInfo { hasNextPage endCursor } edges { node { id title record_fields { name value field { id type } } } } } }`;
+    let after = req.body?.cursor || null, fim = false, trazidos = 0;
+    for (let i = 0; i < PAGINAS_POR_VEZ; i++) {
+      const d = await pipefyQueryPlanilhas(gql, { id: tabela.id, after });
+      const conn = d?.table_records;
+      const regs = (conn?.edges || []).map(e => registroDoPipefy(e.node)).filter(r => r.descricao);
+      if (regs.length) {
+        await query(
+          `INSERT INTO bx_base_registros (base_id, descricao, valor, pipefy_id, criado_por_nome)
+           SELECT $1, d, v, p, 'Pipefy' FROM unnest($2::text[], $3::numeric[], $4::text[]) AS t(d, v, p)
+           ON CONFLICT (base_id, pipefy_id) WHERE pipefy_id IS NOT NULL
+           DO UPDATE SET descricao = EXCLUDED.descricao, valor = EXCLUDED.valor, ativo = TRUE, atualizado_em = NOW()`,
+          [base.id, regs.map(r => r.descricao), regs.map(r => r.valor), regs.map(r => r.pipefy_id)]);
+        trazidos += regs.length;
+      }
+      if (!conn?.pageInfo?.hasNextPage) { fim = true; break; }
+      after = conn.pageInfo.endCursor;
+    }
+    const total = (await query(`SELECT COUNT(*)::int AS n FROM bx_base_registros WHERE base_id = $1 AND ativo`, [base.id])).rows[0].n;
+    res.json({ base: { id: base.id, nome: base.nome }, trazidos, total, cursor: fim ? null : after, terminou: fim });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ erro: err.message });
+    console.error('[Bases] Pipefy:', err.message);
+    res.status(502).json({ erro: `Não consegui ler a base no Pipefy: ${err.message}` });
+  }
 }
