@@ -13,6 +13,54 @@ function mascaraDocumento(v) {
   return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
 }
 import { Button, Spinner } from '../../components/ui';
+import { TELAS, NIVEIS, nomeNivel } from '../../utils/telas';
+
+// ── Telas do colaborador (no Editar usuário) ──────────────────
+// Por tela: padrão do perfil / sem acesso / só ver / ver e mexer. Admin vê e mexe em tudo.
+function TelasDoColaborador({ formEdit, setFormEdit, editando, departamentos }) {
+  const telas = formEdit.telas || {};
+  const simulado = { perfil: formEdit.perfil, email: editando?.email,
+    departamento_nome: departamentos.find(d => String(d.id) === String(formEdit.departamento_id))?.nome || '' };
+  const mudar = (chave, valor) => setFormEdit(f => {
+    const t = { ...(f.telas || {}) };
+    if (valor) t[chave] = valor; else delete t[chave];
+    return { ...f, telas: t };
+  });
+  const cor = (v) => v === 'editar' ? 'text-green-400' : v === 'ver' ? 'text-amber-400' : 'text-[var(--c-suave)]';
+  return (
+    <div className="rounded-xl border border-[var(--c-borda)] p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-semibold text-[var(--c-texto)] flex-1">Telas que pode ver e mexer</p>
+        {Object.keys(telas).length > 0 && formEdit.perfil !== 'admin' && (
+          <button type="button" onClick={() => setFormEdit(f => ({ ...f, telas: {} }))} className="text-[11px] text-[var(--c-suave)] hover:text-[var(--c-texto)]">Voltar tudo ao padrão</button>
+        )}
+      </div>
+      {formEdit.perfil === 'admin' ? (
+        <p className="text-[11px] text-[var(--c-suave)]">Admin vê e mexe em todas as telas.</p>
+      ) : (
+        <>
+          <p className="text-[11px] text-[var(--c-suave)]">"Padrão" segue o perfil e o setor (como era antes). A mudança vale em até 30 segundos.</p>
+          <div className="divide-y divide-[var(--c-borda)]">
+            {TELAS.map(t => {
+              const padrao = t.legado(simulado);
+              const atual = telas[t.chave] || '';
+              return (
+                <div key={t.chave} className="flex items-center gap-2 py-1.5">
+                  <span className="flex-1 min-w-0 text-xs text-[var(--c-texto)] truncate">{t.nome}</span>
+                  <select value={atual} onChange={e => mudar(t.chave, e.target.value)}
+                    className={`w-40 shrink-0 bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-[var(--c-destaque)] ${cor(atual || padrao)}`}>
+                    <option value="">Padrão ({nomeNivel(padrao)})</option>
+                    {NIVEIS.map(n => <option key={n.valor} value={n.valor}>{n.nome}</option>)}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 // ── Aba Usuários ─────────────────────────────────────────────
 function AbaUsuarios() {
@@ -23,7 +71,7 @@ function AbaUsuarios() {
   const [editando,      setEditando]      = useState(null);
   const [busca,         setBusca]         = useState('');
   const [form,          setForm]          = useState({ nome: '', email: '', senha: '', perfil: 'colaborador', departamento_id: '' });
-  const [formEdit,      setFormEdit]      = useState({ email: '', senha: '', perfil: 'colaborador', departamento_id: '' });
+  const [formEdit,      setFormEdit]      = useState({ email: '', senha: '', perfil: 'colaborador', departamento_id: '', telas: {} });
   const [erro,          setErro]          = useState('');
   const [erroEdit,      setErroEdit]      = useState('');
   const [salvando,      setSalvando]      = useState(false);
@@ -68,6 +116,7 @@ function AbaUsuarios() {
       if (formEdit.senha)  payload.senha  = formEdit.senha;
       if (formEdit.perfil) payload.perfil = formEdit.perfil;
       if (formEdit.departamento_id !== undefined) payload.departamento_id = formEdit.departamento_id ? parseInt(formEdit.departamento_id) : null;
+      payload.telas = formEdit.telas || {}; // telas escolhidas (vazio = padrão do perfil)
       await adminService.atualizarUsuario(editando.id, payload);
       setEditando(null);
       carregar();
@@ -89,7 +138,7 @@ function AbaUsuarios() {
 
   function abrirEdicao(u) {
     setEditando(u);
-    setFormEdit({ email: u.email, senha: '', perfil: u.perfil, departamento_id: u.departamento_id || '' });
+    setFormEdit({ email: u.email, senha: '', perfil: u.perfil, departamento_id: u.departamento_id || '', telas: { ...(u.telas || {}) } });
     setErroEdit('');
   }
 
@@ -164,7 +213,7 @@ function AbaUsuarios() {
       {/* Modal de edição */}
       {editando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-sm min-w-0 max-h-[calc(100dvh-1.5rem)] overflow-y-auto bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-4 sm:p-5 space-y-4">
+          <div className="w-full max-w-lg min-w-0 max-h-[calc(100dvh-1.5rem)] overflow-y-auto bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl p-4 sm:p-5 space-y-4">
             <div>
               <h3 className="font-semibold text-[var(--c-texto)]">Editar usuário</h3>
               <p className="text-xs text-[var(--c-suave)] mt-0.5">{editando.nome}</p>
@@ -193,6 +242,7 @@ function AbaUsuarios() {
                   {departamentos.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
                 </select>
               </div>
+              <TelasDoColaborador formEdit={formEdit} setFormEdit={setFormEdit} editando={editando} departamentos={departamentos} />
               {erroEdit && <p className="text-xs text-red-400">{erroEdit}</p>}
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setEditando(null)} className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]">Cancelar</button>
@@ -215,7 +265,8 @@ function AbaUsuarios() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-[var(--c-texto)] truncate">{u.nome}</p>
-                <p className="text-xs text-[var(--c-suave)] break-all">{u.email} · <span className="capitalize">{u.perfil}</span>{u.departamento_nome ? ` · ${u.departamento_nome}` : ''}</p>
+                <p className="text-xs text-[var(--c-suave)] break-all">{u.email} · <span className="capitalize">{u.perfil}</span>{u.departamento_nome ? ` · ${u.departamento_nome}` : ''}
+                  {u.perfil !== 'admin' && u.telas && Object.keys(u.telas).length > 0 && <span className="ml-1.5 text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-destaque)]/10 text-[var(--c-destaque)]">{Object.keys(u.telas).length} tela(s) personalizada(s)</span>}</p>
               </div>
               <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto">
                 <button onClick={() => abrirEdicao(u)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--c-destaque)]/10 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/20 transition-colors">
