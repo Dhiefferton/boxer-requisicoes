@@ -26,6 +26,7 @@ export const TELAS = [
   { chave: 'lojinha',                nome: 'Lojinha Boxer' },
   { chave: 'orcamentos',             nome: 'Orçamentos' },
   { chave: 'logistica_cif',          nome: 'Logística CIF (Enviar)' },
+  { chave: 'databases',              nome: 'Databases' },
 ];
 const CHAVES = new Set(TELAS.map(t => t.chave));
 export const NIVEIS = ['nenhum', 'ver', 'editar'];
@@ -36,6 +37,10 @@ const ROTAS = [
   [null,    /^\/pedidos-orcamento(\/|$)/,           ['orcamentos']],
   [null,    /^\/lojinha(\/|$)/,                     ['lojinha']],
   [null,    /^\/logistica-cif(\/|$)/,               ['logistica_cif']],
+  // Databases: só o que muda a database (ler e criar registro no card continuam abertos)
+  ['POST',   /^\/bases(\/importar-pipefy|\/\d+\/importar)?$/, ['databases']],
+  ['PATCH',  /^\/bases\/(\d+|registros\/\d+)$/,     ['databases']],
+  ['DELETE', /^\/bases\/(\d+|registros\/\d+)$/,     ['databases']],
   [null,    /^\/(inventarios|marketplace)(\/|$)/,   ['inventario']],
   [null,    /^\/recebimento-importacao(\/|$)/,      ['recebimento_importacao']],
   [null,    /^\/necessidades-pecas(\/|$)/,          ['necessidade_pecas']],
@@ -170,6 +175,8 @@ export async function aplicarTelas(req, res, next) {
     if (botoesRota.length) {
       const comBotao = botoesRota.filter(b => temBotao(u, b.chave) && telas?.[b.tela] !== 'nenhum');
       if (comBotao.length) { req.liberadoTela = true; req.telasLiberadas = new Set(comBotao.map(b => b.tela)); }
+      // ou a tela da rota (ex.: Databases) com "Ver e mexer"
+      else if (mapeadas.some(t => telas?.[t] === 'editar')) { req.liberadoTela = true; req.telasLiberadas = new Set(mapeadas.filter(t => telas[t] === 'editar')); }
       return next();
     }
     if (!telas) return next(); // nada configurado: regras antigas
