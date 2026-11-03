@@ -33,7 +33,7 @@ export const salvarConfigLojinha = (req, res, next) => cfgLojinha.salvarConfig(r
 export const adicionarOpcaoLojinha = (req, res, next) => cfgLojinha.adicionarOpcao(req, res, next);
 
 // ── Histórico de movimentação ───────────────────────────────
-async function registrarMovLoj(pedido, tipo, { de = null, para = null, descricao = null, detalhes = null, usuario = null, origem = 'usuario' } = {}) {
+export async function registrarMovLoj(pedido, tipo, { de = null, para = null, descricao = null, detalhes = null, usuario = null, origem = 'usuario' } = {}) {
   try {
     await query(
       `INSERT INTO loj_movimentos (pedido_id, referencia, cliente_nome, tipo, de_status, para_status, descricao, detalhes, usuario_id, usuario_nome, origem)
@@ -47,6 +47,7 @@ import { criarPedidoLojinhaZen, listarVendedorasZen } from '../integrations/zenL
 import { criarCardsLojinha, excluirCardLojinha, fasesDosCards, cardsDoPedidoLojinha } from '../integrations/pipefyLojinha.js';
 import { buscarPedidoLI } from '../integrations/lojaIntegrada.js';
 import { temBotao } from '../middlewares/telas.js';
+import { entrarNoCif } from './logisticaCifController.js';
 
 const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
 const SETORES = ['sac / suporte'];
@@ -63,7 +64,7 @@ const TRANSPORTADORAS = [
 const AVISOS_UF = { PA: 'PA — confirmar a transportadora com a Gessica.' };
 
 let estruturaOk = null;
-function garantirEstrutura() {
+export function garantirEstrutura() {
   if (!estruturaOk) {
     estruturaOk = query(`
       CREATE TABLE IF NOT EXISTS lojinha_boxer_pedidos (
@@ -131,6 +132,11 @@ function garantirEstrutura() {
       );
       CREATE INDEX IF NOT EXISTS idx_loj_mov_criado ON loj_movimentos (criado_em DESC);
       CREATE INDEX IF NOT EXISTS idx_loj_mov_pedido ON loj_movimentos (pedido_id, criado_em);
+      -- Logística CIF (Enviar): continuação do pedido depois de Finalizado
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS cif_status VARCHAR(60);
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS cif_entrou_em TIMESTAMPTZ;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS cif_valores JSONB NOT NULL DEFAULT '{}'::jsonb;
+      CREATE INDEX IF NOT EXISTS idx_loj_cif_status ON lojinha_boxer_pedidos (cif_status);
       UPDATE lojinha_boxer_pedidos
          SET status = 'liberacao', qtd_cards = GREATEST(1, CEIL(jsonb_array_length(itens) / 7.0))::int
        WHERE status = 'entrada' AND zen_ordem_separacao_id IS NOT NULL;
@@ -467,6 +473,7 @@ export async function moverPedidoLojinha(req, res, next) {
       de: atual, para: status, usuario: req.usuario,
       descricao: `Movido de ${col.get(atual)?.nome || atual} para ${col.get(status)?.nome || status}`,
     });
+    if (status === 'finalizado') await entrarNoCif(req.usuario).catch(e => console.error('[CIF] entrada:', e.message));
     res.json({ pedido: r.rows[0] });
   } catch (err) { next(err); }
 }
@@ -476,6 +483,7 @@ export async function listarPedidosLojinha(req, res, next) {
   try {
     await garantirEstrutura();
     await sincronizarFasesPipefy().catch(e => console.error('[Lojinha] sync:', e.message));
+    await entrarNoCif().catch(e => console.error('[CIF] entrada:', e.message));
     const r = await query(
       `SELECT t.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome) ORDER BY f.id), '[]'::json)
                       FROM loj_fotos f WHERE f.pedido_id = t.id) AS fotos_locais

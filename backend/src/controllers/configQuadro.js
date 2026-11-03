@@ -40,9 +40,10 @@ export function exigidoAgora(c, todos, valores, idCampo) {
 }
 
 /**
- * @param {{ TC: string, TF: string, tabPedidos: string, padrao: Array<{chave,nome,cor,so_admin?,arquivada?,zen?}> }} o
+ * @param {{ TC: string, TF: string, tabPedidos: string, padrao: Array<{chave,nome,cor,so_admin?,arquivada?,zen?}>, colStatus?: string, prefixoId?: string }} o
+ * colStatus = coluna do pedido com a fase deste quadro; prefixoId = prefixo do id do valor do campo (ex.: cif_bx_)
  */
-export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
+export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'status', prefixoId = 'bx_' }) {
   const porChave = new Map(padrao.map(c => [c.chave, c]));
   let estrutura = null;
   function garantirConfig() {
@@ -121,7 +122,7 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
   }
   
   /** Id do valor do campo no card: o do Pipefy (campo trazido da fase) ou bx_<id>. */
-  const idCampoConfig = (c) => c.pipefy_campo || `bx_${c.id}`;
+  const idCampoConfig = (c) => c.pipefy_campo || `${prefixoId}${c.id}`;
   
   const COR_OK = /^#[0-9a-f]{6}$/i;
   const limpar = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -173,7 +174,7 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao }) {
       }
       if (saem.length) {
         const comCards = (await query(
-          `SELECT status, COUNT(*)::int AS n FROM ${tabPedidos} WHERE status = ANY($1::text[]) GROUP BY status`,
+          `SELECT ${colStatus} AS status, COUNT(*)::int AS n FROM ${tabPedidos} WHERE ${colStatus} = ANY($1::text[]) GROUP BY ${colStatus}`,
           [saem.map(c => c.chave)])).rows;
         if (comCards.length) {
           return res.status(400).json({ erro: `Não dá para excluir coluna com cards. Mova os cards antes: ${comCards.map(r => `${r.status} (${r.n})`).join(', ')}.` });
