@@ -131,6 +131,9 @@ export const basesService = {
   registros:      (baseId)         => api.get(`/bases/${baseId}/registros`),
   criarRegistro:  (baseId, dados)  => api.post(`/bases/${baseId}/registros`, dados),
   editarRegistro: (id, dados)      => api.patch(`/bases/registros/${id}`, dados),
+  editarBase:     (baseId, dados)  => api.patch(`/bases/${baseId}`, dados),
+  excluirRegistro: (id)            => api.delete(`/bases/registros/${id}`),
+  importar:       (baseId, linhas) => api.post(`/bases/${baseId}/importar`, { linhas }, { timeout: 120000 }),
   importarPipefy: (cursor, baseId) => api.post('/bases/importar-pipefy', { cursor, base_id: baseId }, { timeout: 120000 }),
 };
 
