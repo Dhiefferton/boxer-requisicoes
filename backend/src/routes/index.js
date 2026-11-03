@@ -212,7 +212,7 @@ const INVENTARIO_COLABORADORES = [
 ];
 function acessoInventario(req, res, next) {
   const email = String(req.usuario?.email || '').trim().toLowerCase();
-  if (['admin', 'operador'].includes(req.usuario?.perfil) || INVENTARIO_COLABORADORES.includes(email)) return next();
+  if (req.liberadoTela || ['admin', 'operador'].includes(req.usuario?.perfil) || INVENTARIO_COLABORADORES.includes(email)) return next();
   return res.status(403).json({ erro: 'Acesso restrito à tela de Inventário.' });
 }
 const inv = [autenticar, acessoInventario];
