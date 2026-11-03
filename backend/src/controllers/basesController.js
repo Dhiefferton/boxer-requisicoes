@@ -149,12 +149,21 @@ export async function excluirBase(req, res, next) {
 const FASE_ORCANDO = process.env.PIPEFY_ORCAMENTO_PHASE_ORCANDO_ID || '309113140';
 const CAMPO_PECA = 'pe_a_1_1';
 const PAGINAS_POR_VEZ = 8; // 8 x 50 registros por chamada
+// Database do Pipefy "Peças em Geral" (a ligada aos campos "Peça" da fase Orçando)
+const NOME_TABELA = /pe[cç]as em geral/i;
 async function tabelaDasPecas() {
-  if (process.env.PIPEFY_TABELA_PECAS) return { id: process.env.PIPEFY_TABELA_PECAS, nome: 'Peças' };
+  if (process.env.PIPEFY_TABELA_PECAS) return { id: process.env.PIPEFY_TABELA_PECAS, nome: 'Peças em Geral' };
   const d = await pipefyQueryPlanilhas(`query($id: ID!) { phase(id: $id) { fields { id label connectedRepo { __typename ... on Table { id name } } } } }`, { id: FASE_ORCANDO });
-  const f = (d?.phase?.fields || []).find(x => x.id === CAMPO_PECA) || (d?.phase?.fields || []).find(x => x.connectedRepo?.__typename === 'Table' && /pe[cç]a/i.test(x.label));
-  if (!f?.connectedRepo?.id) throw Object.assign(new Error('Não achei no Pipefy a base ligada ao campo "Peça 1" (fase Orçando).'), { status: 400 });
-  return { id: String(f.connectedRepo.id), nome: f.connectedRepo.name || 'Peças' };
+  const campos = (d?.phase?.fields || []).filter(x => x.connectedRepo?.__typename === 'Table' && x.connectedRepo?.id);
+  let f = campos.find(x => NOME_TABELA.test(x.connectedRepo.name || '')) || campos.find(x => x.id === CAMPO_PECA);
+  if (f) return { id: String(f.connectedRepo.id), nome: f.connectedRepo.name || 'Peças em Geral' };
+  // Não achou pelo campo: procura a database pelo nome na organização
+  try {
+    const o = await pipefyQueryPlanilhas(`query($id: ID!) { pipe(id: $id) { organization { tables { edges { node { id name } } } } } }`, { id: process.env.PIPEFY_ORCAMENTO_PIPE_ID || '301367367' });
+    const t = (o?.pipe?.organization?.tables?.edges || []).map(e => e.node).find(n => NOME_TABELA.test(n?.name || ''));
+    if (t) return { id: String(t.id), nome: t.name };
+  } catch (e) { console.error('[Bases] tabelas da organização:', e.message); }
+  throw Object.assign(new Error('Não achei no Pipefy a database "Peças em Geral".'), { status: 400 });
 }
 function registroDoPipefy(node) {
   const campos = node.record_fields || [];
@@ -176,7 +185,7 @@ export async function importarBasePipefy(req, res, next) {
     }
     if (!tabela) tabela = await tabelaDasPecas();
     if (!base) {
-      const nome = limpar(`${tabela.nome} (Pipefy)`, 80);
+      const nome = limpar(tabela.nome, 80); // mesma base do B-Requisições com esse nome, se já existir
       base = (await query(`SELECT id, nome, pipefy_tabela FROM bx_bases WHERE ativo AND (pipefy_tabela = $1 OR LOWER(nome) = LOWER($2)) ORDER BY id LIMIT 1`, [tabela.id, nome])).rows[0]
         || (await query(`INSERT INTO bx_bases (nome, com_valor, pipefy_tabela) VALUES ($1, TRUE, $2) RETURNING id, nome, pipefy_tabela`, [nome, tabela.id])).rows[0];
       if (!base.pipefy_tabela) await query(`UPDATE bx_bases SET pipefy_tabela = $1, com_valor = TRUE WHERE id = $2`, [tabela.id, base.id]);
