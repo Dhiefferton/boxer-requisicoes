@@ -1,6 +1,6 @@
 ﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor, fornecedorZen } from '../controllers/fornecedoresController.js';
 import { Router } from 'express';
-import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro, excluirBase, importarBasePipefy } from '../controllers/basesController.js';
+import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro, excluirBase, importarBasePipefy, editarBase, excluirRegistro, importarRegistros } from '../controllers/basesController.js';
 import bcrypt from 'bcryptjs';
 import { login, me, trocarSenha, alterarSenha, esqueciSenha, validarTokenSenha, redefinirSenha } from '../controllers/authController.js';
 import rateLimit from 'express-rate-limit';
@@ -179,6 +179,10 @@ router.delete('/bases/:id',             autenticar, exigirPerfil('admin'), exclu
 router.get('/bases/:id/registros',      autenticar, listarRegistros);
 router.post('/bases/:id/registros',     autenticar, criarRegistro);
 router.patch('/bases/registros/:id',    autenticar, exigirPerfil('admin'), editarRegistro);
+// Tela Databases (admin ou tela "Databases" liberada no cadastro)
+router.delete('/bases/registros/:id',   autenticar, exigirPerfil('admin'), excluirRegistro);
+router.patch('/bases/:id',              autenticar, exigirPerfil('admin'), editarBase);
+router.post('/bases/:id/importar',      autenticar, exigirPerfil('admin'), importarRegistros);
 router.get('/pedidos-orcamento/config',         autenticar, exigirLeituraOrcamentos, verConfigOrcamento);
 router.post('/pedidos-orcamento/config',        autenticar, exigirPerfil('admin'), salvarConfigOrcamento);
 router.post('/pedidos-orcamento/config/campos/:id/opcoes', autenticar, exigirLeituraOrcamentos, adicionarOpcaoOrcamento);

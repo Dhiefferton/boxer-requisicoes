@@ -6,6 +6,7 @@ import { pedidoLIBruto, buscarPedidoLI, tentativasLI, getLIBruto } from '../inte
 import { pagamentosDaPreferencia, getMPBruto, mercadoPagoConfigurado } from '../integrations/mercadoPago.js';
 import { fasesDosCards } from '../integrations/pipefyLojinha.js';
 import { query } from '../config/db.js';
+import { importarPecasPipefy } from '../controllers/basesController.js';
 import { SQL_CATEGORIA_USO_CONSUMO } from '../controllers/mrpController.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
 import { sincronizarSaidas, garantirRelatorioSemanal, compararPlanilhaZen } from '../integrations/marketplaceSaidas.js';
@@ -134,6 +135,14 @@ router.get('/debug-ns-orcamento', async (req, res) => {
     const t = (await query(`SELECT COUNT(*)::int AS total, COUNT(NULLIF(ns_entrada::text, ''))::int AS com_ns FROM pedidos_orcamento WHERE pipefy_card_id IS NOT NULL`)).rows[0];
     res.json({ ...t, cards: r });
   } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Ex: GET /api/erp/debug-importar-pecas?secret=...&cursor=&base= — copia a database "Peças em Geral" do Pipefy
+// para a base do B-Requisições (só lê o Pipefy). Chamar de novo com o cursor devolvido até terminou=true.
+router.get('/debug-importar-pecas', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try { res.json(await importarPecasPipefy({ cursor: req.query.cursor || null, baseId: req.query.base || null })); }
+  catch (e) { res.status(e.status || 500).json({ erro: e.message }); }
 });
 
 // Ex: GET /api/erp/debug-corrigir-orcamento?secret=...&id=796&status=orcando
