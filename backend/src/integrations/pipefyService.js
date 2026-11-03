@@ -80,6 +80,7 @@ async function pipefyMutation(mutation, variables, liberado = false) {
 export async function pipefyQuery(query, variables) {
   return pipefyMutation(query, variables);
 }
+const pipefyQueryNormal = pipefyQuery;
 
 // Só leitura para as Planilhas: funciona mesmo com a integração desligada
 export async function pipefyQueryPlanilhas(query, variables) {
@@ -127,7 +128,8 @@ async function buscarCardsFase(phaseId) {
 // Registros conectados a um campo de conexão (ex.: "Cliente" -> cadastro do
 // cliente, de onde sai o CNPJ). Pega os IDs via array_value e lê cada um
 // como registro de tabela (ou, se não for, como card). Nunca lança erro.
-async function buscarConectados(cardId, fieldId) {
+async function buscarConectados(cardId, fieldId, liberado = false) {
+  const pipefyQuery = liberado ? pipefyQueryPlanilhas : pipefyQueryNormal;
   try {
     const r = await pipefyQuery(
       `query($id: ID!) { card(id: $id) { fields { field { id } array_value } } }`,
@@ -201,6 +203,73 @@ export async function listarCardsNovosOrcamento(criadosDesde, atualizadosDesde) 
     if (campoCliente) campoCliente.conectados = await buscarConectados(card.id, 'cadastro_cliente');
   }
   return cards;
+}
+
+// ---------- Importar a fase "Entrada" (botão na tela Orçamentos) ----------
+// Única leitura do Pipefy ligada com a integração desligada: só consulta (nunca altera o pipe).
+// Para gastar o mínimo de chamadas: 1 consulta paginada (50 cards por página) da fase e
+// 1 consulta em lote (aliases) com os cadastros de cliente dos cards que ainda não existem aqui.
+export const ORCAMENTO_PHASE_ENTRADA = process.env.PIPEFY_ORCAMENTO_PHASE_ENTRADA_ID || '309113139';
+export async function listarCardsEntradaPipefy(jaExistem = new Set()) {
+  let chamadas = 0;
+  const gql = `
+    query CardsEntrada($phaseId: ID!, $after: String) {
+      phase(id: $phaseId) {
+        name
+        cards(first: 50, after: $after) {
+          pageInfo { hasNextPage endCursor }
+          edges { node { id title url createdAt fields { name value array_value field { id } } } }
+        }
+      }
+    }`;
+  const cards = [];
+  let after = null, faseNome = 'Entrada';
+  for (let pagina = 0; pagina < 20; pagina++) {
+    const data = await pipefyQueryPlanilhas(gql, { phaseId: String(ORCAMENTO_PHASE_ENTRADA), after });
+    chamadas++;
+    const conn = data?.phase?.cards;
+    if (data?.phase?.name) faseNome = data.phase.name;
+    if (!conn) break;
+    for (const { node } of conn.edges || []) {
+      if (jaExistem.has(String(node.id))) continue; // já está no B-Requisições: nem processa
+      cards.push({
+        id: String(node.id), titulo: node.title, url: node.url, criadoEm: node.createdAt,
+        campos: (node.fields || []).map(f => ({ id: f.field?.id || null, nome: f.name, valor: f.value, array_value: f.array_value })),
+      });
+    }
+    if (!conn.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  // Cadastro do cliente (campo de conexão): todos os cards novos numa consulta só
+  const ids = [...new Set(cards.flatMap(c => (c.campos.find(f => f.id === 'cadastro_cliente')?.array_value || []).slice(0, 5).map(String)))]
+    .filter(id => /^\d+$/.test(id)).slice(0, 100);
+  const registros = new Map();
+  if (ids.length) {
+    try {
+      const lote = `query { ${ids.map((id, i) => `r${i}: table_record(id: "${id}") { id title record_fields { name value field { id } } }`).join(' ')} }`;
+      const d = await pipefyQueryPlanilhas(lote);
+      chamadas++;
+      ids.forEach((id, i) => { const rec = d?.[`r${i}`]; if (rec) registros.set(id, rec); });
+    } catch (err) {
+      chamadas++;
+      console.error('⚠️ Cadastro dos clientes em lote falhou; usando um por card:', err.message);
+    }
+  }
+  for (const card of cards) {
+    const campo = card.campos.find(f => f.id === 'cadastro_cliente');
+    if (campo) {
+      const lig = (campo.array_value || []).slice(0, 5).map(String);
+      if (lig.length && lig.every(id => registros.has(id))) {
+        campo.conectados = lig.map(id => { const rec = registros.get(id); return { id: rec.id, titulo: rec.title,
+          campos: (rec.record_fields || []).map(rf => ({ id: rf.field?.id || null, nome: rf.name, valor: rf.value })) }; });
+      } else if (lig.length) {
+        campo.conectados = await buscarConectados(card.id, 'cadastro_cliente', true);
+        chamadas += 1 + lig.length;
+      }
+    }
+    for (const f of card.campos) delete f.array_value;
+  }
+  return { cards, faseNome, chamadas };
 }
 
 export async function listarCardsDaFase(phaseId = ORCAMENTO_PHASE_REQUISITAR) {
