@@ -61,11 +61,66 @@ export function telasDaRota(metodo, caminho) {
   return r ? r[2] : [];
 }
 
+// ── Botões que o admin libera por colaborador (Admin > Usuários > Editar)
+// Sem escolha = padrão (legado). Admin sempre tem todos.
+// Manter igual a BOTOES em frontend/src/utils/telas.js
+const RECONTAGEM_EMAILS = ['alexsander.lucas@boxer.com.br'];
+const emailDe = (u) => String(u?.email || '').trim().toLowerCase();
+const soAdminLeg = () => false; // não-admin: sem o botão por padrão
+export const BOTOES = [
+  // Orçamentos
+  { chave: 'orc_novo_card',     tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/novo-card$/], ['GET', /^\/pedidos-orcamento\/cliente-zen$/]] },
+  { chave: 'orc_trazer_pipefy', tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/importar-entrada$/]] },
+  { chave: 'orc_movimentacao',  tela: 'orcamentos', rotas: [['GET', /^\/pedidos-orcamento\/movimentos$/]] },
+  { chave: 'orc_historico',     tela: 'orcamentos', rotas: [['GET', /^\/pedidos-orcamento\/movimentos$/]] },
+  { chave: 'orc_campos',        tela: 'orcamentos', rotas: [['PATCH', /^\/pedidos-orcamento\/\d+\/campos$/]] },
+  { chave: 'orc_editar_fase',   tela: 'orcamentos', rotas: [['PATCH', /^\/pedidos-orcamento\/\d+\/campos$/]] },
+  { chave: 'orc_mover',         tela: 'orcamentos', rotas: [] }, // checado no moverPedido
+  { chave: 'orc_pecas_zen',     tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/\d+\/(atualizar-itens-zen|voltar-separacao)$/]] },
+  { chave: 'orc_configurar',    tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/config$/], ['GET', /^\/pedidos-orcamento\/pipefy-pipes$/],
+    ['POST', /^\/bases$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
+  // Lojinha
+  { chave: 'loj_movimentacao',  tela: 'lojinha', rotas: [] },
+  { chave: 'loj_editar_fase',   tela: 'lojinha', rotas: [] },
+  { chave: 'loj_mover_admin',   tela: 'lojinha', rotas: [] }, // checado no moverPedidoLojinha
+  { chave: 'loj_configurar',    tela: 'lojinha', rotas: [['POST', /^\/lojinha\/quadro-config$/],
+    ['POST', /^\/bases$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
+  // Inventário
+  { chave: 'inv_recontagem',    tela: 'inventario', rotas: [], legado: u => RECONTAGEM_EMAILS.includes(emailDe(u)) },
+  { chave: 'inv_finalizar',     tela: 'inventario', rotas: [], legado: u => RECONTAGEM_EMAILS.includes(emailDe(u)) },
+  { chave: 'inv_cancelar',      tela: 'inventario', rotas: [['POST', /^\/inventarios\/\d+\/cancelar$/]] },
+  { chave: 'inv_marketplace',   tela: 'inventario', rotas: [['POST', /^\/marketplace\/(relatorios\/gerar|sincronizar)$/]] },
+  // Necessidade de Peças
+  { chave: 'nec_revisar',       tela: 'necessidade_pecas', rotas: [[null, /^\/necessidades-pecas\/relatorios(\/\d+)?$/],
+    ['POST', /^\/necessidades-pecas\/\d+\/(iniciar-revisao|aprovar|recusar|enviar)$/], ['PATCH', /^\/necessidades-pecas\/\d+$/]] },
+];
+const CHAVES_BOTOES = new Set(BOTOES.map(b => b.chave));
+
+/** O usuário tem o botão? (admin sempre; senão o escolhido no cadastro; sem escolha = padrão) */
+export function temBotao(usuario, chave) {
+  if (!usuario) return false;
+  if (usuario.perfil === 'admin') return true;
+  const b = BOTOES.find(x => x.chave === chave);
+  if (!b) return false;
+  const escolhido = usuario.telas?._botoes?.[chave];
+  if (typeof escolhido === 'boolean') return escolhido;
+  return (b.legado || soAdminLeg)(usuario);
+}
+export function botoesDaRota(metodo, caminho) {
+  return BOTOES.filter(b => b.rotas.some(([m, re]) => (!m || m === metodo) && re.test(caminho)));
+}
+
 /** Limpa o que veio da tela: só chaves conhecidas e níveis válidos. Vazio = null (padrão do perfil). */
 export function normalizarTelas(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
   const out = {};
   for (const [k, v] of Object.entries(obj)) if (CHAVES.has(k) && NIVEIS.includes(v)) out[k] = v;
+  const bt = obj._botoes;
+  if (bt && typeof bt === 'object' && !Array.isArray(bt)) {
+    const b = {};
+    for (const [k, v] of Object.entries(bt)) if (CHAVES_BOTOES.has(k) && typeof v === 'boolean') b[k] = v;
+    if (Object.keys(b).length) out._botoes = b;
+  }
   return Object.keys(out).length ? out : null;
 }
 
@@ -99,9 +154,16 @@ export async function aplicarTelas(req, res, next) {
     if (!u || u.perfil === 'admin') return next();
     const caminho = String(req.originalUrl || '').split('?')[0].replace(/^\/api(?=\/)/, '');
     const mapeadas = telasDaRota(req.method, caminho);
-    if (!mapeadas.length) return next();
+    const botoesRota = botoesDaRota(req.method, caminho);
+    if (!mapeadas.length && !botoesRota.length) return next();
     const telas = await telasDoUsuario(u.id);
     u.telas = telas;
+    // Ação de um botão liberável: quem tem o botão passa; quem não tem segue o padrão do perfil
+    if (botoesRota.length) {
+      const comBotao = botoesRota.filter(b => temBotao(u, b.chave) && telas?.[b.tela] !== 'nenhum');
+      if (comBotao.length) { req.liberadoTela = true; req.telasLiberadas = new Set(comBotao.map(b => b.tela)); }
+      return next();
+    }
     if (!telas) return next(); // nada configurado: regras antigas
     const leitura = ['GET', 'HEAD'].includes(req.method) || (req.method === 'POST' && POST_LEITURA.some(re => re.test(caminho)));
     const liberadas = mapeadas.filter(t => telas[t] === 'editar' || (telas[t] === 'ver' && leitura));
