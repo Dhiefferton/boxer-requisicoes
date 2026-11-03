@@ -63,14 +63,16 @@ function garantirColunas() {
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
       await garantirTabelaMovimentos();
-      // NS de entrada: cards trazidos do Pipefy antes da correção (campo "NS de entrada";
-      // vazio = número do card no Pipefy, que é o campo "ID" do card)
+      // NS de entrada: cards trazidos do Pipefy antes da correção. Desfaz o número do
+      // próprio card (usado por engano) e pega o primeiro campo de NS preenchido.
+      await query(`UPDATE pedidos_orcamento SET ns_entrada = NULL WHERE pipefy_card_id IS NOT NULL AND ns_entrada::text = pipefy_card_id::text`)
+        .catch(e => console.error('⚠️ NS de entrada (desfazer):', e.message));
       await query(`
         UPDATE pedidos_orcamento p SET ns_entrada = x.v
-          FROM (SELECT id, COALESCE((SELECT e->>'valor' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(pipefy_campos) = 'array' THEN pipefy_campos ELSE '[]'::jsonb END) e
-                             WHERE e->>'id' IN ('ns_entrada_1', 'ns_entrada', 'ns_de_entrada') AND COALESCE(e->>'valor', '') <> ''
-                             ORDER BY array_position(ARRAY['ns_entrada_1', 'ns_entrada', 'ns_de_entrada'], e->>'id') LIMIT 1),
-                           NULLIF(pipefy_card_id::text, '')) AS v
+          FROM (SELECT id, (SELECT e->>'valor' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(pipefy_campos) = 'array' THEN pipefy_campos ELSE '[]'::jsonb END) e
+                             WHERE (e->>'id' IN ('ns_entrada_1', 'ns_entrada', 'ns_de_entrada') OR lower(trim(e->>'nome')) IN ('ns entrada', 'ns de entrada'))
+                               AND COALESCE(e->>'valor', '') <> ''
+                             ORDER BY COALESCE(array_position(ARRAY['ns_entrada_1', 'ns_entrada', 'ns_de_entrada'], e->>'id'), 9) LIMIT 1) AS v
                   FROM pedidos_orcamento WHERE COALESCE(ns_entrada::text, '') = '' AND pipefy_card_id IS NOT NULL) x
          WHERE x.id = p.id AND x.v IS NOT NULL`).catch(e => console.error('⚠️ NS de entrada (cards antigos):', e.message));
       // Fotos anexadas no B-Requisições (ficam só aqui, não vão para o Pipefy)
@@ -793,7 +795,13 @@ export async function importarEntradaPipefy(req, res, next) {
   importandoEntrada = (async () => {
     await garantirColunas();
     const ja = new Set((await query(`SELECT pipefy_card_id FROM pedidos_orcamento WHERE pipefy_card_id IS NOT NULL`)).rows.map(r => String(r.pipefy_card_id)));
-    const { cards, faseNome, chamadas } = await listarCardsEntradaPipefy(ja);
+    const { cards, faseNome, chamadas, nsExistentes = [] } = await listarCardsEntradaPipefy(ja);
+    // NS de entrada preenchida no Pipefy depois que o card já tinha vindo para cá
+    let nsAtualizadas = 0;
+    for (const { id, ns } of nsExistentes) {
+      const r = await query(`UPDATE pedidos_orcamento SET ns_entrada = $1 WHERE pipefy_card_id = $2 AND COALESCE(ns_entrada::text, '') = ''`, [String(ns).slice(0, 100), id]);
+      nsAtualizadas += r.rowCount || 0;
+    }
     let novos = 0;
     for (const card of cards) {
       const d = extrairDadosOrcamento(card);
@@ -816,7 +824,7 @@ export async function importarEntradaPipefy(req, res, next) {
         });
       }
     }
-    return { sucesso: true, novos, novos_no_pipefy: cards.length, chamadas_pipefy: chamadas };
+    return { sucesso: true, novos, novos_no_pipefy: cards.length, ns_atualizadas: nsAtualizadas, chamadas_pipefy: chamadas };
   })();
   try { res.json(await importandoEntrada); }
   catch (err) { next(err); }
