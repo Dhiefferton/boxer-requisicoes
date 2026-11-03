@@ -329,7 +329,8 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
   async function moverPara(status) {
     if (!status || status === pedido.status) return;
     const destino = COLUNAS.find(c => c.status === status);
-    const avisoZen = (status === 'separando' && pedido.status === 'solicitacao') || status === 'solicitacao' ? '\n\nIsso cria o pedido de venda e a ordem de separação no Zen (o card vai para Em Separação).'
+    const avisoZen = (status === 'separando' && pedido.status === 'solicitacao') || status === 'solicitacao'
+      || (['separando', 'separado'].includes(status) && !pedido.zen_ordem_separacao_id) ? '\n\nIsso cria o pedido de venda e a ordem de separação no Zen (o card vai para Em Separação).'
       : ['nao_liberado', 'finalizado'].includes(status) && pedido.zen_ordem_separacao_id && !pedido.zen_nota_id
         ? '\n\nIsso fecha o romaneio e cria a nota fiscal no Zen.' : '';
     // Card criado aqui: avisa os campos obrigatórios da fase atual ainda vazios (como no Pipefy)
