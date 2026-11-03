@@ -3,7 +3,7 @@
 // ============================================================
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes, Truck } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes, Truck, Database } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
@@ -40,6 +40,7 @@ export default function AppLayout({ children }) {
     { to: '/recebimento-importacao', icon: Camera, label: 'Recebimento/Importação', tela: 'recebimento_importacao' },
     { to: '/lojinha', icon: Store, label: 'Lojinha Boxer', tela: 'lojinha' },
     { to: '/logistica-cif', icon: Truck, label: 'Logística CIF (Enviar)', tela: 'logistica_cif' },
+    { to: '/databases', icon: Database, label: 'Databases', tela: 'databases' },
     { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', tela: 'orcamentos' },
   ].filter(item => veTela(usuario, item.tela));
   // Tela aberta com "Só ver": aviso no topo (o servidor bloqueia salvar/mover/criar/excluir)
