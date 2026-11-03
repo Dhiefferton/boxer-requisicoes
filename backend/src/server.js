@@ -19,7 +19,7 @@ app.use(cors({
   origin:      process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true,
 }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '5mb' })); // anexos do card (PDF etc. até 2,5 MB em base64)
 app.use(marcarOrigem); // origem das chamadas ao Pipefy (relatório de uso)
 
 app.locals.db = db;
