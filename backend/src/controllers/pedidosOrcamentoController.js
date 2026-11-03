@@ -412,18 +412,22 @@ export async function moverPedido(req, res, next) {
       return res.status(400).json({ erro: 'Este card só vai para Requisitar Peças quando for movido no Pipefy. Mova o card lá e aguarde a atualização automática (até 30s).' });
     }
 
+    // Entrou em Em Separação / Separado sem pedido + ordem de separação no Zen (de qualquer coluna):
+    // cria no Zen antes de mover
+    const precisaZen = ['separando', 'separado'].includes(status) && status !== pedido.status
+      && (!pedido.zen_pedido_id || !pedido.zen_ordem_separacao_id);
     // Trava: sem peças (código + quantidade) não vai para Em Separação — nem tenta o Zen
-    if (status === 'separando' && pedido.status !== 'separando'
+    if ((status === 'separando' || precisaZen) && pedido.status !== status
         && !(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)) {
       return res.status(400).json({ erro: PIPEFY_ATIVO && pedido.pipefy_card_id
         ? 'Este card não tem peças. Lance as peças no Pipefy (fase "Requisitar Peças") e aguarde a atualização automática (até 30s) antes de mandar para Em Separação.'
         : 'Este card não tem peças. Preencha as peças nos campos do card antes de mandar para Em Separação.' });
     }
 
-    // Solicitação -> Separando: cria o pedido de venda no ZenERP antes de mover.
+    // -> Em Separação / Separado sem pedido no Zen: cria o pedido de venda e a ordem de separação antes de mover.
     // Se o Zen falhar, o card fica onde está e o erro aparece na tela.
     let zen = null;
-    if (pedido.status === 'solicitacao' && status === 'separando' && (pedido.pipefy_card_id || (pedido.itens || []).length)) {
+    if (precisaZen && (pedido.pipefy_card_id || (pedido.itens || []).length)) {
       try {
         zen = await criarPedidoVendaZen(pedido);
         await query(
