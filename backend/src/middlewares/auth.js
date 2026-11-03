@@ -11,6 +11,7 @@
 
 import jwt from 'jsonwebtoken';
 import { query } from '../config/db.js';
+import { aplicarTelas } from './telas.js';
 
 // Verifica se o usuário está autenticado
 export function autenticar(req, res, next) {
@@ -34,13 +35,14 @@ export function autenticar(req, res, next) {
       perfil:          payload.perfil,
       departamento_id: payload.departamento_id,
     };
-    next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ erro: 'Sessão expirada. Faça login novamente.' });
     }
     return res.status(401).json({ erro: 'Token inválido.' });
   }
+  // Telas liberadas no cadastro do colaborador (sem acesso / só ver / ver e mexer)
+  return aplicarTelas(req, res, next);
 }
 
 // Restringe uma rota a admin, OU a usuários de um(ns) setor(es) específico(s)
@@ -51,7 +53,7 @@ export function exigirAdminOuSetor(...nomesSetor) {
   const nomesNormalizados = nomesSetor.map(n => n.trim().toLowerCase());
   return async (req, res, next) => {
     if (!req.usuario) return res.status(401).json({ erro: 'Não autenticado.' });
-    if (req.usuario.perfil === 'admin') return next();
+    if (req.usuario.perfil === 'admin' || req.liberadoTela) return next();
 
     try {
       if (!req.usuario.departamento_id) {
@@ -74,7 +76,7 @@ export function exigirPerfil(...perfis) {
     if (!req.usuario) {
       return res.status(401).json({ erro: 'Não autenticado.' });
     }
-    if (!perfis.includes(req.usuario.perfil)) {
+    if (!perfis.includes(req.usuario.perfil) && !req.liberadoTela) {
       return res.status(403).json({
         erro: `Acesso restrito. Necessário perfil: ${perfis.join(' ou ')}.`
       });

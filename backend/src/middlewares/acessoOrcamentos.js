@@ -14,7 +14,7 @@ export const ORCAMENTOS_SOMENTE_LEITURA = [
 export function exigirLeituraOrcamentos(req, res, next) {
   if (!req.usuario) return res.status(401).json({ erro: 'Não autenticado.' });
   const email = String(req.usuario.email || '').trim().toLowerCase();
-  if (['admin', 'operador'].includes(req.usuario.perfil) || ORCAMENTOS_SOMENTE_LEITURA.includes(email)) {
+  if (req.liberadoTela || ['admin', 'operador'].includes(req.usuario.perfil) || ORCAMENTOS_SOMENTE_LEITURA.includes(email)) {
     return next();
   }
   return res.status(403).json({ erro: 'Acesso restrito à tela de Orçamentos.' });
