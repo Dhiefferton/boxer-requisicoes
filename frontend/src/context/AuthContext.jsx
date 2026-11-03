@@ -23,6 +23,28 @@ export function AuthProvider({ children }) {
     setCarregando(false);
   }, []);
 
+  // Atualiza os dados do usuário (telas liberadas, perfil, setor) ao abrir e ao voltar para a aba,
+  // para a mudança feita no cadastro valer sem precisar sair e entrar de novo
+  useEffect(() => {
+    async function atualizar() {
+      if (!localStorage.getItem('boxer_token')) return;
+      try {
+        const { data } = await authService.me();
+        if (!data?.usuario) return;
+        setUsuario(u => {
+          if (!u) return u;
+          const novo = { ...u, ...data.usuario, trocar_senha: u.trocar_senha && data.usuario.trocar_senha };
+          localStorage.setItem('boxer_usuario', JSON.stringify(novo));
+          return novo;
+        });
+      } catch { /* sem rede ou sessão expirada: segue com o que está salvo */ }
+    }
+    atualizar();
+    const aoVoltar = () => { if (document.visibilityState === 'visible') atualizar(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    return () => document.removeEventListener('visibilitychange', aoVoltar);
+  }, []);
+
   async function login(email, senha) {
     const { data } = await authService.login(email, senha);
     localStorage.setItem('boxer_token', data.token);
