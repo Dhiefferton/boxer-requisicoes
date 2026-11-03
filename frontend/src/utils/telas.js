@@ -8,7 +8,7 @@
 // Manter o catálogo igual a backend/src/middlewares/telas.js
 // ============================================================
 import { ORCAMENTOS_SOMENTE_LEITURA } from './acessoOrcamentos';
-import { INVENTARIO_COLABORADORES } from './acessoInventario';
+import { INVENTARIO_COLABORADORES, RECONTAGEM_EMAILS } from './acessoInventario';
 
 const perfilEm = (u, ...p) => p.includes(u?.perfil);
 const doSetor = (u, setor) => (u?.departamento_nome || '').trim().toLowerCase() === setor.toLowerCase();
@@ -58,4 +58,47 @@ export const mexeTela = (usuario, chave) => nivelTela(usuario, chave) === 'edita
 export function telaDaRota(caminho) {
   const p = String(caminho || '');
   return TELAS.find(t => t.rotas.some(r => p === r || p.startsWith(r + '/')))?.chave || null;
+}
+
+// ── Botões liberados por colaborador (Admin > Usuários > Editar, embaixo de cada tela)
+// Sem escolha = padrão (só o admin; recontagem/finalizar: o Alexsander). Admin sempre tem todos.
+// Manter igual a BOTOES em backend/src/middlewares/telas.js
+const recontador = (u) => RECONTAGEM_EMAILS.includes(email(u));
+export const BOTOES = [
+  { chave: 'orc_novo_card',     tela: 'orcamentos', nome: 'Novo card' },
+  { chave: 'orc_trazer_pipefy', tela: 'orcamentos', nome: 'Trazer do Pipefy' },
+  { chave: 'orc_movimentacao',  tela: 'orcamentos', nome: 'Movimentação (relatório)' },
+  { chave: 'orc_historico',     tela: 'orcamentos', nome: 'Histórico do card' },
+  { chave: 'orc_campos',        tela: 'orcamentos', nome: 'Preencher os campos da fase atual' },
+  { chave: 'orc_editar_fase',   tela: 'orcamentos', nome: 'Editar fases anteriores' },
+  { chave: 'orc_mover',         tela: 'orcamentos', nome: 'Mover para qualquer coluna (arrastar e colunas só do admin)' },
+  { chave: 'orc_pecas_zen',     tela: 'orcamentos', nome: 'Atualizar peças no Zen' },
+  { chave: 'orc_configurar',    tela: 'orcamentos', nome: 'Configurar colunas e campos (engrenagem)' },
+  { chave: 'loj_movimentacao',  tela: 'lojinha',    nome: 'Movimentação (relatório)' },
+  { chave: 'loj_editar_fase',   tela: 'lojinha',    nome: 'Editar fases anteriores' },
+  { chave: 'loj_mover_admin',   tela: 'lojinha',    nome: 'Mover para colunas só do admin' },
+  { chave: 'loj_configurar',    tela: 'lojinha',    nome: 'Configurar colunas e campos (engrenagem)' },
+  { chave: 'inv_recontagem',    tela: 'inventario', nome: 'Fazer a recontagem', legado: recontador },
+  { chave: 'inv_finalizar',     tela: 'inventario', nome: 'Finalizar inventário e marcar ajuste no Zen', legado: recontador },
+  { chave: 'inv_cancelar',      tela: 'inventario', nome: 'Cancelar inventário' },
+  { chave: 'inv_marketplace',   tela: 'inventario', nome: 'Gerar relatório de reposição (Marketplace)' },
+  { chave: 'nec_revisar',       tela: 'necessidade_pecas', nome: 'Revisar, aprovar, recusar e relatórios' },
+];
+/** Padrão do botão (sem escolha no cadastro). */
+export function botaoPadrao(usuario, chave) {
+  if (usuario?.perfil === 'admin') return true;
+  const b = BOTOES.find(x => x.chave === chave);
+  return !!(b?.legado && b.legado(usuario));
+}
+/** O usuário tem o botão? Admin sempre; senão o escolhido no cadastro; sem escolha = padrão. */
+export function temBotao(usuario, chave) {
+  if (!usuario) return false;
+  if (usuario.perfil === 'admin') return true;
+  const escolhido = usuario.telas?._botoes?.[chave];
+  if (typeof escolhido === 'boolean') return escolhido;
+  return botaoPadrao(usuario, chave);
+}
+/** Botões de uma tela como objeto: podeNaTela(u, 'orcamentos') → { novo_card: true, mover: false, … } */
+export function podeNaTela(usuario, tela) {
+  return Object.fromEntries(BOTOES.filter(b => b.tela === tela).map(b => [b.chave.replace(/^[a-z]+_/, ''), temBotao(usuario, b.chave)]));
 }

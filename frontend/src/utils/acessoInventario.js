@@ -13,10 +13,12 @@ export const INVENTARIO_COLABORADORES = [
 // Recontagem: só o Alexsander. Manter igual a RECONTAGEM_EMAILS em
 // backend/src/controllers/inventarioController.js
 export const RECONTAGEM_EMAILS = ['alexsander.lucas@boxer.com.br'];
-export const podeRecontar = (usuario) => RECONTAGEM_EMAILS.includes(String(usuario?.email || '').trim().toLowerCase());
+// Liberados por colaborador em Admin > Usuários (padrão: só o Alexsander)
+export const podeRecontar = (usuario) => temBotao(usuario, 'inv_recontagem');
+export const podeFinalizar = (usuario) => temBotao(usuario, 'inv_finalizar');
 
 // Também respeita as telas escolhidas no cadastro do colaborador (utils/telas.js)
-import { veTela } from './telas';
+import { veTela, temBotao } from './telas';
 export function podeVerInventario(usuario) {
   return veTela(usuario, 'inventario');
 }
