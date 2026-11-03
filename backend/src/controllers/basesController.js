@@ -188,8 +188,8 @@ const PAGINAS_POR_VEZ = 8; // 8 x 50 registros por chamada
 const NOME_TABELA = /pe[cç]as em geral/i;
 async function tabelaDasPecas() {
   if (process.env.PIPEFY_TABELA_PECAS) return { id: process.env.PIPEFY_TABELA_PECAS, nome: 'Peças em Geral' };
-  const d = await pipefyQueryPlanilhas(`query($id: ID!) { phase(id: $id) { fields { id label connectedRepo { __typename ... on Table { id name } } } } }`, { id: FASE_ORCANDO });
-  const campos = (d?.phase?.fields || []).filter(x => x.connectedRepo?.__typename === 'Table' && x.connectedRepo?.id);
+  const d = await pipefyQueryPlanilhas(`query($id: ID!) { phase(id: $id) { fields { id label connectedRepo { __typename ... on PublicTable { id name } } } } }`, { id: FASE_ORCANDO });
+  const campos = (d?.phase?.fields || []).filter(x => /Table/.test(x.connectedRepo?.__typename || '') && x.connectedRepo?.id);
   let f = campos.find(x => NOME_TABELA.test(x.connectedRepo.name || '')) || campos.find(x => x.id === CAMPO_PECA);
   if (f) return { id: String(f.connectedRepo.id), nome: f.connectedRepo.name || 'Peças em Geral' };
   // Não achou pelo campo: procura a database pelo nome na organização
