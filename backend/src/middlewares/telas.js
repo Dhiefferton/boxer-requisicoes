@@ -80,19 +80,19 @@ export const BOTOES = [
   { chave: 'orc_mover',         tela: 'orcamentos', rotas: [] }, // checado no moverPedido
   { chave: 'orc_pecas_zen',     tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/\d+\/(atualizar-itens-zen|voltar-separacao)$/]] },
   { chave: 'orc_configurar',    tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/config$/], ['GET', /^\/pedidos-orcamento\/pipefy-pipes$/],
-    ['POST', /^\/bases$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
+    ['POST', /^\/bases(\/importar-pipefy)?$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
   // Lojinha
   { chave: 'loj_movimentacao',  tela: 'lojinha', rotas: [] },
   { chave: 'loj_editar_fase',   tela: 'lojinha', rotas: [] },
   { chave: 'loj_mover_admin',   tela: 'lojinha', rotas: [] }, // checado no moverPedidoLojinha
   { chave: 'loj_configurar',    tela: 'lojinha', rotas: [['POST', /^\/lojinha\/quadro-config$/],
-    ['POST', /^\/bases$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
+    ['POST', /^\/bases(\/importar-pipefy)?$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
   // Logística CIF (Enviar)
   { chave: 'cif_movimentacao',  tela: 'logistica_cif', rotas: [] },
   { chave: 'cif_editar_fase',   tela: 'logistica_cif', rotas: [] },
   { chave: 'cif_mover_admin',   tela: 'logistica_cif', rotas: [] }, // checado no moverPedidoCif
   { chave: 'cif_configurar',    tela: 'logistica_cif', rotas: [['POST', /^\/logistica-cif\/quadro-config$/],
-    ['POST', /^\/bases$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
+    ['POST', /^\/bases(\/importar-pipefy)?$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
   // Inventário
   { chave: 'inv_recontagem',    tela: 'inventario', rotas: [], legado: u => RECONTAGEM_EMAILS.includes(emailDe(u)) },
   { chave: 'inv_finalizar',     tela: 'inventario', rotas: [], legado: u => RECONTAGEM_EMAILS.includes(emailDe(u)) },
