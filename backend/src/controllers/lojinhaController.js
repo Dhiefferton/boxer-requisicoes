@@ -141,7 +141,7 @@ export async function acessoLojinha(req, res, next) {
   try {
     const u = req.usuario;
     if (!u) return res.status(401).json({ erro: 'Não autenticado.' });
-    if (['admin', 'operador'].includes(u.perfil)) return next();
+    if (req.liberadoTela || ['admin', 'operador'].includes(u.perfil)) return next();
     if (u.departamento_id) {
       const r = await query(`SELECT nome FROM departamentos WHERE id = $1`, [u.departamento_id]);
       if (SETORES.includes((r.rows[0]?.nome || '').trim().toLowerCase())) return next();

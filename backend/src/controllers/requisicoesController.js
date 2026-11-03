@@ -158,7 +158,8 @@ export async function listarRequisicoes(req, res, next) {
     const params = [];
     let idx = 1;
 
-    if (perfil === 'colaborador') {
+    // Colaborador vê só as dele — a não ser que tenha a tela Operador liberada no cadastro
+    if (perfil === 'colaborador' && !req.telasLiberadas?.has('operador')) {
       condicoes.push(`r.usuario_id = $${idx++}`);
       params.push(usuarioId);
     }
@@ -221,7 +222,7 @@ export async function detalharRequisicao(req, res, next) {
 
     const requisicao = result.rows[0];
 
-    if (perfil === 'colaborador' && requisicao.usuario_id !== usuarioId) {
+    if (perfil === 'colaborador' && requisicao.usuario_id !== usuarioId && !req.telasLiberadas?.has('operador')) {
       return res.status(403).json({ erro: 'Acesso negado.' });
     }
 

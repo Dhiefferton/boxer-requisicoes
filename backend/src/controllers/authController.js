@@ -2,6 +2,9 @@
 // controllers/authController.js — Login e Autenticação
 // ============================================================
 import bcrypt from 'bcryptjs';
+import { telasDoUsuario } from '../middlewares/telas.js';
+// Telas liberadas no cadastro (null = padrão do perfil). Falhou ao ler: segue o padrão.
+const telasSeguras = (id) => telasDoUsuario(id).catch(() => null);
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import crypto from 'crypto';
@@ -66,6 +69,7 @@ export async function login(req, res, next) {
         departamento_id:   usuario.departamento_id,
         departamento_nome: usuario.departamento_nome,
         trocar_senha:      usuario.trocar_senha,
+        telas:             await telasSeguras(usuario.id),
       }
     });
   } catch (err) {
@@ -138,7 +142,7 @@ export async function me(req, res, next) {
     if (!result.rows[0]) {
       return res.status(404).json({ erro: 'Usuário não encontrado.' });
     }
-    res.json({ usuario: result.rows[0] });
+    res.json({ usuario: { ...result.rows[0], telas: await telasSeguras(result.rows[0].id) } });
   } catch (err) {
     next(err);
   }

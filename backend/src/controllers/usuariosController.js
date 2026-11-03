@@ -4,6 +4,7 @@
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { query } from '../config/db.js';
+import { garantirColunaTelas, normalizarTelas, limparCacheTelas } from '../middlewares/telas.js';
 
 const criarUsuarioSchema = z.object({
   nome:            z.string().min(2, 'Nome muito curto'),
@@ -17,13 +18,15 @@ const criarUsuarioSchema = z.object({
 // GET /admin/usuarios
 export async function listarUsuarios(req, res, next) {
   try {
-    const result = await query(
-      `SELECT u.id, u.nome, u.email, u.perfil, u.ativo, u.trocar_senha, u.ultimo_acesso, u.created_at,
+    const sql = (comTelas) => query(
+      `SELECT u.id, u.nome, u.email, u.perfil, u.ativo, u.trocar_senha, u.ultimo_acesso, u.created_at${comTelas ? ', u.telas' : ''},
               d.id AS departamento_id, d.nome AS departamento_nome, d.codigo AS departamento_codigo
        FROM usuarios u
        LEFT JOIN departamentos d ON d.id = u.departamento_id
        ORDER BY u.nome`
     );
+    // Coluna "telas" criada na primeira vez; se não der, a lista sai sem ela
+    const result = await garantirColunaTelas().then(() => sql(true)).catch(() => sql(false));
     res.json({ usuarios: result.rows });
   } catch (err) {
     next(err);
@@ -52,6 +55,14 @@ export async function atualizarUsuario(req, res, next) {
   try {
     const { id } = req.params;
     const { ativo, perfil, departamento_id, email, senha, trocar_senha } = req.body;
+    // Telas (sem acesso / só ver / ver e mexer) — só o admin de verdade altera
+    if (req.body?.telas !== undefined) {
+      if (req.usuario?.perfil !== 'admin') return res.status(403).json({ erro: 'Só o administrador altera as telas dos colaboradores.' });
+      await garantirColunaTelas();
+      const telas = normalizarTelas(req.body.telas);
+      await query(`UPDATE usuarios SET telas = $1::jsonb, updated_at = NOW() WHERE id = $2`, [telas ? JSON.stringify(telas) : null, parseInt(id)]);
+      limparCacheTelas(id);
+    }
 
     let senha_hash = null;
     if (senha && senha.length >= 6) {
@@ -68,7 +79,7 @@ export async function atualizarUsuario(req, res, next) {
            trocar_senha    = COALESCE($6, trocar_senha),
            updated_at      = NOW()
        WHERE id = $7
-       RETURNING id, nome, email, perfil, ativo, departamento_id, trocar_senha`,
+       RETURNING id, nome, email, perfil, ativo, departamento_id, trocar_senha, telas`,
       [
         ativo ?? null,
         perfil || null,
