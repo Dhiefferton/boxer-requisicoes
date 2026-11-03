@@ -25,6 +25,7 @@ export const TELAS = [
   { chave: 'recebimento_importacao', nome: 'Recebimento/Importação' },
   { chave: 'lojinha',                nome: 'Lojinha Boxer' },
   { chave: 'orcamentos',             nome: 'Orçamentos' },
+  { chave: 'logistica_cif',          nome: 'Logística CIF (Enviar)' },
 ];
 const CHAVES = new Set(TELAS.map(t => t.chave));
 export const NIVEIS = ['nenhum', 'ver', 'editar'];
@@ -34,6 +35,7 @@ export const NIVEIS = ['nenhum', 'ver', 'editar'];
 const ROTAS = [
   [null,    /^\/pedidos-orcamento(\/|$)/,           ['orcamentos']],
   [null,    /^\/lojinha(\/|$)/,                     ['lojinha']],
+  [null,    /^\/logistica-cif(\/|$)/,               ['logistica_cif']],
   [null,    /^\/(inventarios|marketplace)(\/|$)/,   ['inventario']],
   [null,    /^\/recebimento-importacao(\/|$)/,      ['recebimento_importacao']],
   [null,    /^\/necessidades-pecas(\/|$)/,          ['necessidade_pecas']],
@@ -84,6 +86,12 @@ export const BOTOES = [
   { chave: 'loj_editar_fase',   tela: 'lojinha', rotas: [] },
   { chave: 'loj_mover_admin',   tela: 'lojinha', rotas: [] }, // checado no moverPedidoLojinha
   { chave: 'loj_configurar',    tela: 'lojinha', rotas: [['POST', /^\/lojinha\/quadro-config$/],
+    ['POST', /^\/bases$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
+  // Logística CIF (Enviar)
+  { chave: 'cif_movimentacao',  tela: 'logistica_cif', rotas: [] },
+  { chave: 'cif_editar_fase',   tela: 'logistica_cif', rotas: [] },
+  { chave: 'cif_mover_admin',   tela: 'logistica_cif', rotas: [] }, // checado no moverPedidoCif
+  { chave: 'cif_configurar',    tela: 'logistica_cif', rotas: [['POST', /^\/logistica-cif\/quadro-config$/],
     ['POST', /^\/bases$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
   // Inventário
   { chave: 'inv_recontagem',    tela: 'inventario', rotas: [], legado: u => RECONTAGEM_EMAILS.includes(emailDe(u)) },
