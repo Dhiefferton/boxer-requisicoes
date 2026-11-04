@@ -44,6 +44,7 @@ function numBR(v) {
 const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
 const linkZenPedido = (id) => `${ZEN_APP_URL}/sale/sale?q=id==${id}`;
 const linkZenOrdem = (id) => `${ZEN_APP_URL}/material/pickingOrder?q=id==${id}`;
+const linkZenNota = (id) => `${ZEN_APP_URL}/fiscal/outgoingInvoice?q=id==${id}`;
 // Colunas (mesmo visual da tela de Orçamentos). Sem o Pipefy: criado o pedido no Zen
 // (ordem de separação), vai sozinho para Em Separação; termina a separação no Zen,
 // vai para Em Conferência. Daí em diante o pedido é movido na tela.
@@ -351,13 +352,31 @@ export function InfoLiberacao({ p, itens }) {
   const grupos = Array.from({ length: qtd }, (_, i) => itens.slice(i * ITENS_POR_CARD, (i + 1) * ITENS_POR_CARD));
   return (
     <div className="rounded-lg border border-[var(--c-destaque)]/40 bg-[var(--c-destaque)]/10 p-2.5 space-y-1.5">
-      <div>
-        <div>
-          <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Nº Ordem de Separação (Zen)</p>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Pedido de venda</p>
+          {p.zen_pedido_id
+            ? <a href={linkZenPedido(p.zen_pedido_id)} target="_blank" rel="noreferrer" title="Abrir pedido de venda no Zen"
+                className="inline-flex items-center gap-1 font-mono font-bold text-base text-[var(--c-texto)] hover:text-[var(--c-destaque)]">
+                {p.zen_venda_numero || p.zen_pedido_id} <ExternalLink size={13} />
+              </a>
+            : <p className="font-mono text-base text-[var(--c-suave)]">—</p>}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Ordem de separação</p>
           <a href={linkZenOrdem(p.zen_ordem_separacao_id)} target="_blank" rel="noreferrer" title="Abrir ordem de separação no Zen"
             className="inline-flex items-center gap-1 font-mono font-bold text-base text-[var(--c-texto)] hover:text-[var(--c-destaque)]">
             {p.zen_ordem_separacao_id} <ExternalLink size={13} />
           </a>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Nota fiscal</p>
+          {p.zen_nf_numero
+            ? <a href={linkZenNota(p.zen_nf_id)} target="_blank" rel="noreferrer" title="Abrir nota fiscal no Zen"
+                className="inline-flex items-center gap-1 font-mono font-bold text-base text-[var(--c-texto)] hover:text-[var(--c-destaque)]">
+                {p.zen_nf_numero} <ExternalLink size={13} />
+              </a>
+            : <p className="text-[11px] text-[var(--c-suave)] mt-1">{p.zen_nf_id ? 'Em preparação' : 'Ainda não emitida'}</p>}
         </div>
       </div>
       {false && qtd > 1 && (
