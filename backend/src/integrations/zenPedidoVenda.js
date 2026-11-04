@@ -283,6 +283,29 @@ export async function consultarOrdemSeparacao(ordemId) {
   };
 }
 
+/**
+ * Nº do pedido de venda e da nota fiscal no Zen (Lojinha / CIF). Só leitura.
+ * A NF só existe depois que o faturamento cria/emite a nota do romaneio.
+ */
+export async function documentosZen({ zen_pedido_id, zen_ordem_separacao_id, zen_venda_numero }) {
+  const r = { vendaNumero: zen_venda_numero || null, nfNumero: null, nfId: null, nfStatus: null };
+  if (zen_pedido_id && !r.vendaNumero) {
+    const v = await zen('GET', `/sale/sale/${zen_pedido_id}`).catch(() => null);
+    r.vendaNumero = v ? String(v.number ?? v.code ?? zen_pedido_id) : null;
+  }
+  if (zen_ordem_separacao_id) {
+    const ordem = await zen('GET', `/material/pickingOrder/${zen_ordem_separacao_id}`);
+    const romaneioId = ordem?.outgoingList?.id;
+    if (romaneioId) {
+      const notas = await zen('GET', `/fiscal/outgoingInvoice?q=${q(`outgoingList.id==${romaneioId}`)}&max=5`).catch(() => []);
+      const lista = Array.isArray(notas) ? notas : (notas?.content || notas?.data || []);
+      const n = lista.find(x => x?.number) || lista[0];
+      if (n) { r.nfId = n.id || null; r.nfNumero = n.number ? String(n.number) : null; r.nfStatus = n.status || null; }
+    }
+  }
+  return r;
+}
+
 /** Romaneio de saída da ordem de separação (e-mail ao faturamento da Lojinha). Só leitura. */
 export async function romaneioDaOrdem(ordemId) {
   const ordem = await zen('GET', `/material/pickingOrder/${ordemId}`);
