@@ -1,5 +1,6 @@
 ﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor, fornecedorZen } from '../controllers/fornecedoresController.js';
 import { Router } from 'express';
+import { verTratativa, anexoTratativa } from '../controllers/tratativaController.js';
 import { autorizarUpload, registrarVisto, alertaBlob, verUsoBlob, salvarLimites, excluirArquivo, conferirNaVercel } from '../controllers/blobController.js';
 import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro, excluirBase, importarBasePipefy, editarBase, excluirRegistro, importarRegistros } from '../controllers/basesController.js';
 import bcrypt from 'bcryptjs';
@@ -167,6 +168,8 @@ router.post('/necessidades-pecas/:id/cancelar',     autenticar, exigirAdminOuSet
 router.get('/pedidos-orcamento',                autenticar, exigirLeituraOrcamentos, listarPedidos);
 router.get('/pedidos-orcamento/movimentos',     autenticar, exigirPerfil('admin'), listarMovimentos);
 router.get('/pedidos-orcamento/estrutura',      autenticar, exigirLeituraOrcamentos, estruturaOrcamento);
+router.get('/pedidos-orcamento/:id/tratativa',  autenticar, exigirLeituraOrcamentos, verTratativa);
+router.get('/pedidos-orcamento/:id/tratativa/anexo', autenticar, exigirLeituraOrcamentos, anexoTratativa);
 router.patch('/pedidos-orcamento/:id/campos',   autenticar, exigirPerfil('admin'), editarCampos);
 router.post('/pedidos-orcamento/novo-card',     autenticar, exigirPerfil('admin'), criarCardBoxer);
 router.get('/pedidos-orcamento/cliente-zen',    autenticar, exigirPerfil('admin'), clienteZen);
