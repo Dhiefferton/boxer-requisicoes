@@ -3,7 +3,7 @@
 // ============================================================
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_URL
+export const baseURL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : '/api';
 
@@ -171,6 +171,16 @@ export const cifService = {
   enviarFoto:  (id, dados)    => api.post(`/logistica-cif/pedidos/${id}/fotos`, dados, { timeout: 60000 }),
   excluirFoto: (fotoId)       => api.delete(`/logistica-cif/fotos/${fotoId}`),
   movimentos:  (params)       => api.get('/logistica-cif/movimentos', { params, timeout: 30000 }),
+};
+
+// Vídeos e arquivos grandes (Vercel Blob) — tela Armazenamento
+export const blobService = {
+  uso:      ()            => api.get('/blob/uso', { timeout: 30000 }),
+  alerta:   ()            => api.get('/blob/alerta'),
+  limites:  (dados)       => api.put('/blob/limites', dados),
+  excluir:  (id)          => api.delete(`/blob/arquivos/${id}`),
+  conferir: ()            => api.post('/blob/conferir', {}, { timeout: 60000 }),
+  visto:    (id, quadro)  => api.post(`/blob/visto/${id}`, { quadro }).catch(() => {}),
 };
 
 export const requisicoesService = {
