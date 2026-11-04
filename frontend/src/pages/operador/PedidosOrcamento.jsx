@@ -404,6 +404,23 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
     } catch (err) { alert(err.response?.data?.erro || 'Erro ao atualizar as peças no Zen.'); onAtualizar(); }
     finally { setAtualizandoItens(false); }
   }
+  // Orçamento recusado: cancela o pedido de venda no Zen e o card continua no quadro
+  const recusado = /recus|reprov/.test(aprovacao) && !parcial;
+  const [cancelandoZen, setCancelandoZen] = useState(false);
+  async function cancelarZen() {
+    if (!confirm(
+      `Cancelar o pedido de venda #${pedido.zen_pedido_id} no Zen?\n\n` +
+      'A ordem de separação é desfeita (as peças voltam pro estoque) e o pedido de venda é excluído no Zen. ' +
+      'O card NÃO é excluído: continua aqui na mesma coluna.'
+    )) return;
+    setCancelandoZen(true);
+    try {
+      await pedidosOrcamentoService.cancelarZen(pedido.id);
+      alert(`Pronto! Pedido #${pedido.zen_pedido_id} cancelado no Zen. O card continua no quadro.`);
+      onAtualizar();
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao cancelar o pedido no Zen.'); onAtualizar(); }
+    finally { setCancelandoZen(false); }
+  }
   async function cancelar() {
     const noZen = pedido.status === 'aprovado_recusado' && pedido.zen_pedido_id;
     const msg = noZen
@@ -434,6 +451,12 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
           className="inline-flex items-center gap-1 mr-1 text-[10px] font-semibold text-green-400 bg-green-500/10 hover:bg-green-500/20 rounded px-1.5 py-0.5">
           Pedido Zen #{pedido.zen_pedido_id} <ExternalLink size={10} />
         </a>
+      )}
+      {!pedido.zen_pedido_id && pedido.zen_cancelado_id && (
+        <span title={`Cancelado no Zen em ${formatarData(pedido.zen_cancelado_em)}`}
+          className="inline-block mr-1 text-[10px] font-semibold text-red-400 bg-red-500/10 rounded px-1.5 py-0.5">
+          Pedido Zen #{pedido.zen_cancelado_id} cancelado
+        </span>
       )}
       {pedido.zen_ordem_separacao_id && (
         <a href={`${ZEN_APP_URL}/material/pickingOrder?q=id==${pedido.zen_ordem_separacao_id}`} target="_blank" rel="noreferrer" title="Abrir ordem de separação no Zen" onClick={parar}
@@ -523,6 +546,10 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
   if (podeEditar && precisaRetirar && codigosRecusados.length) {
     acoesZen.push({ id: 'retirar', onClick: retirarRecusadas, ocupado: retirando, alerta: true,
       texto: 'Retirar peças recusadas no Zen', textoOcupado: 'Retirando no Zen…' });
+  }
+  if (podeEditar && recusado && pedido.zen_pedido_id && !pedido.zen_nota_id) {
+    acoesZen.push({ id: 'cancelar_zen', onClick: cancelarZen, ocupado: cancelandoZen, alerta: true,
+      texto: 'Cancelar pedido no Zen', textoOcupado: 'Cancelando no Zen…' });
   }
   const temPecas = (pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0);
   const podeAvancar = !!proxima && !(proxima.status === 'separando' && !temPecas);
