@@ -75,7 +75,7 @@ export default function Armazenamento() {
       {!dados.configurado && (
         <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-300 space-y-1">
           <p className="font-semibold flex items-center gap-2"><AlertTriangle size={15} /> O armazenamento ainda não está ligado</p>
-          <p className="text-xs">No painel da Vercel, abra o projeto <b>boxer-requisicoes</b> (o do servidor) → <b>Storage</b> → <b>Create Database</b> → <b>Blob</b> → criar e <b>Connect</b> ao projeto. Depois faça um Redeploy do servidor. Até lá, vídeos não podem ser enviados.</p>
+          <p className="text-xs">No painel da Vercel, abra o projeto <b>boxer-requisicoes-2kyh</b> (o do servidor) → <b>Storage</b> → <b>Create Database</b> → <b>Blob</b> (acesso <b>Public</b> e marcando o token de leitura/escrita) → <b>Create</b>. Depois faça um Redeploy do servidor. Até lá, vídeos não podem ser enviados.</p>
         </div>
       )}
       {dados.alerta && (
