@@ -44,7 +44,7 @@ export async function registrarMovLoj(pedido, tipo, { de = null, para = null, de
        usuario?.id || null, usuario?.nome || (origem === 'usuario' ? null : 'Sistema'), origem]);
   } catch (e) { console.error('[Lojinha] movimento:', e.message); }
 }
-import { criarPedidoLojinhaZen, listarVendedorasZen } from '../integrations/zenLojinha.js';
+import { criarPedidoLojinhaZen, listarVendedorasZen, buscarVendaZen, vincularVendaZen } from '../integrations/zenLojinha.js';
 import { criarCardsLojinha, excluirCardLojinha, fasesDosCards, cardsDoPedidoLojinha } from '../integrations/pipefyLojinha.js';
 import { buscarPedidoLI } from '../integrations/lojaIntegrada.js';
 import { temBotao } from '../middlewares/telas.js';
@@ -103,6 +103,7 @@ export function garantirEstrutura() {
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS finalizado_em TIMESTAMPTZ;
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS transacao_manual VARCHAR(80);
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS campos JSONB NOT NULL DEFAULT '{}'::jsonb;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS origem VARCHAR(20);
       CREATE TABLE IF NOT EXISTS loj_fotos (
         id           SERIAL PRIMARY KEY,
         pedido_id    INTEGER NOT NULL,
@@ -274,6 +275,8 @@ export async function reenviarZenLojinha(req, res, next) {
       await query(`UPDATE lojinha_boxer_pedidos SET transacao_manual = $2 WHERE id = $1`, [p.id, t || null]);
       p.transacao_manual = t || null;
     }
+    // Lojinha Faturada: o pedido já existe no Zen — só liga a ordem de separação
+    if (p.origem === 'zen' && p.zen_pedido_id) return res.json({ pedido: await ligarVendaZen(p, req.usuario) });
     res.json({ pedido: await enviarZen(p) });
   } catch (err) { next(err); }
 }
@@ -614,6 +617,115 @@ export async function criarPedidoLojinha(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// ── Lojinha Faturada: pedido de venda que já existe no Zen ──
+// Lê o pedido no Zen e monta o mesmo formato do formulário
+async function lerVendaFaturada(numero) {
+  const { venda, pessoa, itens } = await buscarVendaZen(numero);
+  const doc = soDigitos(pessoa?.documentNumber);
+  const cidade = pessoa?.city?.name || null;
+  const uf = pessoa?.city?.state?.code || pessoa?.city?.state?.initials || pessoa?.city?.state?.abbreviation || null;
+  const lista = (itens || []).map(i => ({
+    codigo: String(i.productPacking?.code || '').trim(),
+    descricao: String(i.productPacking?.fullDescription || i.productPacking?.product?.description || '').replace(/^\S+\s+/, '').trim(),
+    unidade: String(i.productPacking?.unit?.code || 'UN').toUpperCase(),
+    quantidade: Number(i.quantity) || 0,
+    preco: Number(i.unitValue) || 0,
+    frete: Number(i.otherValues?.freightValue) || 0,
+  })).filter(i => i.codigo && i.quantidade > 0);
+  const frete = Math.round(lista.reduce((t, i) => t + i.frete, 0) * 100) / 100;
+  // Envio: o que estiver no comentário do pedido (pedidos feitos pelo B-Requisições) ou a transportadora do pedido
+  const coment = String(venda.properties?.comments || '');
+  const ship = `${venda.personShipping?.fantasyName || ''} ${venda.personShipping?.name || ''}`;
+  let tipo = '', transportadora = '';
+  const m = coment.match(/Envio:\s*(Sedex|PAC|Pr[oó]prio|Transportadora)(?:\s*-\s*(.+))?/i);
+  if (m) {
+    tipo = TIPOS_ENVIO.find(t => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() === m[1].normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()) || '';
+    if (tipo === 'Transportadora') transportadora = TRANSPORTADORAS.find(t => t.nome.toLowerCase() === String(m[2] || '').trim().toLowerCase())?.nome || '';
+  } else {
+    const t = TRANSPORTADORAS.find(x => ship.toLowerCase().includes(x.nome.toLowerCase()));
+    if (t) { tipo = 'Transportadora'; transportadora = t.nome; }
+  }
+  return {
+    zen_pedido_id: Number(venda.id), numero: String(venda.code || '').trim() || String(venda.id), status_zen: venda.status,
+    ordem_separacao: venda.pickingOrder?.id || null, data: String(venda.date || venda.availabilityDate || '').slice(0, 10),
+    documento: doc, cliente: { id: Number(pessoa?.id) || null, nome: pessoa?.name || '', cidade, uf },
+    vendedora: venda.personSalesperson ? { id: Number(venda.personSalesperson.id), nome: venda.personSalesperson.fantasyName || venda.personSalesperson.name } : null,
+    itens: lista.map(({ frete: _f, ...i }) => i), valor_frete: frete, tipo_envio: tipo, transportadora,
+    transportadora_zen: venda.personShipping?.fantasyName || venda.personShipping?.name || null,
+  };
+}
+
+// Liga o card da Lojinha Faturada ao pedido de venda do Zen (ordem de separação) e
+// segue para Em Separação. Com erro, grava zen_erro (botão "Tentar de novo"). Nunca lança erro.
+async function ligarVendaZen(pedido, usuario = null) {
+  try {
+    const v = await vincularVendaZen(pedido.zen_pedido_id);
+    const u = await query(
+      `UPDATE lojinha_boxer_pedidos SET zen_ordem_separacao_id = $2, zen_erro = NULL, status = 'liberacao', qtd_cards = $3
+        WHERE id = $1 RETURNING *`, [pedido.id, v.ordemSeparacaoId, qtdCards(pedido.itens)]);
+    const final = await enviarPipefy(u.rows[0]);
+    await registrarMovLoj(final, 'zen_vinculado', { de: pedido.status, para: final.status, usuario, origem: usuario ? 'usuario' : 'sistema',
+      descricao: `Ligado ao pedido de venda #${pedido.zen_pedido_id} do Zen — ordem de separação #${v.ordemSeparacaoId}${v.criouOrdem ? ' (gerada agora)' : ' (já existia)'}`,
+      detalhes: { zen_pedido_id: pedido.zen_pedido_id, ordem_separacao: v.ordemSeparacaoId } });
+    return final;
+  } catch (e) {
+    const u = await query(`UPDATE lojinha_boxer_pedidos SET zen_erro = $2 WHERE id = $1 RETURNING *`, [pedido.id, e.message]);
+    await registrarMovLoj(u.rows[0], 'erro_zen', { origem: 'sistema', descricao: `Erro no Zen: ${String(e.message).slice(0, 500)}` });
+    return u.rows[0];
+  }
+}
+
+// GET /lojinha/zen-pedido/:numero — busca o pedido de venda no Zen (Lojinha Faturada)
+export async function buscarPedidoZenLojinha(req, res) {
+  try {
+    await garantirEstrutura();
+    const p = await lerVendaFaturada(req.params.numero);
+    const d = await query(`SELECT id, status, numero_pedido FROM lojinha_boxer_pedidos WHERE zen_pedido_id = $1 OR LOWER(numero_pedido) = LOWER($2) LIMIT 1`, [p.zen_pedido_id, p.numero]);
+    res.json({ pedido: { ...p, duplicado: d.rows[0] || null } });
+  } catch (e) { res.status(e.status || 502).json({ erro: e.message }); }
+}
+
+// POST /lojinha/pedidos/zen { numero, tipo_envio, transportadora, assistente_autorizado }
+// Registra na Entrada um pedido que já existe no Zen (relido aqui) e liga o card a ele:
+// usa a ordem de separação existente ou gera uma; não cria pedido novo.
+export async function criarPedidoLojinhaFaturada(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const b = req.body || {};
+    const tipo = String(b.tipo_envio || '').trim();
+    const transportadora = String(b.transportadora || '').trim();
+    if (!TIPOS_ENVIO.includes(tipo)) return res.status(400).json({ erro: 'Escolha o tipo de envio.' });
+    if (tipo === 'Transportadora' && !TRANSPORTADORAS.some(t => t.nome === transportadora)) return res.status(400).json({ erro: 'Escolha a transportadora.' });
+    let p;
+    try { p = await lerVendaFaturada(b.numero); }
+    catch (e) { return res.status(e.status || 502).json({ erro: e.message }); }
+    if (p.documento.length !== 11 && p.documento.length !== 14) return res.status(400).json({ erro: 'O cliente do pedido no Zen está sem CPF/CNPJ válido.' });
+    if (!p.itens.length) return res.status(400).json({ erro: 'O pedido no Zen não tem produtos.' });
+    if (!p.vendedora?.id) return res.status(400).json({ erro: 'O pedido no Zen está sem vendedor(a).' });
+    const dup = await query(`SELECT id FROM lojinha_boxer_pedidos WHERE zen_pedido_id = $1 OR LOWER(numero_pedido) = LOWER($2) LIMIT 1`, [p.zen_pedido_id, p.numero]);
+    if (dup.rows[0]) return res.status(409).json({ erro: `O pedido ${p.numero} já foi registrado aqui.` });
+    const itens = [];
+    for (const it of p.itens) {
+      const m = await produtoPorSku(it.codigo).catch(() => null);
+      itens.push({ material_id: m?.id || null, codigo: it.codigo, descricao: m?.descricao || it.descricao, unidade: m?.unidade || it.unidade, quantidade: it.quantidade, preco: it.preco });
+    }
+    const r = await query(
+      `INSERT INTO lojinha_boxer_pedidos (documento, cliente_id_zen, cliente_nome, cliente_cidade, cliente_uf, data,
+          numero_pedido, vendedora, tipo_envio, transportadora, itens, criado_por, criado_por_nome,
+          assistente_autorizado, valor_frete, vendedora_id_zen, zen_pedido_id, origem)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'zen') RETURNING *`,
+      [p.documento, p.cliente.id, p.cliente.nome, [p.cliente.cidade, p.cliente.uf].filter(Boolean).join(' / ') || null,
+       String(p.cliente.uf || '').toUpperCase().slice(0, 2) || null, /^\d{4}-\d{2}-\d{2}$/.test(p.data) ? p.data : new Date().toISOString().slice(0, 10),
+       p.numero, p.vendedora.nome, tipo, tipo === 'Transportadora' ? transportadora : null, JSON.stringify(itens),
+       req.usuario.id, req.usuario.nome, b.assistente_autorizado === true, p.valor_frete, p.vendedora.id, p.zen_pedido_id]);
+    let pedido = r.rows[0];
+    await registrarMovLoj(pedido, 'criado_manual', { para: 'entrada', usuario: req.usuario,
+      descricao: `Lojinha Faturada: pedido de venda ${p.numero} do Zen registrado na Entrada (${itens.length} produto(s))` });
+    pedido = await ligarVendaZen(pedido, req.usuario);
+    res.status(201).json({ pedido });
+  } catch (err) { next(err); }
+}
+
 // DELETE /lojinha/pedidos/:id — exclui o pedido no Zen (desfaz a ordem de
 // separação), os cards do Pipefy e o pedido da Lojinha
 export async function excluirPedidoLojinha(req, res, next) {
@@ -623,8 +735,9 @@ export async function excluirPedidoLojinha(req, res, next) {
     const p = r.rows[0];
     if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
 
-    // 1. Zen
-    if (p.zen_pedido_id) {
+    // 1. Zen (Lojinha Faturada: o pedido é do Zen — não exclui lá, só tira o card daqui)
+    const faturadaZen = p.origem === 'zen';
+    if (p.zen_pedido_id && !faturadaZen) {
       try {
         await excluirPedidoVendaZen({ zen_pedido_id: p.zen_pedido_id });
         await query(`UPDATE lojinha_boxer_pedidos SET zen_pedido_id = NULL, zen_ordem_separacao_id = NULL WHERE id = $1`, [p.id]);
@@ -652,7 +765,7 @@ export async function excluirPedidoLojinha(req, res, next) {
     await query(`DELETE FROM lojinha_boxer_pedidos WHERE id = $1`, [p.id]);
     await query(`DELETE FROM loj_fotos WHERE pedido_id = $1`, [p.id]);
     await registrarMovLoj(p, 'cancelado', { de: p.status, usuario: req.usuario,
-      descricao: `Pedido ${p.numero_pedido} excluído${p.zen_pedido_id ? ` (pedido #${p.zen_pedido_id} excluído no Zen)` : ''}` });
+      descricao: `Pedido ${p.numero_pedido} excluído${p.zen_pedido_id ? (faturadaZen ? ` (Lojinha Faturada: pedido #${p.zen_pedido_id} continua no Zen)` : ` (pedido #${p.zen_pedido_id} excluído no Zen)`) : ''}` });
     res.json({ ok: true, numero_pedido: p.numero_pedido, zen_pedido_id: p.zen_pedido_id, cards: cards.length });
   } catch (err) { next(err); }
 }
