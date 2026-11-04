@@ -241,3 +241,26 @@ export const tratativaService = {
   ver:   (id, atualizar = false) => api.get(`/pedidos-orcamento/${id}/tratativa`, { params: atualizar ? { atualizar: 1 } : {}, timeout: 60000 }),
   anexo: (id, caminho)           => api.get(`/pedidos-orcamento/${id}/tratativa/anexo`, { params: { caminho }, timeout: 30000 }),
 };
+
+// Telas criadas pelo admin (quadros de cards) e nomes das telas renomeadas
+export const telasService = {
+  ver:          ()           => api.get('/telas'),
+  criarQuadro:  (nome)       => api.post('/telas/quadros', { nome }),
+  editarQuadro: (id, dados)  => api.patch(`/telas/quadros/${id}`, dados),
+  salvarNomes:  (nomes)      => api.put('/telas/nomes', { nomes }),
+};
+/** Serviço de um quadro criado pelo admin (mesmo formato dos serviços da Lojinha/CIF). */
+export const quadroService = (qid) => ({
+  cards:        ()              => api.get(`/quadros/${qid}/cards`),
+  criar:        (dados)         => api.post(`/quadros/${qid}/cards`, dados),
+  mover:        (id, status)    => api.post(`/quadros/${qid}/cards/${id}/mover`, { status }),
+  editarCampos: (id, campos, titulo) => api.post(`/quadros/${qid}/cards/${id}/campos`, { campos, titulo }),
+  excluir:      (id)            => api.delete(`/quadros/${qid}/cards/${id}`),
+  config:       ()              => api.get(`/quadros/${qid}/config`, { timeout: 30000 }),
+  salvarConfig: (dados)         => api.post(`/quadros/${qid}/config`, dados, { timeout: 60000 }),
+  criarOpcao:   (campoId, opcao) => api.post(`/quadros/${qid}/config/campos/${campoId}/opcoes`, { opcao }),
+  imagem:       (url)           => api.get(url, { responseType: 'blob', timeout: 30000 }),
+  enviarFoto:   (id, dados)     => api.post(`/quadros/${qid}/cards/${id}/fotos`, dados, { timeout: 60000 }),
+  excluirFoto:  (fotoId)        => api.delete(`/quadros/${qid}/fotos/${fotoId}`),
+  movimentos:   (params)        => api.get(`/quadros/${qid}/movimentos`, { params, timeout: 30000 }),
+});
