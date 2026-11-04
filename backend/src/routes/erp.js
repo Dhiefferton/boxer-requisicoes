@@ -10,6 +10,7 @@ import { importarPecasPipefy } from '../controllers/basesController.js';
 import { usoBlob } from '../controllers/blobController.js';
 import { buscarTratativa } from '../integrations/pipefyTratativa.js';
 import { previaEmailFaturamento } from '../controllers/faturamentoLojinha.js';
+import { documentosZen } from '../integrations/zenPedidoVenda.js';
 import { SQL_CATEGORIA_USO_CONSUMO } from '../controllers/mrpController.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
 import { sincronizarSaidas, garantirRelatorioSemanal, compararPlanilhaZen } from '../integrations/marketplaceSaidas.js';
@@ -190,6 +191,15 @@ router.get('/debug-email-faturamento', async (req, res) => {
   if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
   try { res.json(await previaEmailFaturamento(parseInt(req.query.pedido) || 0)); }
   catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Ex: GET /api/erp/debug-docs-lojinha?secret=...&pedido=93 — Nº do pedido de venda e da NF no Zen (só leitura)
+router.get('/debug-docs-lojinha', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const p = (await query(`SELECT id, zen_pedido_id, zen_ordem_separacao_id FROM lojinha_boxer_pedidos WHERE id = $1`, [parseInt(req.query.pedido) || 0])).rows[0];
+    res.json(p ? { pedido: p, docs: await documentosZen(p) } : { achou: false });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
 // Ex: GET /api/erp/debug-importar-pecas?secret=...&cursor=&base= — copia a database "Peças em Geral" do Pipefy
