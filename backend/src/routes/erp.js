@@ -12,7 +12,7 @@ import { buscarTratativa } from '../integrations/pipefyTratativa.js';
 import { previaEmailFaturamento } from '../controllers/faturamentoLojinha.js';
 import { lerConfigLojinha, registrarMovLoj, garantirEstrutura } from '../controllers/lojinhaController.js';
 import { lerConfigCif } from '../controllers/logisticaCifController.js';
-import { documentosZen } from '../integrations/zenPedidoVenda.js';
+import { documentosZen, zenLeitura } from '../integrations/zenPedidoVenda.js';
 import { SQL_CATEGORIA_USO_CONSUMO } from '../controllers/mrpController.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
 import { sincronizarSaidas, garantirRelatorioSemanal, compararPlanilhaZen } from '../integrations/marketplaceSaidas.js';
@@ -225,6 +225,20 @@ router.get('/debug-email-faturamento', async (req, res) => {
   if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
   try { res.json(await previaEmailFaturamento(parseInt(req.query.pedido) || 0)); }
   catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Ex: GET /api/erp/debug-prazos?secret=...&nome=next — forma de pagamento (prazo) dos últimos pedidos de venda no Zen (só leitura)
+router.get('/debug-prazos', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const nome = String(req.query.nome || '').trim();
+    const filtro = nome ? `&q=${encodeURIComponent(`person.name=like="*${nome}*"`)}` : '';
+    const vendas = await zenLeitura(`/sale/sale?max=${Math.min(parseInt(req.query.max) || 100, 300)}&sort=-id${filtro}`);
+    const lista = (vendas || []).map(v => ({ id: v.id, numero: v.number, cliente: v.person?.name || v.person?.description || v.person?.id, prazo: v.properties?.paymentMethods ?? null, status: v.status }));
+    const contagem = {};
+    for (const v of lista) contagem[String(v.prazo)] = (contagem[String(v.prazo)] || 0) + 1;
+    res.json({ contagem, lista: lista.slice(0, 60) });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
 // Ex: GET /api/erp/debug-docs-lojinha?secret=...&pedido=93 — Nº do pedido de venda e da NF no Zen (só leitura)
