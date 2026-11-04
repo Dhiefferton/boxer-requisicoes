@@ -294,7 +294,7 @@ export default function CardAbertoOrcamento({
                   <button key={a.id} onClick={a.onClick} disabled={a.ocupado}
                     className={`w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-40 ${
                       a.alerta ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25' : 'border border-[var(--c-borda)] text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40'}`}>
-                    {a.id === 'retirar' ? <Scissors size={13} /> : <PackageCheck size={13} />}
+                    {a.id === 'retirar' ? <Scissors size={13} /> : a.id === 'cancelar_zen' ? <Ban size={13} /> : <PackageCheck size={13} />}
                     <span className="flex-1 text-left">{a.ocupado ? a.textoOcupado : a.texto}</span>
                   </button>
                 ))}
