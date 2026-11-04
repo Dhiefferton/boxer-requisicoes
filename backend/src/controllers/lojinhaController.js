@@ -13,7 +13,7 @@
 // Acesso: admin, operador e o setor SAC / Suporte.
 // ============================================================
 import { query } from '../config/db.js';
-import { buscarClienteZen, excluirPedidoVendaZen, consultarOrdemSeparacao } from '../integrations/zenPedidoVenda.js';
+import { buscarClienteZen, excluirPedidoVendaZen, consultarOrdemSeparacao, documentosZen } from '../integrations/zenPedidoVenda.js';
 import { PIPEFY_ATIVO } from '../integrations/pipefyService.js';
 import { criarConfigQuadro, exigidoAgora } from './configQuadro.js';
 
@@ -137,6 +137,12 @@ export function garantirEstrutura() {
       CREATE INDEX IF NOT EXISTS idx_loj_mov_criado ON loj_movimentos (criado_em DESC);
       CREATE INDEX IF NOT EXISTS idx_loj_mov_pedido ON loj_movimentos (pedido_id, criado_em);
       -- Logística CIF (Enviar): continuação do pedido depois de Finalizado
+      -- Nº do pedido de venda e da nota fiscal no Zen (mostrados no card)
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_venda_numero VARCHAR(40);
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_nf_numero VARCHAR(40);
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_nf_id INTEGER;
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_nf_status VARCHAR(40);
+      ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS zen_docs_em TIMESTAMPTZ;
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS cif_status VARCHAR(60);
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS cif_entrou_em TIMESTAMPTZ;
       ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS cif_valores JSONB NOT NULL DEFAULT '{}'::jsonb;
@@ -443,6 +449,34 @@ async function sincronizarSemPipefy() {
   }
 }
 
+// ── Nº do pedido de venda e da NF no Zen (só leitura) ─────
+// Lidos aos poucos (até 4 pedidos por vez, em paralelo, cada um no máx. a cada 10 min) enquanto
+// faltar a NF emitida; depois que a NF tem número, o pedido não é mais consultado.
+let docsRodando = null, docsUltima = 0;
+export function atualizarDocumentosZen() {
+  if (docsRodando || Date.now() - docsUltima < 20000) return docsRodando || Promise.resolve();
+  docsUltima = Date.now();
+  docsRodando = (async () => {
+    await garantirEstrutura();
+    const r = await query(`SELECT id, zen_pedido_id, zen_ordem_separacao_id, zen_venda_numero FROM lojinha_boxer_pedidos
+       WHERE zen_pedido_id IS NOT NULL AND (zen_venda_numero IS NULL OR zen_nf_numero IS NULL)
+         AND (zen_docs_em IS NULL OR zen_docs_em < NOW() - INTERVAL '10 minutes')
+         AND criado_em > NOW() - INTERVAL '60 days'
+       ORDER BY (status = 'finalizado' OR cif_status IS NOT NULL) DESC, zen_docs_em NULLS FIRST, id DESC LIMIT 4`);
+    await Promise.all(r.rows.map(async (p) => {
+      try {
+        const d = await documentosZen(p);
+        await query(`UPDATE lojinha_boxer_pedidos SET zen_venda_numero = COALESCE($2, zen_venda_numero), zen_nf_numero = $3,
+            zen_nf_id = $4, zen_nf_status = $5, zen_docs_em = NOW() WHERE id = $1`, [p.id, d.vendaNumero, d.nfNumero, d.nfId, d.nfStatus]);
+      } catch (e) {
+        await query(`UPDATE lojinha_boxer_pedidos SET zen_docs_em = NOW() WHERE id = $1`, [p.id]).catch(() => {});
+        console.error(`[Lojinha] documentos Zen pedido ${p.id}:`, e.message);
+      }
+    }));
+  })().catch(e => console.error('[Lojinha] documentos Zen:', e.message)).finally(() => { docsRodando = null; });
+  return docsRodando;
+}
+
 // POST /lojinha/pedidos/:id/mover { status } — muda a coluna do pedido (sem o Pipefy)
 export async function moverPedidoLojinha(req, res, next) {
   try {
@@ -492,6 +526,7 @@ export async function listarPedidosLojinha(req, res, next) {
     await sincronizarFasesPipefy().catch(e => console.error('[Lojinha] sync:', e.message));
     await entrarNoCif().catch(e => console.error('[CIF] entrada:', e.message));
     await avisarFaturamentoLojinha(); // finalizados pelo Pipefy / tentativa que falhou
+    await atualizarDocumentosZen(); // Nº do pedido de venda e da NF
     const r = await query(
       `SELECT t.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome, 'blob_url', f.blob_url, 'tamanho', f.tamanho) ORDER BY f.id), '[]'::json)
                       FROM loj_fotos f WHERE f.pedido_id = t.id) AS fotos_locais

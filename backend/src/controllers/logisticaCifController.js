@@ -9,7 +9,7 @@
 // ============================================================
 import { query } from '../config/db.js';
 import { criarConfigQuadro, exigidoAgora } from './configQuadro.js';
-import { garantirEstrutura, registrarMovLoj } from './lojinhaController.js';
+import { garantirEstrutura, registrarMovLoj, atualizarDocumentosZen } from './lojinhaController.js';
 import { temBotao } from '../middlewares/telas.js';
 
 const COLUNAS_CIF = [
@@ -59,6 +59,7 @@ export async function acessoCif(req, res, next) {
 export async function listarPedidosCif(req, res, next) {
   try {
     await entrarNoCif().catch(e => console.error('[CIF] entrada:', e.message));
+    await atualizarDocumentosZen(); // Nº do pedido de venda e da NF
     const cfg = await cfgCif.ler();
     const arquivadas = cfg.colunas.filter(c => c.arquivada).map(c => c.chave);
     const r = await query(
