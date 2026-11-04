@@ -15,6 +15,7 @@ import { FotosCampo } from './FotosOrcamento';
 import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA, obrigatorioAgora, visivelAgora, lerRegistro } from './CamposCardOrcamento';
 import { COLUNAS_ORCAMENTO, STATUS_SO_ADMIN } from '../../utils/fasesOrcamento';
 import { useFasesPassadas, CaixaFase } from './FaseAnterior';
+import TratativaSAC from './TratativaSAC';
 
 const ehLargo = (c) => c.tipo === 'long_text' || c.tipo === 'attachment';
 
@@ -192,7 +193,13 @@ export default function CardAbertoOrcamento({
             </div>
 
             {!fases && !erro && <div className="flex justify-center py-10"><Spinner className="text-[var(--c-destaque)]" /></div>}
-            {fases && !anteriores.length && <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido nas fases anteriores.</p>}
+            {fases && !anteriores.length && !pedido.pipefy_card_id && <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido nas fases anteriores.</p>}
+            {/* Card vindo do Pipefy sem campos no Formulário inicial: a tratativa do SAC fica numa caixa própria */}
+            {fases && pedido.pipefy_card_id && !anteriores.some(g => g.chave === 'inicio') && (
+              <CaixaFase titulo="Formulário inicial" aberta={!fechadas.has('inicio-sac')} onAlternar={() => alternarFase('inicio-sac', !fechadas.has('inicio-sac'))}>
+                <TratativaSAC pedido={pedido} />
+              </CaixaFase>
+            )}
             {anteriores.map(g => {
               const col = g.chave && g.chave !== 'inicio' ? COLUNAS_ORCAMENTO.find(c => c.status === g.chave) : null;
               const aberta = abertas.has(g.faseId) || (g.chave === 'inicio' && !fechadas.has(g.faseId));
@@ -202,9 +209,10 @@ export default function CardAbertoOrcamento({
                   aberta={aberta} onAlternar={() => alternarFase(g.faseId, aberta)}
                   podeEditar={botoes.editar_fase} editando={g.editando}
                   onEditar={() => setEditandoFase(s => { const n = new Set(s); n.has(g.faseId) ? n.delete(g.faseId) : n.add(g.faseId); return n; })}>
+                  {g.chave === 'inicio' && <TratativaSAC pedido={pedido} />}
                   {g.campos.length
                     ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
-                    : <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido.</p>}
+                    : g.chave !== 'inicio' && <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido.</p>}
                 </CaixaFase>
               );
             })}
