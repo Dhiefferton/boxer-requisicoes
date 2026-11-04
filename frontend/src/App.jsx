@@ -21,6 +21,8 @@ import Compras         from './pages/operador/Compras';
 import NecessidadePecas from './pages/operador/NecessidadePecas';
 import LojinhaBoxer from './pages/operador/LojinhaBoxer';
 import LogisticaCif from './pages/operador/LogisticaCif';
+import QuadroPersonalizado from './pages/operador/QuadroPersonalizado';
+import Telas from './pages/operador/Telas';
 import Databases from './pages/operador/Databases';
 import Armazenamento from './pages/operador/Armazenamento';
 import RecebimentoImportacao from './pages/operador/RecebimentoImportacao';
@@ -111,6 +113,12 @@ export default function App() {
             } />
             <Route path="/logistica-cif" element={
               <RotaTela tela="logistica_cif"><LogisticaCif /></RotaTela>
+            } />
+            <Route path="/quadro/:id" element={
+              <RotaProtegida><QuadroPersonalizado /></RotaProtegida>
+            } />
+            <Route path="/telas" element={
+              <RotaTela tela="admin"><Telas /></RotaTela>
             } />
             <Route path="/lojinha" element={
               <RotaTela tela="lojinha"><LojinhaBoxer /></RotaTela>
