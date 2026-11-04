@@ -48,8 +48,7 @@ import { criarCardsLojinha, excluirCardLojinha, fasesDosCards, cardsDoPedidoLoji
 import { buscarPedidoLI } from '../integrations/lojaIntegrada.js';
 import { temBotao } from '../middlewares/telas.js';
 import { registrarArquivoBlob, excluirArquivoBlob, lerEnvioBlob } from './blobController.js';
-import { entrarNoCif } from './logisticaCifController.js';
-import { avisarFaturamentoLojinha } from './faturamentoLojinha.js';
+import { avisarFaturamentoLojinha, liberarFaturamento, ehLiberacaoFaturamento } from './faturamentoLojinha.js';
 
 const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
 const SETORES = ['sac / suporte'];
@@ -511,10 +510,8 @@ export async function moverPedidoLojinha(req, res, next) {
       de: atual, para: status, usuario: req.usuario,
       descricao: `Movido de ${col.get(atual)?.nome || atual} para ${col.get(status)?.nome || status}`,
     });
-    if (status === 'finalizado') {
-      await entrarNoCif(req.usuario).catch(e => console.error('[CIF] entrada:', e.message));
-      await avisarFaturamentoLojinha(req.usuario); // e-mail ao faturamento (nunca lança erro)
-    }
+    // Chegou na "Liberação de Faturamento": e-mail ao faturamento (nunca lança erro)
+    if (ehLiberacaoFaturamento(col.get(status)?.nome)) await liberarFaturamento(p.id, req.usuario);
     res.json({ pedido: r.rows[0] });
   } catch (err) { next(err); }
 }
@@ -524,8 +521,8 @@ export async function listarPedidosLojinha(req, res, next) {
   try {
     await garantirEstrutura();
     await sincronizarFasesPipefy().catch(e => console.error('[Lojinha] sync:', e.message));
-    await entrarNoCif().catch(e => console.error('[CIF] entrada:', e.message));
-    await avisarFaturamentoLojinha(); // finalizados pelo Pipefy / tentativa que falhou
+    // Entrada automática na Logística CIF desligada (pedido do Dhiefferton, 04/11/2026)
+    await avisarFaturamentoLojinha(); // tentativa de e-mail que falhou
     await atualizarDocumentosZen(); // Nº do pedido de venda e da NF
     const r = await query(
       `SELECT t.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome, 'blob_url', f.blob_url, 'tamanho', f.tamanho) ORDER BY f.id), '[]'::json)

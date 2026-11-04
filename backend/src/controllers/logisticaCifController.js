@@ -11,6 +11,7 @@ import { query } from '../config/db.js';
 import { criarConfigQuadro, exigidoAgora } from './configQuadro.js';
 import { garantirEstrutura, registrarMovLoj, atualizarDocumentosZen } from './lojinhaController.js';
 import { temBotao } from '../middlewares/telas.js';
+import { liberarFaturamento, ehLiberacaoFaturamento } from './faturamentoLojinha.js';
 
 const COLUNAS_CIF = [
   { chave: 'aguardando_envio', nome: 'Aguardando envio', cor: '#3b82f6', so_admin: false },
@@ -58,7 +59,7 @@ export async function acessoCif(req, res, next) {
 // GET /logistica-cif/pedidos
 export async function listarPedidosCif(req, res, next) {
   try {
-    await entrarNoCif().catch(e => console.error('[CIF] entrada:', e.message));
+    // Entrada automática (Finalizado → Aguardando envio) desligada (04/11/2026); entrarNoCif() fica sem uso
     await atualizarDocumentosZen(); // Nº do pedido de venda e da NF
     const cfg = await cfgCif.ler();
     const arquivadas = cfg.colunas.filter(c => c.arquivada).map(c => c.chave);
@@ -101,6 +102,7 @@ export async function moverPedidoCif(req, res, next) {
       de: atual, para: status, usuario: req.usuario,
       descricao: `Logística CIF: movido de ${col.get(atual)?.nome || atual} para ${col.get(status)?.nome || status}`,
     });
+    if (ehLiberacaoFaturamento(col.get(status)?.nome)) await liberarFaturamento(p.id, req.usuario);
     res.json({ pedido: r.rows[0] });
   } catch (err) { next(err); }
 }

@@ -1,11 +1,12 @@
 // ============================================================
-// controllers/faturamentoLojinha.js — E-mail ao faturamento (Lojinha → Finalizado)
+// controllers/faturamentoLojinha.js — E-mail ao faturamento (Liberação de Faturamento)
 // ============================================================
-// Quando um pedido da Lojinha chega em Finalizado, manda um e-mail para
+// Quando um pedido chega na coluna "Liberação de Faturamento" (na Lojinha ou na
+// Logística CIF — reconhecida pelo nome da coluna), manda um e-mail para
 // faturamento@boxersoldas.com.br pedindo a nota (mesmo texto do Pipefy
 // "Logística CIF"): romaneio, transportadora, CNPJ da transportadora, peso,
 // volumes e frete por conta. Um e-mail por pedido (marcado em email_faturamento_em).
-// Só pedidos finalizados depois desta função existir (EMAIL_FAT_DESDE).
+// Marca a chegada em fat_liberado_em; o envio tenta até 3 vezes.
 // ============================================================
 import { query } from '../config/db.js';
 import { enviarEmail, emailConfigurado } from '../integrations/email.js';
@@ -13,14 +14,14 @@ import { romaneioDaOrdem } from '../integrations/zenPedidoVenda.js';
 import { registrarMovLoj } from './lojinhaController.js';
 
 const PARA = process.env.EMAIL_FATURAMENTO || 'faturamento@boxersoldas.com.br';
-const EMAIL_FAT_DESDE = '2026-11-04T02:00:00Z';
 const CNPJ_CORREIOS = '68.945.153/0001-45';
 
 let colunas = null;
 const garantir = () => (colunas ||= query(`
   ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS email_faturamento_em TIMESTAMPTZ;
   ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS email_faturamento_erro TEXT;
-  ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS email_faturamento_tentativas INTEGER NOT NULL DEFAULT 0;`)
+  ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS email_faturamento_tentativas INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS fat_liberado_em TIMESTAMPTZ;`)
   .catch(e => { colunas = null; throw e; }));
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -69,6 +70,18 @@ async function dadosEmail(p) {
   return { rom, email: montarEmail({ romaneio: rom?.numero ?? null, transportadora, cnpj, peso: rom?.peso ?? null, volumes: rom?.volumes ?? null, frete: 'Emitente' }) };
 }
 
+/** A coluna é a "Liberação de Faturamento"? (pelo nome, sem acento/maiúscula) */
+export const ehLiberacaoFaturamento = (nome) => /libera\w*\s+(de\s+)?fatura/.test(norm(nome));
+
+/** Pedido chegou na Liberação de Faturamento: marca e manda o e-mail. Nunca lança erro. */
+export async function liberarFaturamento(pedidoId, usuario = null) {
+  try {
+    await garantir();
+    await query(`UPDATE lojinha_boxer_pedidos SET fat_liberado_em = COALESCE(fat_liberado_em, NOW()) WHERE id = $1`, [pedidoId]);
+  } catch (e) { console.error('[Lojinha] liberação de faturamento:', e.message); }
+  await avisarFaturamentoLojinha(usuario);
+}
+
 /** Prévia do e-mail de um pedido (diagnóstico; não envia). */
 export async function previaEmailFaturamento(pedidoId) {
   const p = (await query(`SELECT * FROM lojinha_boxer_pedidos WHERE id = $1`, [pedidoId])).rows[0];
@@ -83,14 +96,14 @@ async function enviarUm(p) {
   return { assunto: email.assunto, romaneio: rom?.numero ?? null };
 }
 
-/** Manda o e-mail dos pedidos que chegaram em Finalizado e ainda não avisaram o faturamento. Nunca lança erro. */
+/** Manda o e-mail dos pedidos que chegaram na Liberação de Faturamento e ainda não avisaram o faturamento. Nunca lança erro. */
 export async function avisarFaturamentoLojinha(usuario = null) {
   try {
     if (!emailConfigurado()) return;
     await garantir();
     const r = await query(`SELECT * FROM lojinha_boxer_pedidos
-       WHERE status = 'finalizado' AND finalizado_em >= $1 AND email_faturamento_em IS NULL AND email_faturamento_tentativas < 3
-       ORDER BY finalizado_em LIMIT 10`, [EMAIL_FAT_DESDE]);
+       WHERE fat_liberado_em IS NOT NULL AND email_faturamento_em IS NULL AND email_faturamento_tentativas < 3
+       ORDER BY fat_liberado_em LIMIT 10`);
     for (const p of r.rows) {
       // marca antes de enviar (outra requisição ao mesmo tempo não manda de novo)
       const trava = await query(`UPDATE lojinha_boxer_pedidos SET email_faturamento_em = NOW(), email_faturamento_tentativas = email_faturamento_tentativas + 1
