@@ -53,6 +53,17 @@ export function ehEletroSoldas(pedido) {
   return Boolean(doc) && CNPJS_ELETRO.includes(doc);
 }
 
+// Forma de pagamento (prazo, campo paymentMethods) por cliente:
+// Eletro Soldas = 28 dd; Equip NEXT = 14 dd; os demais = padrão (0 = à vista)
+export const PRAZO_ELETRO = process.env.ZEN_PV_PRAZO_ELETRO || '28';
+export const PRAZO_NEXT = process.env.ZEN_PV_PRAZO_NEXT || '14';
+const ehNext = (nome) => /\bnext\b/i.test(String(nome || ''));
+export function prazoDoCliente(pedido, cliente = null) {
+  if (ehEletroSoldas(pedido)) return PRAZO_ELETRO;
+  if (ehNext(pedido?.cliente_nome) || ehNext(cliente?.name) || ehNext(cliente?.fantasyName)) return PRAZO_NEXT;
+  return null; // sem regra: usa o padrão
+}
+
 async function zen(metodo, caminho, corpo) {
   const token = await getToken();
   const resp = await fetch(`${ZEN_BASE_URL}${caminho}`, {
@@ -194,7 +205,7 @@ export async function criarPedidoVendaZen(pedido) {
       currency:               { id: CFG.currency },
       availabilityDate:       hojeSP(),
       properties:             { comments: baixa ? ['BAIXA DE ESTOQUE - ELETRO SOLDA', obs].filter(Boolean).join('\n') : obs,
-                                paymentMethods: CFG.paymentMethods },
+                                paymentMethods: prazoDoCliente(pedido, cliente) || CFG.paymentMethods },
     });
     zenPedidoId = venda?.id;
     if (!zenPedidoId) throw new Error('ZenERP não retornou o ID do pedido criado.');
@@ -231,9 +242,11 @@ export async function criarPedidoVendaZen(pedido) {
         resultado.itensIncluidos++;
       }
 
-      // 4. Finalizar preparação — exige forma de pagamento (prazo) no pedido
-      if (venda.properties?.paymentMethods == null) {
-        venda.properties = { ...(venda.properties || {}), paymentMethods: CFG.paymentMethods };
+      // 4. Finalizar preparação — exige forma de pagamento (prazo) no pedido.
+      // Eletro Soldas (28 dd) e NEXT (14 dd) sempre com o prazo deles.
+      const prazo = prazoDoCliente(pedido, Number(venda.fiscalProfileOperation?.id) === CFG.fiscalOpBaixa ? null : cliente);
+      if (venda.properties?.paymentMethods == null || (prazo && String(venda.properties.paymentMethods).trim() !== prazo)) {
+        venda.properties = { ...(venda.properties || {}), paymentMethods: prazo || CFG.paymentMethods };
         await zen('PUT', '/sale/sale', venda);
       }
       await zen('POST', `/sale/saleOpPrepare/${zenPedidoId}`);
