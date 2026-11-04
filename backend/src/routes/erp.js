@@ -11,6 +11,7 @@ import { usoBlob } from '../controllers/blobController.js';
 import { buscarTratativa } from '../integrations/pipefyTratativa.js';
 import { previaEmailFaturamento } from '../controllers/faturamentoLojinha.js';
 import { lerConfigOrcamento } from '../controllers/configOrcamentoController.js';
+import { previaEmailsOrcamento } from '../controllers/faturamentoOrcamento.js';
 import { lerConfigLojinha, registrarMovLoj, garantirEstrutura } from '../controllers/lojinhaController.js';
 import { lerConfigCif } from '../controllers/logisticaCifController.js';
 import { documentosZen, zenLeitura } from '../integrations/zenPedidoVenda.js';
@@ -148,6 +149,13 @@ router.get('/debug-campos-orcamento', async (req, res) => {
       .map(c => ({ id: c.id, nome: c.nome, valor: String(c.valor).slice(0, 120) })) }));
     res.json(out);
   } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Ex: GET /api/erp/debug-email-faturamento-orc?secret=...&pedido=1352 — prévia dos 2 e-mails ao faturamento do Orçamento (não envia)
+router.get('/debug-email-faturamento-orc', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try { res.json(await previaEmailsOrcamento(parseInt(req.query.pedido) || 0)); }
+  catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
 // Ex: GET /api/erp/debug-blob?secret=... — armazenamento de vídeos ligado? (só leitura)
