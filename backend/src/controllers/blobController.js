@@ -163,7 +163,7 @@ export function lerEnvioBlob(b) {
 export async function registrarVisto(req, res) {
   try {
     await garantirBlob();
-    const tab = req.body?.quadro === 'orc' ? 'orc_fotos' : 'loj_fotos';
+    const tab = req.body?.quadro === 'orc' ? 'orc_fotos' : req.body?.quadro === 'qd' ? 'bx_quadro_fotos' : 'loj_fotos';
     const f = (await query(`SELECT blob_url, tamanho FROM ${tab} WHERE id = $1`, [parseInt(req.params.id) || 0])).rows[0];
     if (f?.blob_url) await evento('visto', { bytes: Number(f.tamanho) || 0, simples: 1 });
     res.json({ ok: true });
@@ -185,6 +185,7 @@ export async function verUsoBlob(req, res, next) {
     const arquivos = (await query(
       `SELECT a.id, a.url, a.tamanho, a.mime, a.nome, a.quadro, a.pedido_id, a.campo_id, a.usuario_nome, a.criado_em,
               CASE WHEN a.quadro = 'orc' THEN (SELECT COALESCE(cliente_nome, referencia) FROM pedidos_orcamento WHERE id = a.pedido_id)
+                   WHEN a.quadro = 'qd' THEN (SELECT q.nome || ' — ' || c.titulo FROM bx_quadro_cards c JOIN bx_quadros q ON q.id = c.quadro_id WHERE c.id = a.pedido_id)
                    ELSE (SELECT 'Pedido ' || numero_pedido || ' — ' || cliente_nome FROM lojinha_boxer_pedidos WHERE id = a.pedido_id) END AS card
          FROM bx_blob_arquivos a WHERE a.excluido_em IS NULL ORDER BY a.tamanho DESC, a.id DESC LIMIT 500`)).rows;
     res.json({ ...uso, lista: arquivos });
@@ -218,6 +219,7 @@ export async function excluirArquivo(req, res, next) {
     await excluirArquivoBlob(a.url);
     await query(`DELETE FROM orc_fotos WHERE blob_url = $1`, [a.url]).catch(() => {});
     await query(`DELETE FROM loj_fotos WHERE blob_url = $1`, [a.url]).catch(() => {});
+    await query(`DELETE FROM bx_quadro_fotos WHERE blob_url = $1`, [a.url]).catch(() => {});
     res.json({ ok: true });
   } catch (err) { next(err); }
 }
