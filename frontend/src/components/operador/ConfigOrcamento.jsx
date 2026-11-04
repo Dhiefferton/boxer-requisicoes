@@ -10,6 +10,9 @@ import { X, Plus, Settings, ChevronUp, ChevronDown, Trash2, Pencil, Check, GripV
 import { pedidosOrcamentoService, basesService } from '../../services/api';
 import { Spinner } from '../ui';
 
+// Valores da condição: texto (um) ou lista (vários)
+const valoresCondicao = (v) => (Array.isArray(v) ? v : [v]).map(x => String(x ?? '').trim()).filter(Boolean);
+
 export const TIPOS_CAMPO = [
   { tipo: 'texto', nome: 'Texto curto', sigla: 'Aa' },
   { tipo: 'longo', nome: 'Texto longo', sigla: '¶' },
@@ -181,8 +184,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
   function carregarDe(data, fases = null) {
     const cols = data.colunas.map(c => ({ ...c }));
     const lista = data.campos.map(c => ({ ...c, uid: `id_${c.id}`, opcoes: Array.isArray(c.opcoes) ? c.opcoes : [],
-      condicao: c.condicao?.campo ? { campo: `id_${c.condicao.campo}`, valor: c.condicao.valor } : null,
-      visivel: c.visivel?.campo ? { campo: `id_${c.visivel.campo}`, valor: c.visivel.valor } : null }));
+      condicao: c.condicao?.campo ? { campo: `id_${c.condicao.campo}`, valor: valoresCondicao(c.condicao.valor) } : null,
+      visivel: c.visivel?.campo ? { campo: `id_${c.visivel.campo}`, valor: valoresCondicao(c.visivel.valor) } : null }));
     const trazidas = [];
     if (Array.isArray(fases)) {
       for (const col of cols) {
@@ -293,8 +296,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
       const { data } = await svc.salvarConfig({
         colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null })),
         campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null, cria_opcoes: !!c.cria_opcoes, cores: c.tipo === 'etiquetas' ? c.cores || null : null,
-          uid: c.uid, condicao: c.obrigatorio && c.condicao?.campo && c.condicao?.valor ? c.condicao : null,
-          visivel: c.visivel?.campo && c.visivel?.valor && campos.some(o => o.uid === c.visivel.campo) ? c.visivel : null })),
+          uid: c.uid, condicao: c.obrigatorio && c.condicao?.campo && valoresCondicao(c.condicao?.valor).length ? c.condicao : null,
+          visivel: c.visivel?.campo && valoresCondicao(c.visivel?.valor).length && campos.some(o => o.uid === c.visivel.campo) ? c.visivel : null })),
       });
       // as colunas novas ganharam chave: mantém a seleção pela posição
       const pos = colunas.findIndex(c => keyCol(c) === colSel);
@@ -439,8 +442,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       <Sigla tipo={c.tipo} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-[var(--c-texto)]">{c.obrigatorio && <span className="text-red-400">* </span>}{c.rotulo}
-                          {c.visivel?.campo && <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-sky-400 bg-sky-500/10 rounded px-1 py-0.5" title={`Aparece só quando "${camposAtuais.find(o => o.uid === c.visivel.campo)?.rotulo || '?'}" for "${c.visivel.valor}"`}>aparece se</span>}
-                          {c.obrigatorio && c.condicao?.campo && <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-amber-400 bg-amber-500/10 rounded px-1 py-0.5" title={`Obrigatório só quando "${camposAtuais.find(o => o.uid === c.condicao.campo)?.rotulo || '?'}" for "${c.condicao.valor}"`}>condicional</span>}
+                          {c.visivel?.campo && <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-sky-400 bg-sky-500/10 rounded px-1 py-0.5" title={`Aparece só quando "${camposAtuais.find(o => o.uid === c.visivel.campo)?.rotulo || '?'}" for "${valoresCondicao(c.visivel.valor).join('" ou "')}"`}>aparece se</span>}
+                          {c.obrigatorio && c.condicao?.campo && <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-amber-400 bg-amber-500/10 rounded px-1 py-0.5" title={`Obrigatório só quando "${camposAtuais.find(o => o.uid === c.condicao.campo)?.rotulo || '?'}" for "${valoresCondicao(c.condicao.valor).join('" ou "')}"`}>condicional</span>}
                           {c.pipefy_campo && <span title="Campo que já existia na fase do Pipefy (o valor do card vem de lá)" className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-sky-400 bg-sky-500/10 rounded px-1 py-0.5">Pipefy</span>}</p>
                         {c.descricao && <p className="text-[11px] text-[var(--c-suave)]">{c.descricao}</p>}
                       </div>
@@ -478,15 +481,13 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       <div className="rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 space-y-1.5">
                         <p className="text-[11px] font-semibold text-[var(--c-texto)]">Mostrar este campo</p>
                         <select value={ref ? ref.uid : ''} className={inp}
-                          onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, visivel: e.target.value ? { campo: e.target.value, valor: (refs.find(o => o.uid === e.target.value)?.opcoes || [])[0] || '' } : null }))}>
+                          onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, visivel: e.target.value ? { campo: e.target.value, valor: (refs.find(o => o.uid === e.target.value)?.opcoes || []).slice(0, 1) } : null }))}>
                           <option value="">Sempre</option>
                           {refs.map(o => <option key={o.uid} value={o.uid}>Só quando "{o.rotulo}" for…</option>)}
                         </select>
                         {ref && (
-                          <select value={campoAtual.visivel?.valor || ''} className={inp}
-                            onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, visivel: { ...c.visivel, valor: e.target.value } }))}>
-                            {ref.opcoes.map(o => <option key={o} value={o}>{o}</option>)}
-                          </select>
+                          <OpcoesCondicao opcoes={ref.opcoes} valor={campoAtual.visivel?.valor}
+                            onChange={v => mudarCampo(campoAtual.uid, c => ({ ...c, visivel: { ...c.visivel, valor: v } }))} />
                         )}
                         {ref && <p className="text-[10px] text-[var(--c-suave)]">Escondido, o campo não é obrigatório.</p>}
                       </div>
@@ -500,15 +501,13 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       <div className="rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 space-y-1.5">
                         <p className="text-[11px] font-semibold text-[var(--c-texto)]">Quando é obrigatório</p>
                         <select value={ref ? ref.uid : ''} className={inp}
-                          onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: e.target.value ? { campo: e.target.value, valor: (refs.find(o => o.uid === e.target.value)?.opcoes || [])[0] || '' } : null }))}>
+                          onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: e.target.value ? { campo: e.target.value, valor: (refs.find(o => o.uid === e.target.value)?.opcoes || []).slice(0, 1) } : null }))}>
                           <option value="">Sempre</option>
                           {refs.map(o => <option key={o.uid} value={o.uid}>Só quando "{o.rotulo}" for…</option>)}
                         </select>
                         {ref && (
-                          <select value={campoAtual.condicao?.valor || ''} className={inp}
-                            onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: { ...c.condicao, valor: e.target.value } }))}>
-                            {ref.opcoes.map(o => <option key={o} value={o}>{o}</option>)}
-                          </select>
+                          <OpcoesCondicao opcoes={ref.opcoes} valor={campoAtual.condicao?.valor}
+                            onChange={v => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: { ...c.condicao, valor: v } }))} />
                         )}
                         {!refs.length && <p className="text-[10px] text-[var(--c-suave)]">Para condicionar, crie antes nesta coluna um campo com opções (lista, única opção ou checkbox).</p>}
                       </div>
@@ -625,6 +624,23 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Condição com uma ou mais opções (ex.: "Aprovado" ou "Aprovado parcialmente")
+function OpcoesCondicao({ opcoes, valor, onChange }) {
+  const sel = valoresCondicao(valor);
+  const alternar = (o) => onChange(sel.includes(o) ? sel.filter(x => x !== o) : [...sel, o]);
+  return (
+    <div className="rounded-lg border border-[var(--c-borda)] px-2.5 py-1.5 space-y-1">
+      {opcoes.map(o => (
+        <label key={o} className="flex items-center gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
+          <input type="checkbox" checked={sel.includes(o)} onChange={() => alternar(o)} />
+          <span className="truncate">{o}</span>
+        </label>
+      ))}
+      <p className="text-[10px] text-[var(--c-suave)]">{sel.length ? `Vale quando for ${sel.map(x => `"${x}"`).join(' ou ')}.` : 'Marque uma ou mais opções.'}</p>
     </div>
   );
 }

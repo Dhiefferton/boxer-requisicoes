@@ -40,12 +40,16 @@ const MULTI = ['checklist_vertical', 'checklist_horizontal', 'label_select'];
 const ESCOLHA = ['select', 'radio_vertical', 'radio_horizontal'];
 export const SO_LEITURA = ['attachment', 'id'];
 
+// Valores aceitos pela condição: texto (um) ou lista (vários, ex.: Aprovado / Aprovado parcialmente)
+export const valoresCondicao = (v) => (Array.isArray(v) ? v : [v]).map(x => String(x ?? '').trim()).filter(Boolean);
+const bate = (valores, cond) => { const ok = valoresCondicao(cond); return valores.some(v => ok.includes(String(v).trim())); };
+
 // Obrigatório agora? (campo.quando = obrigatório só quando outro campo tiver o valor)
 /** Campo aparece agora? (Configurar → "Mostrar este campo: só quando …"), seguindo a cadeia de campos. */
 export function visivelAgora(campo, valorDe) {
   let m = campo?.mostrar, n = 0;
   while (m && n++ < 10) {
-    if (!valorLista(valorDe(m.id)).map(v => String(v).trim()).includes(String(m.valor).trim())) return false;
+    if (!bate(valorLista(valorDe(m.id)), m.valor)) return false;
     m = m.pai;
   }
   return true;
@@ -55,7 +59,7 @@ export function obrigatorioAgora(campo, valorDe) {
   if (!campo?.obrigatorio) return false;
   if (!visivelAgora(campo, valorDe)) return false;
   if (!campo.quando) return true;
-  return valorLista(valorDe(campo.quando.id)).map(v => String(v).trim()).includes(String(campo.quando.valor).trim());
+  return bate(valorLista(valorDe(campo.quando.id)), campo.quando.valor);
 }
 
 export function Valor({ campo, valor }) {
