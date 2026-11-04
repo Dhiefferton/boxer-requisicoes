@@ -22,6 +22,7 @@ const cfgCif = criarConfigQuadro({ TC: 'cif_colunas', TF: 'cif_campos', tabPedid
 export const verConfigCif = (req, res, next) => cfgCif.verConfig(req, res, next);
 export const salvarConfigCif = (req, res, next) => cfgCif.salvarConfig(req, res, next);
 export const adicionarOpcaoCif = (req, res, next) => cfgCif.adicionarOpcao(req, res, next);
+export const lerConfigCif = () => cfgCif.ler();
 
 // Só os pedidos finalizados a partir do lançamento da tela entram sozinhos
 const INICIO_CIF = '2026-11-03T00:00:00-03:00';
