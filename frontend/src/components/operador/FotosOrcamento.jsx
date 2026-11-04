@@ -6,8 +6,9 @@
 // B-Requisições (não são enviadas para o Pipefy).
 // ============================================================
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { Camera, X, Paperclip, ImageOff, Trash2, Images, FileText } from 'lucide-react';
-import { pedidosOrcamentoService } from '../../services/api';
+import { Camera, X, Paperclip, ImageOff, Trash2, Images, FileText, Film } from 'lucide-react';
+import { upload } from '@vercel/blob/client';
+import { pedidosOrcamentoService, blobService, baseURL } from '../../services/api';
 import { Spinner } from '../ui';
 
 // Lista de um valor do Pipefy (texto ou JSON '["url1","url2"]')
@@ -45,7 +46,7 @@ export function fotosDoCard(pedido, campoId = null) {
     for (const u of lista(valor)) if (/^https?:\/\//.test(u) && ehImagem(u)) pipefy.push({ tipo: 'pipefy', url: u, campo: c.id });
   }
   const locais = (Array.isArray(pedido?.fotos_locais) ? pedido.fotos_locais : [])
-    .filter(f => !campoId || f.campo === campoId).map(f => ({ tipo: 'local', id: f.id, campo: f.campo, mime: f.mime || 'image/jpeg', nome: f.nome || '' }));
+    .filter(f => !campoId || f.campo === campoId).map(f => ({ tipo: 'local', id: f.id, campo: f.campo, mime: f.mime || 'image/jpeg', nome: f.nome || '', blob_url: f.blob_url || null, tamanho: Number(f.tamanho) || 0 }));
   return [...pipefy, ...locais];
 }
 
@@ -71,12 +72,18 @@ function ImagemAuth({ url, className = '', onClick, alt = '' }) {
 // Miniatura de uma foto (Pipefy ou local)
 // Arquivo (PDF, Word…) adicionado no B-Requisições: abre numa aba nova
 export const ehArquivo = (foto) => foto?.tipo === 'local' && !String(foto.mime || 'image/').startsWith('image/');
+export const ehVideo = (foto) => foto?.tipo === 'local' && !!foto.blob_url && String(foto.mime || '').startsWith('video/');
+const quadroDe = (svc) => (String(svc?.base || '').startsWith('/pedidos-orcamento') ? 'orc' : 'loj');
+const fmtTam = (b) => (b >= 1024 * 1024 * 1024 ? `${(b / 1024 / 1024 / 1024).toFixed(1)} GB` : b >= 1024 * 1024 ? `${Math.round(b / 1024 / 1024)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+const MAX_VIDEO = 500 * 1024 * 1024;
 function extensao(foto) {
   const n = String(foto.nome || '');
   if (n.includes('.')) return n.split('.').pop().slice(0, 4).toUpperCase();
   return /pdf/.test(foto.mime) ? 'PDF' : 'ARQ';
 }
 async function abrirArquivo(svc, foto) {
+  // Arquivo grande (Vercel Blob): abre o link direto
+  if (foto.blob_url) { blobService.visto(foto.id, quadroDe(svc)); window.open(foto.blob_url, '_blank', 'noopener'); return; }
   const aba = window.open('', '_blank');
   try {
     const { data } = await svc.imagem(urlLocal(foto.id, null, svc.base));
@@ -87,6 +94,14 @@ async function abrirArquivo(svc, foto) {
 function Miniatura({ foto, className, onClick }) {
   const svc = useContext(FotosCtx);
   const [falhou, setFalhou] = useState(false);
+  if (ehVideo(foto)) {
+    return (
+      <button type="button" onClick={onClick || (() => abrirArquivo(svc, foto))} title={foto.nome || 'Vídeo'}
+        className={`${className} flex flex-col items-center justify-center gap-0.5 text-[var(--c-texto)] hover:text-[var(--c-destaque)]`}>
+        <Film size={16} /><span className="text-[9px] font-bold">{foto.tamanho ? fmtTam(foto.tamanho) : 'VÍDEO'}</span>
+      </button>
+    );
+  }
   if (ehArquivo(foto)) {
     return (
       <button type="button" onClick={onClick || (() => abrirArquivo(svc, foto))} title={foto.nome || 'Abrir arquivo'}
@@ -127,7 +142,9 @@ export function FotoAmpliada({ fotos, inicio = 0, onFechar, podeExcluir, onExclu
       </div>
       <div className="flex items-center gap-2 max-w-full" onClick={e => e.stopPropagation()}>
         <button disabled={i === 0} onClick={() => setI(n => n - 1)} className="px-2 py-6 text-white/70 hover:text-white disabled:opacity-20 text-2xl">‹</button>
-        {ehArquivo(foto)
+        {ehVideo(foto)
+          ? <VideoBlob foto={foto} svc={svc} />
+          : ehArquivo(foto)
           ? <button onClick={() => abrirArquivo(svc, foto)} className="flex flex-col items-center gap-2 px-10 py-8 rounded-lg bg-white/10 text-white hover:bg-white/15">
               <FileText size={40} /><span className="text-sm">{foto.nome || 'Arquivo'}</span><span className="text-xs underline">Abrir arquivo</span>
             </button>
@@ -136,6 +153,17 @@ export function FotoAmpliada({ fotos, inicio = 0, onFechar, podeExcluir, onExclu
           : <img src={foto.url} alt="" className="max-h-[80dvh] max-w-[85vw] object-contain rounded-lg" />}
         <button disabled={i === fotos.length - 1} onClick={() => setI(n => n + 1)} className="px-2 py-6 text-white/70 hover:text-white disabled:opacity-20 text-2xl">›</button>
       </div>
+    </div>
+  );
+}
+
+// Vídeo guardado no Vercel Blob: toca direto do link (conta uma abertura)
+function VideoBlob({ foto, svc }) {
+  useEffect(() => { blobService.visto(foto.id, quadroDe(svc)); }, [foto.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <video src={foto.blob_url} controls autoPlay playsInline preload="metadata" className="max-h-[75dvh] max-w-[85vw] rounded-lg bg-black" />
+      <a href={foto.blob_url} target="_blank" rel="noreferrer" className="text-xs text-white/80 underline">{foto.nome || 'Abrir vídeo'}{foto.tamanho ? ` · ${fmtTam(foto.tamanho)}` : ''}</a>
     </div>
   );
 }
@@ -173,6 +201,7 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
   const svc = useContext(FotosCtx);
   const [ampliada, setAmpliada] = useState(null);
   const [enviando, setEnviando] = useState(0);
+  const [progresso, setProgresso] = useState(null); // % do vídeo/arquivo grande sendo enviado
   const [erro, setErro] = useState('');
   const input = useRef(null);   // galeria (várias fotos)
   const camera = useRef(null);  // câmera do celular direto
@@ -183,12 +212,29 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
     setErro('');
     const lista = [...(arquivos || [])];
     if (!lista.length) return;
-    const grande = lista.find(a => !a.type.startsWith('image/') && a.size > 2.5 * 1024 * 1024);
-    if (grande) { setErro(`"${grande.name}" passa de 2,5 MB.`); if (input.current) input.current.value = ''; return; }
+    // Vídeo ou arquivo acima de 2,5 MB: vai direto para o armazenamento (Vercel Blob), até 500 MB
+    const vaiProBlob = (a) => a.type.startsWith('video/') || (!a.type.startsWith('image/') && a.size > 2.5 * 1024 * 1024);
+    const grande = lista.find(a => vaiProBlob(a) && a.size > MAX_VIDEO);
+    if (grande) { setErro(`"${grande.name}" passa de 500 MB.`); if (input.current) input.current.value = ''; return; }
     setEnviando(lista.length);
     try {
       for (const a of lista) {
-        if (a.type.startsWith('image/')) {
+        if (vaiProBlob(a)) {
+          setProgresso(0);
+          const ext = (a.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5);
+          const blob = await upload(`${quadroDe(svc)}/${pedido.id}/${campo.id}-${Date.now()}.${ext}`, a, {
+            access: 'public',
+            handleUploadUrl: `${baseURL}/blob/upload`,
+            headers: { Authorization: `Bearer ${localStorage.getItem('boxer_token') || ''}` },
+            clientPayload: JSON.stringify({ tamanho: a.size }),
+            multipart: a.size > 20 * 1024 * 1024,
+            contentType: a.type || 'application/octet-stream',
+            onUploadProgress: (p) => setProgresso(Math.round(p.percentage)),
+          });
+          await svc.enviarFoto(pedido.id, { campo_id: campo.id, nome: a.name,
+            blob: { url: blob.url, pathname: blob.pathname, tamanho: a.size, mime: a.type || blob.contentType, nome: a.name } });
+          setProgresso(null);
+        } else if (a.type.startsWith('image/')) {
           const img = await lerImagem(a);
           await svc.enviarFoto(pedido.id, {
             campo_id: campo.id, imagem: reduzir(img, 1280, 0.75), miniatura: reduzir(img, 320, 0.7), nome: a.name,
@@ -201,7 +247,7 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
       }
       onMudou?.();
     } catch (e) { setErro(e.response?.data?.erro || e.message || 'Erro ao enviar a foto.'); onMudou?.(); }
-    finally { setEnviando(0); if (input.current) input.current.value = ''; if (camera.current) camera.current.value = ''; }
+    finally { setEnviando(0); setProgresso(null); if (input.current) input.current.value = ''; if (camera.current) camera.current.value = ''; }
   }
   async function excluir(foto) {
     if (!confirm(ehArquivo(foto) ? `Excluir o arquivo "${foto.nome || 'arquivo'}" do B-Requisições?` : 'Excluir esta foto do B-Requisições?')) return;
@@ -221,7 +267,7 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
           ))}
           {podeEnviar && (enviando > 0 ? (
             <div className="w-16 h-16 rounded-lg border-2 border-dashed border-[var(--c-borda)] text-[var(--c-suave)] flex flex-col items-center justify-center gap-0.5 text-[10px]">
-              <Spinner size={14} /> {enviando}
+              <Spinner size={14} /> {progresso !== null ? `${progresso}%` : enviando}
             </div>
           ) : (
             <>
@@ -236,8 +282,8 @@ export function FotosCampo({ pedido, campo, valor, podeEnviar, onMudou }) {
               </button>
             </>
           ))}
-          <input ref={camera} type="file" accept="image/*" capture="environment" className="hidden" onChange={e => enviar(e.target.files)} />
-          <input ref={input} type="file" accept="image/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" multiple className="hidden" onChange={e => enviar(e.target.files)} />
+          <input ref={camera} type="file" accept="image/*,video/*" capture="environment" className="hidden" onChange={e => enviar(e.target.files)} />
+          <input ref={input} type="file" accept="image/*,video/*,application/pdf,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" multiple className="hidden" onChange={e => enviar(e.target.files)} />
         </div>
       )}
       {!fotos.length && !podeEnviar && !outros.length && <span className="text-[var(--c-suave)]">—</span>}
