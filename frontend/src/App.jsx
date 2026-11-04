@@ -22,6 +22,7 @@ import NecessidadePecas from './pages/operador/NecessidadePecas';
 import LojinhaBoxer from './pages/operador/LojinhaBoxer';
 import LogisticaCif from './pages/operador/LogisticaCif';
 import Databases from './pages/operador/Databases';
+import Armazenamento from './pages/operador/Armazenamento';
 import RecebimentoImportacao from './pages/operador/RecebimentoImportacao';
 import PedidosOrcamento from './pages/operador/PedidosOrcamento';
 import Inventario       from './pages/operador/Inventario';
@@ -101,6 +102,9 @@ export default function App() {
             } />
             <Route path="/recebimento-importacao" element={
               <RotaTela tela="recebimento_importacao"><RecebimentoImportacao /></RotaTela>
+            } />
+            <Route path="/armazenamento" element={
+              <RotaTela tela="armazenamento"><Armazenamento /></RotaTela>
             } />
             <Route path="/databases" element={
               <RotaTela tela="databases"><Databases /></RotaTela>
