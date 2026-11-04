@@ -172,6 +172,18 @@ router.get('/debug-tratativa', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// Ex: GET /api/erp/debug-campos-lojinha?secret=... — campos configurados da Lojinha e do CIF + um pedido finalizado (só leitura)
+router.get('/debug-campos-lojinha', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const campos = async (t) => (await query(`SELECT id, coluna, tipo, rotulo, lista, pipefy_campo, ativo FROM ${t} ORDER BY coluna, ordem, id`).catch(() => ({ rows: [] }))).rows;
+    const ped = (await query(`SELECT id, status, tipo_envio, transportadora, valor_frete, zen_pedido_id, zen_ordem_separacao_id, finalizado_em, campos, cif_status, cif_valores
+       FROM lojinha_boxer_pedidos WHERE status = 'finalizado' ORDER BY finalizado_em DESC NULLS LAST LIMIT 2`)).rows;
+    const cols = (await query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'lojinha_boxer_pedidos' ORDER BY ordinal_position`)).rows.map(r => r.column_name);
+    res.json({ loj: await campos('loj_campos'), cif: await campos('cif_campos'), colunas: cols, pedidos: ped });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // Ex: GET /api/erp/debug-importar-pecas?secret=...&cursor=&base= — copia a database "Peças em Geral" do Pipefy
 // para a base do B-Requisições (só lê o Pipefy). Chamar de novo com o cursor devolvido até terminou=true.
 router.get('/debug-importar-pecas', async (req, res) => {
