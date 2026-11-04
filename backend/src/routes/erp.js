@@ -10,6 +10,8 @@ import { importarPecasPipefy } from '../controllers/basesController.js';
 import { usoBlob } from '../controllers/blobController.js';
 import { buscarTratativa } from '../integrations/pipefyTratativa.js';
 import { previaEmailFaturamento } from '../controllers/faturamentoLojinha.js';
+import { lerConfigLojinha, registrarMovLoj, garantirEstrutura } from '../controllers/lojinhaController.js';
+import { lerConfigCif } from '../controllers/logisticaCifController.js';
 import { documentosZen } from '../integrations/zenPedidoVenda.js';
 import { SQL_CATEGORIA_USO_CONSUMO } from '../controllers/mrpController.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
@@ -183,6 +185,38 @@ router.get('/debug-campos-lojinha', async (req, res) => {
        FROM lojinha_boxer_pedidos WHERE status = 'finalizado' ORDER BY finalizado_em DESC NULLS LAST LIMIT 2`)).rows;
     const cols = (await query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'lojinha_boxer_pedidos' ORDER BY ordinal_position`)).rows.map(r => r.column_name);
     res.json({ loj: await campos('loj_campos'), cif: await campos('cif_campos'), colunas: cols, pedidos: ped });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Ex: GET /api/erp/mover-coluna-lojinha?secret=...&de=Liberação de Faturamento&para=Concluído[&executar=1]
+// Move em massa os pedidos de uma coluna para outra (Lojinha e Logística CIF, pelo nome da coluna).
+// Sem executar=1 só mostra o que seria movido. Registra no histórico de cada pedido.
+router.get('/mover-coluna-lojinha', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    await garantirEstrutura();
+    const n = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+    const telas = [
+      { tela: 'lojinha', campo: 'status', tipo: 'movido', cfg: await lerConfigLojinha() },
+      { tela: 'cif', campo: 'cif_status', tipo: 'cif_movido', cfg: await lerConfigCif() },
+    ];
+    const out = { colunas: Object.fromEntries(telas.map(t => [t.tela, t.cfg.colunas.map(c => `${c.chave}=${c.nome}`)])), movidos: [] };
+    for (const t of telas) {
+      const de = t.cfg.colunas.find(c => n(c.nome) === n(req.query.de));
+      const para = t.cfg.colunas.find(c => n(c.nome) === n(req.query.para));
+      if (!de || !para) continue;
+      const ps = (await query(`SELECT * FROM lojinha_boxer_pedidos WHERE ${t.campo} = $1 ORDER BY id`, [de.chave])).rows;
+      for (const p of ps) {
+        out.movidos.push({ tela: t.tela, id: p.id, pedido: p.numero_pedido, de: de.nome, para: para.nome });
+        if (req.query.executar !== '1') continue;
+        const extra = t.tela === 'lojinha' ? `, finalizado_em = CASE WHEN $2::text = 'finalizado' THEN COALESCE(finalizado_em, NOW()) ELSE NULL END` : '';
+        const r = await query(`UPDATE lojinha_boxer_pedidos SET ${t.campo} = $2::text${extra} WHERE id = $1 AND ${t.campo} = $3 RETURNING *`, [p.id, para.chave, de.chave]);
+        if (r.rows[0]) await registrarMovLoj(r.rows[0], t.tipo, { de: de.chave, para: para.chave, origem: 'sistema',
+          descricao: `${t.tela === 'cif' ? 'Logística CIF: m' : 'M'}ovido em massa de ${de.nome} para ${para.nome} (pedido do admin)` });
+      }
+    }
+    out.executado = req.query.executar === '1';
+    res.json(out);
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
