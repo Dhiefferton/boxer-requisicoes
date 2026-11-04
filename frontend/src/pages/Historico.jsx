@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { ClipboardList, ChevronRight, Calendar, Package, User, Building2 } from 'lucide-react';
 import { requisicoesService } from '../services/api';
 import { StatusBadge, Spinner, Empty } from '../components/ui';
+import { NomeTela } from '../utils/nomesTelas';
 
 const STATUS_OPTS = [
   { value: '',             label: 'Todos'        },
@@ -51,7 +52,7 @@ export default function Historico() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-bold text-[var(--c-texto)]">Histórico de Requisições</h1>
+        <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="historico" padrao="Histórico de Requisições" /></h1>
         <p className="text-sm text-[var(--c-suave)] mt-0.5">Acompanhe o status das suas solicitações</p>
       </div>
 

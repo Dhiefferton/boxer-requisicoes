@@ -9,6 +9,7 @@ import { Spinner, Empty } from '../components/ui';
 import { Package } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import CartDrawer from '../components/cart/CartDrawer';
+import { NomeTela } from '../utils/nomesTelas';
 
 export default function Catalogo() {
   const [materiais,   setMateriais]   = useState([]);
@@ -62,7 +63,7 @@ export default function Catalogo() {
       {/* ── Título + botão carrinho ─────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)]">Catálogo de Materiais</h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="catalogo" padrao="Catálogo de Materiais" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {loading ? 'Carregando…' : `${total} ${total === 1 ? 'item disponível' : 'itens disponíveis'}`}
           </p>
