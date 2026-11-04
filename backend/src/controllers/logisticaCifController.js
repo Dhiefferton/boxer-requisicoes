@@ -62,7 +62,7 @@ export async function listarPedidosCif(req, res, next) {
     const cfg = await cfgCif.ler();
     const arquivadas = cfg.colunas.filter(c => c.arquivada).map(c => c.chave);
     const r = await query(
-      `SELECT t.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome) ORDER BY f.id), '[]'::json)
+      `SELECT t.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome, 'blob_url', f.blob_url, 'tamanho', f.tamanho) ORDER BY f.id), '[]'::json)
                       FROM loj_fotos f WHERE f.pedido_id = t.id) AS fotos_locais
          FROM ((SELECT * FROM lojinha_boxer_pedidos WHERE cif_status IS NOT NULL AND NOT (cif_status = ANY($1::text[])))
                UNION ALL

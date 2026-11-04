@@ -19,6 +19,7 @@ import {
 import { lerConfigOrcamento, idCampoConfig } from './configOrcamentoController.js';
 import { exigidoAgora } from './configQuadro.js';
 import { temBotao } from '../middlewares/telas.js';
+import { registrarArquivoBlob, excluirArquivoBlob, lerEnvioBlob } from './blobController.js';
 
 const BASE_SELECT = `
   SELECT
@@ -32,7 +33,7 @@ const BASE_SELECT = `
     p.campos_editados, p.pipefy_fase,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome,
-    (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome) ORDER BY f.id), '[]'::json)
+    (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome, 'blob_url', f.blob_url, 'tamanho', f.tamanho) ORDER BY f.id), '[]'::json)
        FROM orc_fotos f WHERE f.pedido_id = p.id) AS fotos_locais
   FROM pedidos_orcamento p
   LEFT JOIN usuarios u ON u.id = p.criado_por
@@ -90,7 +91,9 @@ function garantirColunas() {
         );
         CREATE INDEX IF NOT EXISTS idx_orc_fotos_pedido ON orc_fotos (pedido_id);
         ALTER TABLE orc_fotos ADD COLUMN IF NOT EXISTS nome VARCHAR(200);
-        ALTER TABLE orc_fotos ALTER COLUMN mime TYPE VARCHAR(120);`);
+        ALTER TABLE orc_fotos ALTER COLUMN mime TYPE VARCHAR(120);
+        ALTER TABLE orc_fotos ADD COLUMN IF NOT EXISTS blob_url TEXT;
+        ALTER TABLE orc_fotos ADD COLUMN IF NOT EXISTS tamanho BIGINT;`);
       // "Concluído - Não Liberado" é a fase depois da manutenção (conserto
       // pronto, aguardando liberação) — não é recusa. Cards que tiveram a
       // aprovação trocada por "Não liberado" voltam para a aprovação do Pipefy.
@@ -1432,9 +1435,25 @@ export async function enviarFotoOrcamento(req, res, next) {
     await garantirColunas();
     const id = parseInt(req.params.id);
     const campo = String(req.body?.campo_id || '').trim().slice(0, 120);
+    if (!campo) return res.status(400).json({ erro: 'Campo da foto não informado.' });
+    // Vídeo / arquivo grande: já foi enviado direto ao Vercel Blob; aqui só guarda o link
+    if (req.body?.blob) {
+      const b = lerEnvioBlob(req.body.blob);
+      if (!b) return res.status(400).json({ erro: 'Envio do arquivo inválido.' });
+      const p = await query(`SELECT id FROM pedidos_orcamento WHERE id = $1`, [id]);
+      if (!p.rows[0]) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+      const r = await query(
+        `INSERT INTO orc_fotos (pedido_id, campo_id, imagem, mime, usuario_id, usuario_nome, nome, blob_url, tamanho)
+         VALUES ($1,$2,'\\x'::bytea,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        [id, campo, b.mime, req.usuario?.id || null, req.usuario?.nome || null, b.nome, b.url, b.tamanho]);
+      await registrarArquivoBlob({ ...b, quadro: 'orc', pedido_id: id, campo_id: campo, foto_id: r.rows[0].id, usuario: req.usuario });
+      await registrarMovimento(id, 'foto_adicionada', {
+        usuario: req.usuario, descricao: `${b.mime.startsWith('video/') ? 'Vídeo' : 'Arquivo'} adicionado no B-Requisições (${campo})`, detalhes: { foto_id: r.rows[0].id, campo },
+      });
+      return res.status(201).json({ id: r.rows[0].id });
+    }
     const img = dataUrlParaBuffer(req.body?.imagem);
     const mini = dataUrlParaBuffer(req.body?.miniatura);
-    if (!campo) return res.status(400).json({ erro: 'Campo da foto não informado.' });
     if (!img) return res.status(400).json({ erro: 'Arquivo inválido. Envie foto, PDF, Word, Excel ou texto.' });
     if (img.buf.length > limiteAnexo(img)) return res.status(413).json({ erro: img.mime.startsWith('image/') ? 'Foto muito grande.' : 'Arquivo muito grande (máximo 2,5 MB).' });
     const p = await query(`SELECT id FROM pedidos_orcamento WHERE id = $1`, [id]);
@@ -1468,13 +1487,14 @@ export async function verFotoOrcamento(req, res, next) {
 export async function excluirFotoOrcamento(req, res, next) {
   try {
     await garantirColunas();
-    const r = await query(`SELECT id, pedido_id, campo_id, usuario_id FROM orc_fotos WHERE id = $1`, [parseInt(req.params.fotoId) || 0]);
+    const r = await query(`SELECT id, pedido_id, campo_id, usuario_id, blob_url FROM orc_fotos WHERE id = $1`, [parseInt(req.params.fotoId) || 0]);
     const f = r.rows[0];
     if (!f) return res.status(404).json({ erro: 'Foto não encontrada.' });
     if (req.usuario?.perfil !== 'admin' && f.usuario_id !== req.usuario?.id) {
       return res.status(403).json({ erro: 'Só o administrador ou quem enviou a foto pode excluir.' });
     }
     await query(`DELETE FROM orc_fotos WHERE id = $1`, [f.id]);
+    if (f.blob_url) await excluirArquivoBlob(f.blob_url);
     await registrarMovimento(f.pedido_id, 'foto_excluida', {
       usuario: req.usuario, descricao: `Foto excluída no B-Requisições (${f.campo_id})`, detalhes: { foto_id: f.id, campo: f.campo_id },
     });
