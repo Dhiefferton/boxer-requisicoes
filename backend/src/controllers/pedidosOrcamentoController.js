@@ -17,6 +17,7 @@ import {
   retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen, atualizarItensPedidoZen, buscarClienteZen,
 } from '../integrations/zenPedidoVenda.js';
 import { lerConfigOrcamento, idCampoConfig } from './configOrcamentoController.js';
+import { liberarFaturamentoOrcamento, avisarFaturamentoOrcamento, ehLiberacaoFaturamentoOrc } from './faturamentoOrcamento.js';
 import { exigidoAgora } from './configQuadro.js';
 import { temBotao } from '../middlewares/telas.js';
 import { registrarArquivoBlob, excluirArquivoBlob, lerEnvioBlob } from './blobController.js';
@@ -344,6 +345,7 @@ const criarSchema = z.object({
 export async function listarPedidos(req, res, next) {
   try {
     await garantirColunas();
+    await avisarFaturamentoOrcamento(); // e-mails ao faturamento que falharam (tenta de novo)
     const result = await query(`${BASE_SELECT} WHERE p.status != 'cancelado' ORDER BY p.created_at DESC`);
     res.json({ pedidos: result.rows });
   } catch (err) { next(err); }
@@ -482,6 +484,8 @@ export async function moverPedido(req, res, next) {
         ? `${NOME_STATUS[status]} — romaneio #${detalhesMov.romaneio} fechado e nota fiscal #${detalhesMov.nota} criada no Zen`
         : `Movido de ${nomeCol(pedido.status)} para ${nomeCol(status)}`,
     });
+    // Chegou na "Liberação de Faturamento": e-mails ao faturamento (nunca lança erro)
+    if (status !== pedido.status && ehLiberacaoFaturamentoOrc(nomeCol(status))) await liberarFaturamentoOrcamento(pedido.id, req.usuario);
     // Sem o Pipefy: entrou em Requisitar Peças -> cria o pedido no Zen e vai para Em Separação
     // (se o Zen falhar, o card fica em Requisitar Peças com o erro na tela)
     if (!PIPEFY_ATIVO && status === 'solicitacao' && pedido.status !== 'solicitacao') {
@@ -1199,6 +1203,10 @@ async function executarSincronizacao(req, res, next) {
               + (fimZen ? ` — romaneio #${fimZen.romaneioId} fechado e nota fiscal #${fimZen.notaId} criada no Zen` : ''),
             detalhes: fimZen ? { romaneio: fimZen.romaneioId, nota: fimZen.notaId } : null,
           });
+          {
+            const nomeAlvo = ((await lerConfigOrcamento().catch(() => null))?.colunas || []).find(c => c.chave === alvo)?.nome || NOME_STATUS[alvo];
+            if (ehLiberacaoFaturamentoOrc(nomeAlvo)) await liberarFaturamentoOrcamento(p.id, req.usuario);
+          }
         }
       } catch (err) {
         console.error('⚠️ Não consegui consultar a fase dos cards no Pipefy:', err.message);

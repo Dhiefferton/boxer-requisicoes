@@ -27,7 +27,7 @@ const garantir = () => (colunas ||= query(`
 const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
 // CNPJ da transportadora: procura nas Databases do B-Requisições (coluna "CNPJ")
-async function cnpjTransportadora(nome) {
+export async function cnpjTransportadora(nome) {
   if (!nome) return null;
   try {
     const r = await query(
