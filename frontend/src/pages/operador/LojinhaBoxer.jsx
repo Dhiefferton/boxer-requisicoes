@@ -395,7 +395,7 @@ export function InfoLiberacao({ p, itens }) {
 // Excluir o pedido (Zen e Lojinha) — usado no card e no card aberto
 async function excluirPedido(p) {
   const partes = [
-    p.zen_pedido_id && `o pedido ${p.zen_pedido_id} no Zen (desfazendo a ordem de separação ${p.zen_ordem_separacao_id || ''})`,
+    p.zen_pedido_id && p.origem !== 'zen' && `o pedido ${p.zen_pedido_id} no Zen (desfazendo a ordem de separação ${p.zen_ordem_separacao_id || ''})`,
     'o pedido na Lojinha',
   ].filter(Boolean);
   if (!window.confirm(`Excluir o pedido ${p.numero_pedido}?\n\nIsso vai excluir ${partes.join(', ')}.\nNão dá para desfazer.`)) return false;
@@ -690,6 +690,43 @@ function NovoPedido({ config, onFechar, onSalvo }) {
   const [erroLI, setErroLI] = useState('');
   const ultimaBusca = useRef('');
   const skuRef = useRef(null);
+  // Lojinha Faturada: pedido de venda que já existe no Zen
+  const [modo, setModo] = useState('li'); // 'li' (Loja Integrada) | 'zen' (Lojinha Faturada)
+  const [numeroZen, setNumeroZen] = useState('');
+  const [buscandoZen, setBuscandoZen] = useState(false);
+  const [infoZen, setInfoZen] = useState(null);
+  const [erroZen, setErroZen] = useState('');
+  const faturada = modo === 'zen';
+  function trocarModo(m) {
+    if (m === modo) return;
+    setModo(m); setInfoZen(null); setErroZen(''); setInfoLI(null); setErroLI('');
+    setDocumento(''); setCliente(null); setErroCliente(''); setItens([]); setFrete(''); setNumero('');
+    setVendedoraId(''); setTipo(''); setTransportadora(''); setAutorizado(false); setData(hojeISO()); setErro('');
+  }
+  async function importarZen(e) {
+    e?.preventDefault();
+    const n = soDigitos(numeroZen);
+    if (!n) { setErroZen('Informe o número do pedido de venda do Zen.'); return; }
+    setBuscandoZen(true); setErroZen(''); setInfoZen(null);
+    try {
+      const { data: r } = await lojinhaService.zenPedido(n);
+      const p = r.pedido;
+      const avisos = [];
+      if (p.duplicado) avisos.push(`Este pedido já foi lançado aqui (status: ${p.duplicado.status}).`);
+      if (p.status_zen === 'PREPARING') avisos.push('O pedido ainda está em preparação no Zen — finalize a preparação lá antes de salvar.');
+      if (!p.tipo_envio) avisos.push(`Forma de envio não identificada${p.transportadora_zen ? ` (no Zen: ${p.transportadora_zen})` : ''} — escolha abaixo.`);
+      setNumero(p.numero);
+      setDocumento(mascararDocumento(p.documento || ''));
+      setCliente(p.cliente); setErroCliente(''); setBuscandoCliente(false);
+      if (p.data) setData(p.data);
+      setItens(p.itens);
+      setFrete(p.valor_frete ? p.valor_frete.toFixed(2).replace('.', ',') : '');
+      setVendedoraId(p.vendedora?.id ? String(p.vendedora.id) : '');
+      setTipo(p.tipo_envio || ''); setTransportadora(p.transportadora || '');
+      setInfoZen({ ...p, busca: n, avisos });
+    } catch (e2) { setErroZen(e2.response?.data?.erro || 'Erro ao buscar o pedido no Zen.'); }
+    finally { setBuscandoZen(false); }
+  }
 
   // Mostra a descrição do SKU enquanto digita
   useEffect(() => {
@@ -783,7 +820,21 @@ function NovoPedido({ config, onFechar, onSalvo }) {
     finally { setBuscandoSku(false); }
   }
 
+  async function salvarFaturada() {
+    setErro('');
+    if (!infoZen) { setErro('Busque o pedido de venda no Zen.'); return; }
+    if (!tipo) { setErro('Escolha o tipo de envio.'); return; }
+    if (tipo === 'Transportadora' && !transportadora.trim()) { setErro('Escolha a transportadora.'); return; }
+    setSalvando(true);
+    try {
+      const { data: r } = await lojinhaService.criarFaturada({ numero: infoZen.busca, tipo_envio: tipo, transportadora: transportadora.trim(), assistente_autorizado: autorizado });
+      onSalvo(r.pedido);
+    } catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar o pedido.'); }
+    finally { setSalvando(false); }
+  }
+
   async function salvar() {
+    if (faturada) return salvarFaturada();
     setErro('');
     if (!cliente) { setErro('Busque o cliente pelo CPF/CNPJ.'); return; }
     if (!itens.length) { setErro('Inclua pelo menos um produto.'); return; }
@@ -828,8 +879,36 @@ function NovoPedido({ config, onFechar, onSalvo }) {
         </div>
 
         <div className="p-4 sm:p-5 space-y-5">
+          {/* Origem do pedido */}
+          <div className="grid grid-cols-2 gap-2 max-w-md">
+            <button type="button" onClick={() => trocarModo('li')} className={botao(!faturada)}><Search size={15} /> Loja Integrada</button>
+            <button type="button" onClick={() => trocarModo('zen')} className={botao(faturada)}><BadgeCheck size={15} /> Lojinha Faturada</button>
+          </div>
+
+          {faturada && (
+            <div className="rounded-xl border border-[var(--c-destaque)] p-3">
+              <label className={rotulo}>Nº do pedido de venda (Zen)</label>
+              <form onSubmit={importarZen} className="flex gap-2 max-w-md">
+                <input value={numeroZen} onChange={e => { setNumeroZen(e.target.value); setErroZen(''); }} inputMode="numeric" autoFocus
+                  placeholder="Ex.: 57182" className={campo} />
+                <button type="submit" disabled={buscandoZen}
+                  className="flex items-center gap-1.5 px-4 rounded-xl bg-[var(--c-destaque)] text-white text-sm font-semibold disabled:opacity-50 shrink-0">
+                  {buscandoZen ? <Spinner size={14} /> : <Search size={15} />} Buscar no Zen
+                </button>
+              </form>
+              <p className="text-[11px] text-[var(--c-suave)] mt-1.5">Pedido já lançado no Zen: puxa cliente, data, vendedora, produtos, preços e frete. Confira o envio e salve — o card usa esse pedido (não cria outro) e a ordem de separação dele.</p>
+              {erroZen && <p className="text-xs text-red-400 mt-1.5">{erroZen}</p>}
+              {infoZen && (
+                <div className="mt-2 text-xs space-y-1">
+                  <p className="text-green-400 flex items-center gap-1.5"><Check size={13} /> Pedido de venda #{infoZen.zen_pedido_id} carregado — {infoZen.status_zen}{infoZen.ordem_separacao ? ` — ordem de separação #${infoZen.ordem_separacao}` : ' — sem ordem de separação (será gerada)'}</p>
+                  {infoZen.avisos.map((a, k) => <p key={k} className="text-amber-400 flex items-start gap-1.5"><AlertTriangle size={13} className="shrink-0 mt-px" /> {a}</p>)}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 0. Pedido da Loja Integrada */}
-          <div className="rounded-xl border border-[var(--c-destaque)] p-3">
+          {!faturada && <div className="rounded-xl border border-[var(--c-destaque)] p-3">
             <label className={rotulo}>Número do pedido da lojinha</label>
             <form onSubmit={importarLI} className="flex gap-2 max-w-md">
               <input value={numero} onChange={e => { setNumero(e.target.value); setErroLI(''); }} inputMode="numeric" autoFocus
@@ -847,16 +926,16 @@ function NovoPedido({ config, onFechar, onSalvo }) {
                 {infoLI.avisos.map((a, k) => <p key={k} className="text-amber-400 flex items-start gap-1.5"><AlertTriangle size={13} className="shrink-0 mt-px" /> {a}</p>)}
               </div>
             )}
-          </div>
+          </div>}
 
           {/* 1. Cliente */}
           <div className="grid gap-4 md:grid-cols-[1fr_2fr]">
             <div>
               <label className={rotulo}>CPF / CNPJ do cliente</label>
               <div className="flex gap-2">
-                <input value={documento} onChange={e => mudarDocumento(e.target.value)} inputMode="numeric"
-                  placeholder="000.000.000-00" className={campo} />
-                <button type="button" onClick={() => buscarCliente()} disabled={buscandoCliente}
+                <input value={documento} onChange={e => mudarDocumento(e.target.value)} inputMode="numeric" disabled={faturada}
+                  placeholder="000.000.000-00" className={`${campo} disabled:opacity-70`} />
+                <button type="button" onClick={() => buscarCliente()} disabled={buscandoCliente || faturada}
                   className="px-3 rounded-xl bg-[var(--c-borda)] text-[var(--c-texto)] disabled:opacity-50" title="Buscar no Zen">
                   {buscandoCliente ? <Spinner size={15} /> : <Search size={16} />}
                 </button>
@@ -876,24 +955,26 @@ function NovoPedido({ config, onFechar, onSalvo }) {
               {erroCliente && <p className="text-xs text-red-400 mt-1">{erroCliente}</p>}
             </div>
           </div>
-          <label className="flex items-center gap-2.5 w-fit cursor-pointer select-none text-sm text-[var(--c-texto)]">
+          {!faturada && <label className="flex items-center gap-2.5 w-fit cursor-pointer select-none text-sm text-[var(--c-texto)]">
             <input type="checkbox" checked={autorizado} onChange={e => setAutorizado(e.target.checked)}
               className="w-4 h-4 accent-[var(--c-destaque)]" />
             Cliente é <b>Assistente Autorizado</b>
-          </label>
+          </label>}
 
           {/* 2. Data / 4. Nº pedido / 5. Vendedora */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className={rotulo}>Data</label>
-              <input type="date" value={data} onChange={e => setData(e.target.value)} className={campo} />
+              <input type="date" value={data} onChange={e => setData(e.target.value)} disabled={faturada} className={`${campo} disabled:opacity-70`} />
             </div>
             <div>
               <label className={rotulo}>Vendedora</label>
-              <select value={vendedoraId} onChange={e => setVendedoraId(e.target.value)} className={campo}>
+              {faturada
+                ? <div className={`${campo} min-h-[42px] opacity-70`}>{infoZen?.vendedora?.nome || 'Vem do pedido no Zen'}</div>
+                : <select value={vendedoraId} onChange={e => setVendedoraId(e.target.value)} className={campo}>
                 <option value="">{config.vendedoras.length ? 'Selecione…' : 'Carregando do Zen…'}</option>
                 {config.vendedoras.map(v => <option key={v.id} value={v.id}>{v.nome}</option>)}
-              </select>
+              </select>}
               {config.erro_vendedoras && <p className="text-xs text-red-400 mt-1">{config.erro_vendedoras}</p>}
             </div>
           </div>
@@ -901,7 +982,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
           {/* 3. Produtos */}
           <div>
             <label className={rotulo}>Produtos</label>
-            <form onSubmit={incluirProduto} className="grid grid-cols-[70px_1fr_auto] sm:grid-cols-[1fr_80px_130px_auto] gap-2">
+            {!faturada && <form onSubmit={incluirProduto} className="grid grid-cols-[70px_1fr_auto] sm:grid-cols-[1fr_80px_130px_auto] gap-2">
               <input ref={skuRef} value={sku} onChange={e => { setSku(e.target.value); setErroSku(''); }} placeholder="SKU" className={`${campo} font-mono col-span-3 sm:col-span-1`} />
               <input value={qtd} onChange={e => setQtd(e.target.value)} inputMode="decimal" className={`${campo} text-center`} title="Quantidade" placeholder="Qtd" />
               <input value={preco} onChange={e => setPreco(e.target.value)} inputMode="decimal" className={`${campo} text-right`} title="Preço unitário (R$)" placeholder="Preço R$" />
@@ -909,7 +990,8 @@ function NovoPedido({ config, onFechar, onSalvo }) {
                 className="flex items-center justify-center gap-1.5 px-4 rounded-xl bg-[var(--c-borda)] text-[var(--c-texto)] text-sm font-semibold disabled:opacity-50 shrink-0">
                 {buscandoSku ? <Spinner size={14} /> : <Plus size={15} />} Incluir
               </button>
-            </form>
+            </form>}
+            {faturada && !itens.length && <p className="text-xs text-[var(--c-suave)]">Os produtos vêm do pedido no Zen.</p>}
             {previa && previa.sku === sku.trim() && (
               <div className="mt-1.5 text-xs flex items-center gap-2 min-h-[18px]">
                 {previa.carregando ? <><Spinner size={12} /> <span className="text-[var(--c-suave)]">Buscando no catálogo…</span></>
@@ -927,10 +1009,10 @@ function NovoPedido({ config, onFechar, onSalvo }) {
                   <div key={i.codigo} className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-0.5 px-3 py-2 text-sm">
                     <span className="font-mono font-semibold text-[var(--c-texto)] shrink-0">{i.codigo}</span>
                     <span className="basis-[calc(100%-5rem)] sm:basis-auto flex-1 min-w-0 truncate text-[var(--c-texto)]">{i.descricao}</span>
-                    <span className="text-[11px] text-[var(--c-suave)] shrink-0 hidden sm:inline">saldo {fmtQtd(i.saldo)}</span>
+                    {i.saldo != null && <span className="text-[11px] text-[var(--c-suave)] shrink-0 hidden sm:inline">saldo {fmtQtd(i.saldo)}</span>}
                     <span className="shrink-0 text-[var(--c-texto)]">{fmtQtd(i.quantidade)} {i.unidade} × {fmtR$(i.preco)}</span>
                     <b className="shrink-0 w-24 text-right text-[var(--c-texto)]">{fmtR$(totalItens([i]) - valorDesconto([i], autorizado))}</b>
-                    <button onClick={() => setItens(l => l.filter(x => x.codigo !== i.codigo))} className="p-1 text-[var(--c-suave)] hover:text-red-400" title="Remover"><Trash2 size={14} /></button>
+                    {!faturada && <button onClick={() => setItens(l => l.filter(x => x.codigo !== i.codigo))} className="p-1 text-[var(--c-suave)] hover:text-red-400" title="Remover"><Trash2 size={14} /></button>}
                   </div>
                 ))}
                 {autorizado && <div className="flex justify-between px-3 py-2 text-sm text-green-400"><span>Desconto Assistente Autorizado ({DESC_AUTORIZADO}% em cada peça)</span><b>− {fmtR$(valorDesconto(itens, true))}</b></div>}
@@ -976,7 +1058,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
           <div className="grid gap-4 sm:grid-cols-[200px_1fr] items-end">
             <div>
               <label className={rotulo}>Valor do frete (R$)</label>
-              <input value={frete} onChange={e => setFrete(e.target.value)} inputMode="decimal" placeholder="0,00" className={`${campo} text-right`} />
+              <input value={frete} onChange={e => setFrete(e.target.value)} inputMode="decimal" placeholder="0,00" disabled={faturada} className={`${campo} text-right disabled:opacity-70`} />
             </div>
             <div className="text-right text-sm text-[var(--c-suave)] pb-2.5">
               Total do pedido <b className="text-lg text-[var(--c-texto)] ml-2">{fmtR$(totalItens(itens) - valorDesconto(itens, autorizado) + (numBR(frete) >= 0 ? numBR(frete) : 0))}</b>
@@ -988,7 +1070,7 @@ function NovoPedido({ config, onFechar, onSalvo }) {
             <button onClick={onFechar} className="px-4 py-2.5 rounded-xl border border-[var(--c-borda)] text-sm text-[var(--c-texto)]">Cancelar</button>
             <button onClick={salvar} disabled={salvando}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--c-destaque)] text-white text-sm font-semibold disabled:opacity-50">
-              {salvando ? <><Spinner size={14} /> Criando no Zen…</> : <><Check size={15} /> Salvar na Entrada</>}
+              {salvando ? <><Spinner size={14} /> {faturada ? 'Ligando ao Zen…' : 'Criando no Zen…'}</> : <><Check size={15} /> Salvar na Entrada</>}
             </button>
           </div>
         </div>
