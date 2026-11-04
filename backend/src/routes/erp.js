@@ -8,6 +8,7 @@ import { fasesDosCards } from '../integrations/pipefyLojinha.js';
 import { query } from '../config/db.js';
 import { importarPecasPipefy } from '../controllers/basesController.js';
 import { usoBlob } from '../controllers/blobController.js';
+import { buscarTratativa } from '../integrations/pipefyTratativa.js';
 import { SQL_CATEGORIA_USO_CONSUMO } from '../controllers/mrpController.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
 import { sincronizarSaidas, garantirRelatorioSemanal, compararPlanilhaZen } from '../integrations/marketplaceSaidas.js';
@@ -157,7 +158,7 @@ router.get('/debug-tratativa', async (req, res) => {
        FROM pedidos_orcamento WHERE referencia ILIKE $1 OR cliente_nome ILIKE $1 ORDER BY id DESC LIMIT 1`, [`%${req.query.busca || ''}%`])).rows[0];
     if (!p) return res.json({ achou: false });
     let pipe = null;
-    if (p.pipefy_card_id) {
+    if (p.pipefy_card_id && req.query.ver !== '1') {
       try {
         pipe = await pipefyQueryPlanilhas(`query($id: ID!) { card(id: $id) { id title pipe { id name }
           fields { name value array_value field { id type } }
@@ -165,7 +166,9 @@ router.get('/debug-tratativa', async (req, res) => {
           child_relations { name cards { id title pipe { id name } } } } }`, { id: String(p.pipefy_card_id) });
       } catch (e) { pipe = { erro: e.message }; }
     }
-    res.json({ pedido: p, pipefy: pipe });
+    let tratativa = null;
+    if (req.query.ver === '1' && p.pipefy_card_id) { try { tratativa = await buscarTratativa(p.pipefy_card_id); } catch (e) { tratativa = { erro: e.message }; } }
+    res.json(req.query.ver === '1' ? { pedido_id: p.id, tratativa } : { pedido: p, pipefy: pipe });
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
