@@ -107,9 +107,9 @@ export default function LogisticaCif() {
     <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-3.1rem)]">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="logistica_cif" padrao="Logística CIF (Enviar)" /></h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="logistica_cif" padrao="Garantia - Boxer Soldas" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">
-            {ativos} pedido{ativos !== 1 ? 's' : ''} · os pedidos finalizados na Lojinha entram aqui sozinhos
+            {ativos} pedido{ativos !== 1 ? 's' : ''}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -161,13 +161,13 @@ export default function LogisticaCif() {
           onHistorico={() => setHistorico({ id: aberto.id, nome: `Pedido ${aberto.numero_pedido} — ${aberto.cliente_nome}` })} />
       )}
       {verConfig && botoes.configurar && (
-        <ConfigOrcamento servico={SERVICO_CONFIG} titulo="Configurações — Logística CIF (Enviar)" semInicio
+        <ConfigOrcamento servico={SERVICO_CONFIG} titulo="Configurações — Garantia - Boxer Soldas" semInicio
           colunaInicial={typeof verConfig === 'string' ? verConfig : null}
           onFechar={() => setVerConfig(false)} onSalvo={(data) => setCfg(data)} />
       )}
       {(verMov || historico) && (
         <PainelMovimentacao buscar={buscarMovimentos} nomeStatus={nomeStatus} corStatus={corStatus}
-          titulo="Movimentação — Lojinha e Logística CIF" arquivo="movimentacao-logistica-cif" pedidoInicial={historico}
+          titulo="Movimentação — Lojinha e Garantia" arquivo="movimentacao-logistica-cif" pedidoInicial={historico}
           onFechar={() => { setVerMov(false); setHistorico(null); }} />
       )}
     </div>
@@ -187,7 +187,7 @@ function CardCif({ p, campos, movendo, onAbrir, onArrastar, onFimArraste }) {
       className={`${movendo ? 'opacity-50 pointer-events-none ' : ''}p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-1.5 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors`}>
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
-        <span className="text-[11px] text-[var(--c-suave)]" title="Entrou na Logística CIF">{fmtData(p.cif_entrou_em)}</span>
+        <span className="text-[11px] text-[var(--c-suave)]" title="Entrou na Garantia">{fmtData(p.cif_entrou_em)}</span>
       </div>
       {p.zen_ordem_separacao_id && <div onClick={parar}><InfoLiberacao p={p} itens={Array.isArray(p.itens) ? p.itens : []} /></div>}
       <EtiquetasDoCard campos={campos} valorDe={(id) => valores[pref(id)]} />
@@ -305,7 +305,7 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
           <div className="lg:w-[38%] lg:min-w-[340px] lg:overflow-y-auto border-b lg:border-b-0 lg:border-r border-[var(--c-borda)] p-5 space-y-4">
             <div className="pb-3 border-b border-[var(--c-borda)]">
               <p className="text-lg font-bold font-mono text-[var(--c-texto)]">Pedido {p.numero_pedido}</p>
-              <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-borda)] text-[var(--c-suave)]">Lojinha Boxer → Logística CIF</span>
+              <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-borda)] text-[var(--c-suave)]">Lojinha Boxer → Garantia</span>
             </div>
             <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4 space-y-1.5">
               <p className="text-sm font-bold text-[var(--c-texto)] mb-1">Dados do pedido</p>
@@ -328,7 +328,7 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
                 </CaixaFase>
               );
             })}
-            {anteriores.length > 0 && <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)] pt-1">Logística CIF</p>}
+            {anteriores.length > 0 && <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)] pt-1">Garantia</p>}
             {anteriores.map(g => {
               const k = `cif-${g.col.status}`;
               const aberta = abertas.has(k);
