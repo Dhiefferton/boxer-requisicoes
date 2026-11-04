@@ -12,7 +12,7 @@ export function emailConfigurado() {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 }
 
-export async function enviarEmail({ para, assunto, html, texto }) {
+export async function enviarEmail({ para, assunto, html, texto, responderPara }) {
   if (!emailConfigurado()) {
     throw new Error('Envio de e-mail não configurado (RESEND_API_KEY / EMAIL_FROM).');
   }
@@ -28,6 +28,7 @@ export async function enviarEmail({ para, assunto, html, texto }) {
       subject: assunto,
       html,
       text:    texto,
+      ...(responderPara ? { reply_to: responderPara } : {}),
     }),
   });
   if (!resp.ok) {

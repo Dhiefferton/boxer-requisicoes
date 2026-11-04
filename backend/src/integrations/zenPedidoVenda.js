@@ -283,6 +283,22 @@ export async function consultarOrdemSeparacao(ordemId) {
   };
 }
 
+/** Romaneio de saída da ordem de separação (e-mail ao faturamento da Lojinha). Só leitura. */
+export async function romaneioDaOrdem(ordemId) {
+  const ordem = await zen('GET', `/material/pickingOrder/${ordemId}`);
+  const id = ordem?.outgoingList?.id;
+  if (!id) return null;
+  let r = null;
+  try { r = await zen('GET', `/material/outgoingList/${id}`); } catch { r = null; }
+  const num = (...vs) => { for (const v of vs) { const n = Number(v); if (v != null && v !== '' && Number.isFinite(n) && n > 0) return n; } return null; };
+  return {
+    id,
+    numero: r?.number ?? r?.code ?? id,
+    peso: num(r?.grossWeight, r?.totalGrossWeight, r?.weight, r?.totalWeight, r?.netWeight),
+    volumes: num(r?.volumes, r?.volumeQuantity, r?.volumesQuantity, r?.packageQuantity, r?.quantityVolumes),
+  };
+}
+
 /**
  * Botão "Mover p/ Finalizado": finaliza o romaneio de saída e cria a nota
  * fiscal (fica em preparação no Zen pra alguém revisar e emitir).
