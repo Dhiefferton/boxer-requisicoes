@@ -76,6 +76,9 @@ async function zen(metodo, caminho, corpo) {
 
 const q = (expr) => encodeURIComponent(expr);
 
+/** Só leitura (diagnóstico): GET no Zen */
+export const zenLeitura = (caminho) => zen('GET', caminho);
+
 async function buscarEmbalagem(codigo) {
   const lista = await zen('GET', `/catalog/product/productPacking?q=${q(`code=="${codigo}"`)}&max=2`);
   if (!Array.isArray(lista) || lista.length === 0) {
