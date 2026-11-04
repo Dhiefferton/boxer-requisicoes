@@ -82,6 +82,11 @@ async function zen(metodo, caminho, corpo) {
     const msg = dados?.message || dados?.error || dados?.errors?.[0]?.message || texto.slice(0, 300) || resp.status;
     throw new Error(`ZenERP ${metodo} ${caminho.split('?')[0]} → ${resp.status}: ${msg}`);
   }
+  // Registro que não existe (ex.: pedido excluído no Zen): o Zen responde 200 sem corpo.
+  // Trata como 404 — quem chama já sabe lidar ("não existe mais").
+  if (metodo === 'GET' && dados == null && /^\/[\w/]+\/\d+$/.test(caminho)) {
+    throw new Error(`ZenERP GET ${caminho} → 404: não existe mais no Zen`);
+  }
   return dados;
 }
 
