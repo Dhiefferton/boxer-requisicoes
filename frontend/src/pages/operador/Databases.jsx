@@ -13,6 +13,7 @@ import { basesService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { mexeTela } from '../../utils/telas';
+import { NomeTela } from '../../utils/nomesTelas';
 
 const TIPOS = [
   { valor: 'texto', nome: 'Texto' },
@@ -140,7 +141,7 @@ export default function Databases() {
     <div className="space-y-4 xl:h-[calc(100dvh-3.1rem)] xl:flex xl:flex-col">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)] flex items-center gap-2"><Database size={18} /> Databases</h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)] flex items-center gap-2"><Database size={18} /> <NomeTela chave="databases" padrao="Databases" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">Bases de registros para usar nos campos de qualquer coluna (Orçamento, Lojinha, Logística CIF).</p>
         </div>
         {podeEditar && (

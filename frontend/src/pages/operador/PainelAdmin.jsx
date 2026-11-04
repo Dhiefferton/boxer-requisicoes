@@ -13,11 +13,14 @@ function mascaraDocumento(v) {
   return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2');
 }
 import { Button, Spinner } from '../../components/ui';
-import { TELAS, NIVEIS, nomeNivel, BOTOES, botaoPadrao } from '../../utils/telas';
+import { NIVEIS, nomeNivel, BOTOES, botaoPadrao, telasComQuadros } from '../../utils/telas';
+import { useTelas, NomeTela } from '../../utils/nomesTelas';
 
 // ── Telas do colaborador (no Editar usuário) ──────────────────
 // Por tela: padrão do perfil / sem acesso / só ver / ver e mexer. Admin vê e mexe em tudo.
 function TelasDoColaborador({ formEdit, setFormEdit, editando, departamentos }) {
+  const { quadros, nomes } = useTelas();
+  const listaTelas = telasComQuadros(quadros, nomes); // inclui as telas criadas e os nomes renomeados
   const telas = formEdit.telas || {};
   const simulado = { perfil: formEdit.perfil, email: editando?.email,
     departamento_nome: departamentos.find(d => String(d.id) === String(formEdit.departamento_id))?.nome || '' };
@@ -52,7 +55,7 @@ function TelasDoColaborador({ formEdit, setFormEdit, editando, departamentos }) 
         <>
           <p className="text-[11px] text-[var(--c-suave)]">"Padrão" segue o perfil e o setor (como era antes). A mudança vale em até 30 segundos.</p>
           <div className="divide-y divide-[var(--c-borda)]">
-            {TELAS.map(t => {
+            {listaTelas.map(t => {
               const padrao = t.legado(simulado);
               const atual = telas[t.chave] || '';
               const dela = BOTOES.filter(b => b.tela === t.chave);
@@ -1229,7 +1232,7 @@ export default function PainelAdmin() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-bold text-[var(--c-texto)]">Painel Administrativo</h1>
+        <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="admin" padrao="Painel Administrativo" /></h1>
         <p className="text-sm text-[var(--c-suave)] mt-0.5">Gestão de usuários, departamentos e fornecedores</p>
       </div>
       <div className="flex bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl p-1 w-fit gap-1 flex-wrap">

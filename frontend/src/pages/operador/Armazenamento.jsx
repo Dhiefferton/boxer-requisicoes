@@ -12,6 +12,7 @@ import { blobService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { mexeTela } from '../../utils/telas';
+import { NomeTela } from '../../utils/nomesTelas';
 
 const fmtTam = (b) => {
   const n = Number(b) || 0;
@@ -63,7 +64,7 @@ export default function Armazenamento() {
     <div className="space-y-5 max-w-5xl">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)] flex items-center gap-2"><HardDrive size={18} /> Armazenamento de vídeos</h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)] flex items-center gap-2"><HardDrive size={18} /> <NomeTela chave="armazenamento" padrao="Armazenamento de vídeos" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">Vídeos e arquivos grandes dos cards (até 500 MB cada), guardados no Vercel Blob. Aviso a partir de 90% da cota grátis.</p>
         </div>
         <button onClick={carregar} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border border-[var(--c-borda)] bg-[var(--c-superficie)] text-[var(--c-texto)] hover:border-[var(--c-destaque)]">

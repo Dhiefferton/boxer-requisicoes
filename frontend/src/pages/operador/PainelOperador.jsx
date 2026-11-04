@@ -9,6 +9,7 @@ import { Spinner, StatusBadge, Empty } from '../../components/ui';
 import { ClipboardList } from 'lucide-react';
 import { requisicoesService } from '../../services/api';
 import * as XLSX from 'xlsx';
+import { NomeTela } from '../../utils/nomesTelas';
 
 const COLUNAS = [
   { status: 'solicitado',   label: 'Solicitado',   cor: 'border-blue-500/40'   },
@@ -78,7 +79,7 @@ export default function PainelOperador() {
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)]">Painel do Operador</h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="operador" padrao="Painel do Operador" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {ativas.length} requisição{ativas.length !== 1 ? 'ões' : ''} ativa{ativas.length !== 1 ? 's' : ''}
           </p>

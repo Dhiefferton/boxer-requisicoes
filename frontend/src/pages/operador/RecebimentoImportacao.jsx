@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, RefreshCw, Search, Check, X, AlertTriangle, ImageOff, ChevronLeft, ChevronRight, Trash2, SkipForward, Package, FileText, RotateCcw, RotateCw, Save } from 'lucide-react';
 import { recebimentoImportacaoService } from '../../services/api';
 import { Spinner } from '../../components/ui';
+import { NomeTela } from '../../utils/nomesTelas';
 
 const ZEN_APP_URL = 'https://boxer.zenerp.app.br';
 const fmtData = (d) => (d ? new Date(`${String(d).slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR') : '—');
@@ -453,7 +454,7 @@ export default function RecebimentoImportacao() {
       {/* Cabeçalho */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)]">Recebimento/Importação</h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="recebimento_importacao" padrao="Recebimento/Importação" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">Notas de entrada de importação com peças · fotografe cada item na chegada</p>
         </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">

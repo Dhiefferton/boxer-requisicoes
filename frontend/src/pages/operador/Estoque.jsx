@@ -3,12 +3,13 @@
 // ============================================================
 // Antes era a aba "Estoque" do Painel Administrativo; agora tem tela própria.
 import { AbaEstoque } from './PainelAdmin';
+import { NomeTela } from '../../utils/nomesTelas';
 
 export default function Estoque() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-bold text-[var(--c-texto)]">Estoque</h1>
+        <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="estoque" padrao="Estoque" /></h1>
         <p className="text-sm text-[var(--c-suave)] mt-0.5">Cadastro de produtos, saldo e importação por planilha</p>
       </div>
       <AbaEstoque />

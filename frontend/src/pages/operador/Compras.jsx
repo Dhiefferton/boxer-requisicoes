@@ -14,6 +14,7 @@ import {
 import { comprasService, fornecedoresService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useTema } from '../../context/TemaContext';
+import { NomeTela } from '../../utils/nomesTelas';
 
 const ABAS = [
   { id: 'cotacoes',       label: 'Cotações' },
@@ -27,7 +28,7 @@ export default function Compras() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-bold text-[var(--c-texto)]">Compras</h1>
+        <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="compras" padrao="Compras" /></h1>
         <p className="text-sm text-[var(--c-suave)] mt-0.5">Cotações, comparação de fornecedores e histórico de compras</p>
       </div>
 

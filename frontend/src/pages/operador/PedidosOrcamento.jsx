@@ -19,6 +19,7 @@ import NovoCardOrcamento from '../../components/operador/NovoCardOrcamento';
 import { FaixaFotosCard } from '../../components/operador/FotosOrcamento';
 import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN, aplicarConfigOrcamento, CONFIG_ORCAMENTO } from '../../utils/fasesOrcamento';
 import ConfigOrcamento from '../../components/operador/ConfigOrcamento';
+import { NomeTela } from '../../utils/nomesTelas';
 
 // Colunas: fases do Pipefy + Em Separação / Separado (utils/fasesOrcamento.js).
 // Colunas novas só o admin move; o fluxo de sempre continua igual:
@@ -165,7 +166,7 @@ export default function PedidosOrcamento() {
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)]">Pedidos de Orçamento</h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="orcamentos" padrao="Pedidos de Orçamento" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {ativos} orçamento{ativos !== 1 ? 's' : ''} ativo{ativos !== 1 ? 's' : ''}
           </p>

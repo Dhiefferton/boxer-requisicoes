@@ -20,6 +20,7 @@ import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
 import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnterior';
 import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro } from '../../components/operador/CamposCardOrcamento';
+import { NomeTela } from '../../utils/nomesTelas';
 
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
@@ -173,7 +174,7 @@ export default function LojinhaBoxer() {
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)]">Lojinha Boxer</h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="lojinha" padrao="Lojinha Boxer" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {ativos} pedido{ativos !== 1 ? 's' : ''} ativo{ativos !== 1 ? 's' : ''}
           </p>

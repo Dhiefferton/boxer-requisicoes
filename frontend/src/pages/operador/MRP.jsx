@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import api, { materialFornecedoresService, materiaisService, comprasService } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { Spinner } from '../../components/ui';
+import { NomeTela } from '../../utils/nomesTelas';
 
 const STATUS_CONFIG = {
   critico: { label: 'Crítico',  cor: 'text-red-400',    bg: 'bg-red-500/15',    icon: XCircle,       borda: 'border-red-500/30' },
@@ -202,7 +203,7 @@ export default function MRP() {
     <div className="space-y-5">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)]">MRP — Necessidade de Estoque</h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="mrp" padrao="MRP — Necessidade de Estoque" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">
             Análise de consumo e previsão de compras mensais
           </p>

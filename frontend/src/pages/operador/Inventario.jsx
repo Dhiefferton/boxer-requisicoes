@@ -11,6 +11,7 @@ import { Spinner, Empty } from '../../components/ui';
 import { Kpi, Progresso, TagStatus, fmtData, fmtHora, fmtPct, fmtNum, fmtTempo } from '../../components/inventario/util';
 import MarketplaceSaidas from '../../components/inventario/MarketplaceSaidas';
 import { podeRecontar } from '../../utils/acessoInventario';
+import { NomeTela } from '../../utils/nomesTelas';
 
 // Onde o inventário é feito — cada local tem seus próprios inventários
 export const LOCAIS_INVENTARIO = [
@@ -71,7 +72,7 @@ export default function Inventario() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-lg sm:text-xl font-bold text-[var(--c-texto)]">Inventário</h1>
+          <h1 className="text-lg sm:text-xl font-bold text-[var(--c-texto)]"><NomeTela chave="inventario" padrao="Inventário" /></h1>
           <p className="text-xs sm:text-sm text-[var(--c-suave)]">
             {aba === 'saidas'
               ? 'Quanto sai por dia, mês e ano no Mercado Livre e na Shopee, e a reposição semanal do estoque do marketplace'

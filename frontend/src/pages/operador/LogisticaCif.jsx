@@ -19,6 +19,7 @@ import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/oper
 import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnterior';
 import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro } from '../../components/operador/CamposCardOrcamento';
 import { combinaBusca, montarColunas as colunasLojinha, Pilula, Coluna, InfoLiberacao, DadosPedido } from './LojinhaBoxer';
+import { NomeTela } from '../../utils/nomesTelas';
 
 const fmtData = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
 
@@ -106,7 +107,7 @@ export default function LogisticaCif() {
     <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-3.1rem)]">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)]">Logística CIF (Enviar)</h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="logistica_cif" padrao="Logística CIF (Enviar)" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {ativos} pedido{ativos !== 1 ? 's' : ''} · os pedidos finalizados na Lojinha entram aqui sozinhos
           </p>

@@ -12,6 +12,7 @@ import { necessidadesPecasService, materiaisService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { temBotao } from '../../utils/telas';
 import { Spinner } from '../../components/ui';
+import { NomeTela } from '../../utils/nomesTelas';
 
 function formatarData(iso) {
   if (!iso) return '—';
@@ -103,7 +104,7 @@ export default function NecessidadePecas() {
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-lg font-bold text-[var(--c-texto)]">Necessidade de Peças</h1>
+          <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="necessidade_pecas" padrao="Necessidade de Peças" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {ativas} necessidade{ativas !== 1 ? 's' : ''} ativa{ativas !== 1 ? 's' : ''}
           </p>

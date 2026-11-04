@@ -6,6 +6,7 @@ import { Plus, Search, X, RefreshCw, PackagePlus, Calendar, User, Trash2, FileDo
 import * as XLSX from 'xlsx';
 import api, { materiaisService } from '../../services/api';
 import { Spinner } from '../../components/ui';
+import { NomeTela } from '../../utils/nomesTelas';
 
 export default function RegistroEntradas() {
   const [entradas,   setEntradas]   = useState([]);
@@ -136,7 +137,7 @@ export default function RegistroEntradas() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-bold text-[var(--c-texto)]">Registro de Entradas</h1>
+        <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="entradas" padrao="Registro de Entradas" /></h1>
         <p className="text-sm text-[var(--c-suave)] mt-0.5">Registre entradas de produtos e atualize o estoque</p>
       </div>
 
