@@ -1,6 +1,8 @@
 ﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor, fornecedorZen } from '../controllers/fornecedoresController.js';
 import { Router } from 'express';
 import { verTratativa, anexoTratativa } from '../controllers/tratativaController.js';
+import { acessoQuadro, verTelas, criarQuadro, editarQuadro, salvarNomesTelas, verConfigQuadro, salvarConfigQuadroDin, adicionarOpcaoQuadro,
+  listarCards, criarCard, moverCard, editarCamposCard, excluirCard, listarMovimentosQuadro, enviarFotoQuadro, verFotoQuadro, excluirFotoQuadro } from '../controllers/quadrosController.js';
 import { autorizarUpload, registrarVisto, alertaBlob, verUsoBlob, salvarLimites, excluirArquivo, conferirNaVercel } from '../controllers/blobController.js';
 import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro, excluirBase, importarBasePipefy, editarBase, excluirRegistro, importarRegistros } from '../controllers/basesController.js';
 import bcrypt from 'bcryptjs';
@@ -280,6 +282,25 @@ router.post('/lojinha/quadro-config/campos/:id/opcoes', ...loja, adicionarOpcaoL
 router.delete('/lojinha/pedidos/:id', ...loja, excluirPedidoLojinha);
 
 // ── Logística CIF (Enviar) — continuação da Lojinha (pedido Finalizado entra aqui)
+// Telas criadas pelo admin (quadros de cards) e nomes das telas
+router.get('/telas',                          autenticar, verTelas);
+router.post('/telas/quadros',                 autenticar, exigirPerfil('admin'), criarQuadro);
+router.patch('/telas/quadros/:id',            autenticar, exigirPerfil('admin'), editarQuadro);
+router.put('/telas/nomes',                    autenticar, exigirPerfil('admin'), salvarNomesTelas);
+const qd = [autenticar, acessoQuadro];
+router.get('/quadros/:qid/cards',             ...qd, listarCards);
+router.post('/quadros/:qid/cards',            ...qd, criarCard);
+router.post('/quadros/:qid/cards/:id/mover',  ...qd, moverCard);
+router.post('/quadros/:qid/cards/:id/campos', ...qd, editarCamposCard);
+router.delete('/quadros/:qid/cards/:id',      ...qd, excluirCard);
+router.post('/quadros/:qid/cards/:id/fotos',  ...qd, enviarFotoQuadro);
+router.get('/quadros/:qid/fotos/:fotoId',     ...qd, verFotoQuadro);
+router.delete('/quadros/:qid/fotos/:fotoId',  ...qd, excluirFotoQuadro);
+router.get('/quadros/:qid/movimentos',        ...qd, listarMovimentosQuadro);
+router.get('/quadros/:qid/config',            ...qd, verConfigQuadro);
+router.post('/quadros/:qid/config',           ...qd, exigirPerfil('admin'), salvarConfigQuadroDin);
+router.post('/quadros/:qid/config/campos/:id/opcoes', ...qd, adicionarOpcaoQuadro);
+
 const cif = [autenticar, acessoCif];
 router.get('/logistica-cif/pedidos',              ...cif, listarPedidosCif);
 router.post('/logistica-cif/pedidos/:id/mover',   ...cif, moverPedidoCif);
