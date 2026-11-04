@@ -377,7 +377,17 @@ export function InfoLiberacao({ p, itens }) {
                 className="inline-flex items-center gap-1 font-mono font-bold text-base text-[var(--c-texto)] hover:text-[var(--c-destaque)]">
                 {p.zen_nf_numero} <ExternalLink size={13} />
               </a>
-            : <p className="text-[11px] text-[var(--c-suave)] mt-1">{p.zen_nf_id ? 'Em preparação' : 'Ainda não emitida'}</p>}
+            : p.zen_nf_id
+              ? <a href={linkZenNota(p.zen_nf_id)} target="_blank" rel="noreferrer" title="Abrir nota fiscal no Zen (em preparação)"
+                  className="inline-flex items-center gap-1 font-mono font-bold text-base text-[var(--c-texto)] hover:text-[var(--c-destaque)]">
+                  {p.zen_nf_id} <ExternalLink size={13} />
+                </a>
+              : <p className="text-[11px] text-[var(--c-suave)] mt-1">Ainda não emitida</p>}
+          {p.zen_nf_id && (
+            <p className="text-[10px] text-[var(--c-suave)] font-mono" title="ID da nota fiscal no Zen">
+              {p.zen_nf_numero ? `ID ${p.zen_nf_id}` : 'ID · em preparação'}
+            </p>
+          )}
         </div>
       </div>
       {false && qtd > 1 && (
