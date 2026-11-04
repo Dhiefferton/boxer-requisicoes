@@ -3,7 +3,8 @@
 // ============================================================
 import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes, Truck, Database, HardDrive } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes, Truck, Database, HardDrive, LayoutGrid, Kanban } from 'lucide-react';
+import { useTelas } from '../../utils/nomesTelas';
 import { blobService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
@@ -37,6 +38,7 @@ export default function AppLayout({ children }) {
   function handleLogout() { logout(); navigate('/login'); }
 
   // Menu: telas liberadas pelo perfil e pelas telas escolhidas no cadastro do colaborador
+  const { nomes: nomesTelas, quadros } = useTelas();
   const navItems = [
     { to: '/catalogo',  icon: Package,        label: 'Catálogo',   tela: 'catalogo' },
     { to: '/historico', icon: ClipboardList,   label: 'Histórico',  tela: 'historico' },
@@ -54,7 +56,12 @@ export default function AppLayout({ children }) {
     { to: '/databases', icon: Database, label: 'Databases', tela: 'databases' },
     { to: '/armazenamento', icon: HardDrive, label: 'Armazenamento', tela: 'armazenamento' },
     { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', tela: 'orcamentos' },
-  ].filter(item => veTela(usuario, item.tela));
+    // Telas criadas pelo admin (quadros de cards)
+    ...quadros.filter(q => q.ativo !== false).map(q => ({ to: `/quadro/${q.id}`, icon: Kanban, label: q.nome, tela: `quadro_${q.id}` })),
+  ].filter(item => veTela(usuario, item.tela))
+    .map(item => ({ ...item, label: nomesTelas[item.tela] || item.label }));
+  // Criar e renomear telas: só o admin
+  if (usuario?.perfil === 'admin') navItems.push({ to: '/telas', icon: LayoutGrid, label: 'Telas', tela: 'telas' });
   // Tela aberta com "Só ver": aviso no topo (o servidor bloqueia salvar/mover/criar/excluir)
   const { pathname } = useLocation();
   const telaAtual = telaDaRota(pathname);
