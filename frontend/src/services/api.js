@@ -143,6 +143,8 @@ export const lojinhaService = {
   cliente: (documento) => api.get('/lojinha/cliente', { params: { documento }, timeout: 30000 }),
   produto: (sku)       => api.get('/lojinha/produto', { params: { sku } }),
   lojaIntegrada: (numero) => api.get(`/lojinha/loja-integrada/${encodeURIComponent(numero)}`, { timeout: 60000 }),
+  zenPedido: (numero)  => api.get(`/lojinha/zen-pedido/${encodeURIComponent(numero)}`, { timeout: 60000 }),
+  criarFaturada: (dados) => api.post('/lojinha/pedidos/zen', dados, { timeout: 120000 }),
   pedidos: ()          => api.get('/lojinha/pedidos'),
   criar:   (dados)     => api.post('/lojinha/pedidos', dados, { timeout: 120000 }),
   reenviarZen: (id, transacao) => api.post(`/lojinha/pedidos/${id}/zen`, transacao !== undefined ? { transacao } : {}, { timeout: 120000 }),
