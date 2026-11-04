@@ -424,6 +424,11 @@ async function sincronizarFasesPipefy() {
       `UPDATE lojinha_boxer_pedidos SET status = $2, pipefy_cards = $3,
               finalizado_em = CASE WHEN $4 THEN COALESCE(finalizado_em, NOW()) ELSE NULL END
         WHERE id = $1`, [p.id, novo, JSON.stringify(cards), novo === 'finalizado']);
+    // Chegou pelo Pipefy na coluna Finalizado e ela é a "Liberação de Faturamento": e-mail ao faturamento
+    if (novo !== p.status) {
+      const nomeCol = (await cfgLojinha.ler()).colunas.find(c => c.chave === novo)?.nome;
+      if (ehLiberacaoFaturamento(nomeCol)) await liberarFaturamento(p.id);
+    }
   }
 }
 
