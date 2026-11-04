@@ -32,7 +32,7 @@ export const TELAS = [
     legado: u => perfilEm(u, 'operador', 'admin') ? 'editar' : 'nenhum' },
   { chave: 'lojinha',    nome: 'Lojinha Boxer',         rotas: ['/lojinha'],
     legado: u => (perfilEm(u, 'operador', 'admin') || doSetor(u, 'Sac / Suporte')) ? 'editar' : 'nenhum' },
-  { chave: 'logistica_cif', nome: 'Logística CIF (Enviar)', rotas: ['/logistica-cif'],
+  { chave: 'logistica_cif', nome: 'Garantia - Boxer Soldas', rotas: ['/logistica-cif'],
     legado: u => (perfilEm(u, 'operador', 'admin') || doSetor(u, 'Sac / Suporte')) ? 'editar' : 'nenhum' },
   { chave: 'armazenamento', nome: 'Armazenamento (vídeos)', rotas: ['/armazenamento'], legado: u => perfilEm(u, 'admin') ? 'editar' : 'nenhum' },
   { chave: 'databases',  nome: 'Databases',             rotas: ['/databases'],            legado: u => perfilEm(u, 'admin') ? 'editar' : 'nenhum' },
