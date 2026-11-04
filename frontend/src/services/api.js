@@ -235,3 +235,9 @@ export const comprasService = {
 };
 
 export default api;
+
+// Tratativa do SAC (Pipefy, só leitura) no Formulário inicial do card de Orçamento
+export const tratativaService = {
+  ver:   (id, atualizar = false) => api.get(`/pedidos-orcamento/${id}/tratativa`, { params: atualizar ? { atualizar: 1 } : {}, timeout: 60000 }),
+  anexo: (id, caminho)           => api.get(`/pedidos-orcamento/${id}/tratativa/anexo`, { params: { caminho }, timeout: 30000 }),
+};
