@@ -1,7 +1,7 @@
 import express from 'express';
 import { statusSyncErp, forcerSync, debugEstoquePorCodigo } from '../jobs/syncErpEstoque.js';
 import { getToken } from '../integrations/erpZen.js';
-import { pipefyQuery } from '../integrations/pipefyService.js';
+import { pipefyQuery, pipefyQueryPlanilhas } from '../integrations/pipefyService.js';
 import { pedidoLIBruto, buscarPedidoLI, tentativasLI, getLIBruto } from '../integrations/lojaIntegrada.js';
 import { pagamentosDaPreferencia, getMPBruto, mercadoPagoConfigurado } from '../integrations/mercadoPago.js';
 import { fasesDosCards } from '../integrations/pipefyLojinha.js';
@@ -144,6 +144,28 @@ router.get('/debug-ns-orcamento', async (req, res) => {
        FROM pedidos_orcamento WHERE pipefy_card_id IS NOT NULL ORDER BY id DESC LIMIT 8`)).rows;
     const t = (await query(`SELECT COUNT(*)::int AS total, COUNT(NULLIF(ns_entrada::text, ''))::int AS com_ns FROM pedidos_orcamento WHERE pipefy_card_id IS NOT NULL`)).rows[0];
     res.json({ ...t, cards: r });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Ex: GET /api/erp/debug-tratativa?secret=...&busca=nome — de onde vem a tratativa (SAC) de um card de orçamento (só lê o Pipefy)
+router.get('/debug-tratativa', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const p = (await query(`SELECT id, status, pipefy_card_id, referencia,
+        (SELECT json_agg(json_build_object('id', e->>'id', 'nome', e->>'nome', 'conect', e ? 'conectados', 'v', left(e->>'valor', 40)))
+           FROM jsonb_array_elements(CASE WHEN jsonb_typeof(pipefy_campos) = 'array' THEN pipefy_campos ELSE '[]'::jsonb END) e) AS campos
+       FROM pedidos_orcamento WHERE referencia ILIKE $1 OR cliente_nome ILIKE $1 ORDER BY id DESC LIMIT 1`, [`%${req.query.busca || ''}%`])).rows[0];
+    if (!p) return res.json({ achou: false });
+    let pipe = null;
+    if (p.pipefy_card_id) {
+      try {
+        pipe = await pipefyQueryPlanilhas(`query($id: ID!) { card(id: $id) { id title pipe { id name }
+          fields { name value array_value field { id type } }
+          parent_relations { name source_type cards { id title pipe { id name } current_phase { name } fields { name value array_value field { id type } } } }
+          child_relations { name cards { id title pipe { id name } } } } }`, { id: String(p.pipefy_card_id) });
+      } catch (e) { pipe = { erro: e.message }; }
+    }
+    res.json({ pedido: p, pipefy: pipe });
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
