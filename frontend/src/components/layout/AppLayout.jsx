@@ -1,9 +1,10 @@
 // ============================================================
 // components/layout/AppLayout.jsx — Layout Principal
 // ============================================================
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes, Truck, Database } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes, Truck, Database, HardDrive } from 'lucide-react';
+import { blobService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import CartDrawer from '../cart/CartDrawer';
@@ -16,6 +17,16 @@ export default function AppLayout({ children }) {
   const { totalItens }      = useCart();
   const navigate            = useNavigate();
   const [cartOpen, setCartOpen] = useState(false);
+  // Aviso: armazenamento de vídeos (Vercel Blob) a partir de 90% da cota grátis
+  const [alertaBlob, setAlertaBlob] = useState(null);
+  const veArmazenamento = veTela(usuario, 'armazenamento');
+  useEffect(() => {
+    if (!veArmazenamento) return undefined;
+    const ler = () => blobService.alerta().then(r => setAlertaBlob(r.data?.alerta ? r.data : null)).catch(() => {});
+    ler();
+    const t = setInterval(ler, 10 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [veArmazenamento]);
   const [menuOpen, setMenuOpen] = useState(false);
   // Sidebar recolhida (só ícones) — lembrada neste navegador
   const [recolhida, setRecolhida] = useState(() => { try { return localStorage.getItem('boxer_sidebar') === '1'; } catch { return false; } });
@@ -41,6 +52,7 @@ export default function AppLayout({ children }) {
     { to: '/lojinha', icon: Store, label: 'Lojinha Boxer', tela: 'lojinha' },
     { to: '/logistica-cif', icon: Truck, label: 'Logística CIF (Enviar)', tela: 'logistica_cif' },
     { to: '/databases', icon: Database, label: 'Databases', tela: 'databases' },
+    { to: '/armazenamento', icon: HardDrive, label: 'Armazenamento', tela: 'armazenamento' },
     { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', tela: 'orcamentos' },
   ].filter(item => veTela(usuario, item.tela));
   // Tela aberta com "Só ver": aviso no topo (o servidor bloqueia salvar/mover/criar/excluir)
@@ -193,6 +205,11 @@ export default function AppLayout({ children }) {
       </header>
 
       <main className="flex-1 w-full min-w-0 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
+        {alertaBlob && (
+          <NavLink to="/armazenamento" className="block mb-3 text-xs rounded-xl px-3 py-2 border border-red-500/40 bg-red-500/10 text-red-400 hover:bg-red-500/15">
+            Atenção: o armazenamento de vídeos está em <b>{alertaBlob.pct}%</b> da cota grátis ({alertaBlob.item}). Ao passar de 100% a Vercel bloqueia os vídeos por 30 dias — clique para ver e liberar espaço.
+          </NavLink>
+        )}
         {soVer && <p className="mb-3 text-xs rounded-xl px-3 py-2 border border-amber-500/30 bg-amber-500/10 text-amber-400">Você só pode visualizar esta tela. Para alterar algo, peça a liberação ao administrador.</p>}
         {children}
       </main>
