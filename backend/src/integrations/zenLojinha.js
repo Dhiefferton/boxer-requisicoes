@@ -58,6 +58,10 @@ async function zen(metodo, caminho, corpo) {
     const msg = dados?.message || dados?.error || dados?.errors?.[0]?.message || texto.slice(0, 300) || resp.status;
     throw new Error(`ZenERP ${metodo} ${caminho.split('?')[0]} → ${resp.status}: ${msg}`);
   }
+  // Registro que não existe (ex.: pedido excluído): o Zen responde 200 sem corpo — trata como 404
+  if (metodo === 'GET' && dados == null && /^\/[\w/]+\/\d+$/.test(caminho)) {
+    throw new Error(`ZenERP GET ${caminho} → 404: não existe mais no Zen`);
+  }
   return dados;
 }
 // Transportadora do pedido no Zen (pessoa "shipping"): Sedex/PAC = Correios
@@ -327,4 +331,53 @@ export async function criarPedidoLojinhaZen(pedido) {
     throw err;
   }
   return resultado;
+}
+
+// ============================================================
+// Lojinha Faturada — pedido de venda que já existe no Zen
+// ============================================================
+/**
+ * Acha o pedido de venda pelo número que o colaborador vê no Zen:
+ * primeiro pelo código do pedido (ex.: nº da lojinha), depois pelo ID.
+ * Devolve o pedido, a pessoa (cliente) e os itens. Só leitura.
+ */
+export async function buscarVendaZen(numero) {
+  const n = String(numero || '').trim();
+  if (!/^\d{1,12}$/.test(n)) throw new Error('Informe o número do pedido de venda (só números).');
+  let venda = null;
+  const porCodigo = await zen('GET', `/sale/sale?q=${q(`code=="${n}"`)}&max=2`).catch(() => null);
+  if (Array.isArray(porCodigo) && porCodigo.length === 1) venda = await zen('GET', `/sale/sale/${porCodigo[0].id}`);
+  if (!venda) {
+    try { venda = await zen('GET', `/sale/sale/${n}`); }
+    catch (e) { if (/→ 404/.test(e.message)) throw Object.assign(new Error(`Pedido de venda ${n} não encontrado no Zen.`), { status: 404 }); throw e; }
+  }
+  if (!venda?.id) throw Object.assign(new Error(`Pedido de venda ${n} não encontrado no Zen.`), { status: 404 });
+  const pessoa = venda.person?.id ? await zen('GET', `/catalog/person/person/${venda.person.id}`).catch(() => venda.person) : venda.person;
+  const itens = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${venda.id}`)}&max=200`) || [];
+  return { venda, pessoa, itens };
+}
+
+/**
+ * Liga o card ao pedido de venda existente: usa a ordem de separação dele;
+ * sem ordem, aprova (se preparado) e gera a ordem (perfil LOJINHA).
+ * Pedido ainda em preparação não é mexido: precisa ser finalizado no Zen.
+ */
+export async function vincularVendaZen(saleId) {
+  let venda = await zen('GET', `/sale/sale/${saleId}`);
+  if (venda.pickingOrder?.id) return { ordemSeparacaoId: venda.pickingOrder.id, criouOrdem: false };
+  if (venda.status === 'CANCELED') throw new Error(`O pedido ${saleId} está cancelado no Zen.`);
+  if (venda.status === 'PREPARING') throw new Error(`O pedido ${saleId} ainda está em preparação no Zen — finalize a preparação lá e tente de novo.`);
+  if (venda.status === 'PREPARED') {
+    await zen('POST', `/sale/saleOpApproveUnconditionally/${saleId}`);
+    venda = await zen('GET', `/sale/sale/${saleId}`);
+  }
+  if (venda.status !== 'APPROVED') throw new Error(`O pedido ${saleId} no Zen está com status ${venda.status} e sem ordem de separação.`);
+  const tag = new Date().toISOString().replace(/\D/g, '').substring(2, 14);
+  const ordem = await zen('POST', `/sale/saleOpPickingOrderCreate/${saleId}`, {
+    pickingProfileId: CFG.pickingProfile,
+    properties: { saleOpPickingOrderCreate_tag: tag },
+  });
+  const id = ordem?.id || (await zen('GET', `/sale/sale/${saleId}`))?.pickingOrder?.id || null;
+  if (!id) throw new Error(`Ordem de separação do pedido ${saleId} não retornou ID.`);
+  return { ordemSeparacaoId: id, criouOrdem: true };
 }
