@@ -73,7 +73,7 @@ function ImagemAuth({ url, className = '', onClick, alt = '' }) {
 // Arquivo (PDF, Word…) adicionado no B-Requisições: abre numa aba nova
 export const ehArquivo = (foto) => foto?.tipo === 'local' && !String(foto.mime || 'image/').startsWith('image/');
 export const ehVideo = (foto) => foto?.tipo === 'local' && !!foto.blob_url && String(foto.mime || '').startsWith('video/');
-const quadroDe = (svc) => (String(svc?.base || '').startsWith('/pedidos-orcamento') ? 'orc' : 'loj');
+const quadroDe = (svc) => { const b = String(svc?.base || ''); return b.startsWith('/pedidos-orcamento') ? 'orc' : b.startsWith('/quadros') ? 'qd' : 'loj'; };
 const fmtTam = (b) => (b >= 1024 * 1024 * 1024 ? `${(b / 1024 / 1024 / 1024).toFixed(1)} GB` : b >= 1024 * 1024 ? `${Math.round(b / 1024 / 1024)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const MAX_VIDEO = 500 * 1024 * 1024;
 function extensao(foto) {
