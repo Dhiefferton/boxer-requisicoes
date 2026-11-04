@@ -9,6 +9,7 @@ import { query } from '../config/db.js';
 import { importarPecasPipefy } from '../controllers/basesController.js';
 import { usoBlob } from '../controllers/blobController.js';
 import { buscarTratativa } from '../integrations/pipefyTratativa.js';
+import { previaEmailFaturamento } from '../controllers/faturamentoLojinha.js';
 import { SQL_CATEGORIA_USO_CONSUMO } from '../controllers/mrpController.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
 import { sincronizarSaidas, garantirRelatorioSemanal, compararPlanilhaZen } from '../integrations/marketplaceSaidas.js';
@@ -182,6 +183,13 @@ router.get('/debug-campos-lojinha', async (req, res) => {
     const cols = (await query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'lojinha_boxer_pedidos' ORDER BY ordinal_position`)).rows.map(r => r.column_name);
     res.json({ loj: await campos('loj_campos'), cif: await campos('cif_campos'), colunas: cols, pedidos: ped });
   } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Ex: GET /api/erp/debug-email-faturamento?secret=...&pedido=121 — prévia do e-mail ao faturamento da Lojinha (não envia)
+router.get('/debug-email-faturamento', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try { res.json(await previaEmailFaturamento(parseInt(req.query.pedido) || 0)); }
+  catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
 // Ex: GET /api/erp/debug-importar-pecas?secret=...&cursor=&base= — copia a database "Peças em Geral" do Pipefy
