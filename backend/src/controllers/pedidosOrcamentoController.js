@@ -29,7 +29,7 @@ const BASE_SELECT = `
     p.cliente_nome, p.cliente_cnpj, p.tecnico, p.frete_por_conta,
     p.entregue_por, p.ns_entrada, p.itens,
     p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em, p.aprovacao,
-    p.zen_romaneio_id, p.zen_nota_id,
+    p.zen_romaneio_id, p.zen_nota_id, p.zen_cancelado_id, p.zen_cancelado_em,
     p.pecas_recusadas, p.recusadas_retiradas_em, p.itens_recusados, p.itens_alterados_em,
     p.campos_editados, p.pipefy_fase,
     p.created_at, p.atualizado_em,
@@ -48,9 +48,9 @@ function garantirColunas() {
       const r = await query(
         `SELECT COUNT(*)::int AS n FROM information_schema.columns
           WHERE table_name = 'pedidos_orcamento'
-            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em', 'nao_liberado_ignorado_em', 'campos_editados', 'pipefy_fase')`
+            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em', 'nao_liberado_ignorado_em', 'campos_editados', 'pipefy_fase', 'zen_cancelado_id', 'zen_cancelado_em')`
       );
-      if (r.rows[0].n < 8) {
+      if (r.rows[0].n < 10) {
         await query(
           `ALTER TABLE pedidos_orcamento
               ADD COLUMN IF NOT EXISTS pecas_recusadas        TEXT,
@@ -60,7 +60,9 @@ function garantirColunas() {
               ADD COLUMN IF NOT EXISTS itens_alterados_em     TIMESTAMPTZ,
               ADD COLUMN IF NOT EXISTS nao_liberado_ignorado_em TIMESTAMPTZ,
               ADD COLUMN IF NOT EXISTS campos_editados        JSONB,
-              ADD COLUMN IF NOT EXISTS pipefy_fase            TEXT`
+              ADD COLUMN IF NOT EXISTS pipefy_fase            TEXT,
+              ADD COLUMN IF NOT EXISTS zen_cancelado_id       BIGINT,
+              ADD COLUMN IF NOT EXISTS zen_cancelado_em       TIMESTAMPTZ`
         );
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
@@ -1416,6 +1418,44 @@ export async function cancelarPedido(req, res, next) {
       detalhes: pedido.zen_pedido_id ? { zen_pedido_id: pedido.zen_pedido_id, excluido_no_zen: zenExcluido } : null,
     });
     res.json({ sucesso: true, zen_excluido: zenExcluido, zen_pedido_id: pedido.zen_pedido_id || null });
+  } catch (err) { next(err); }
+}
+
+// POST /pedidos-orcamento/:id/cancelar-zen
+// Orçamento recusado: desfaz a separação e exclui o pedido de venda no Zen,
+// mas o card continua no quadro (na mesma coluna). Sem pedido no Zen, as fases
+// seguintes não tentam fechar romaneio / criar nota.
+export const ehRecusado = (aprovacao) => /recus|reprov/i.test(String(aprovacao || '')) && !/parcial/i.test(String(aprovacao || ''));
+export async function cancelarPedidoZen(req, res, next) {
+  try {
+    await garantirColunas();
+    const pedido = (await query(`SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`, [parseInt(req.params.id)])).rows[0];
+    if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (!pedido.zen_pedido_id) return res.status(400).json({ erro: 'Este card não tem pedido de venda no Zen.' });
+    if (!ehRecusado(pedido.aprovacao)) return res.status(400).json({ erro: 'Só dá para cancelar no Zen quando o orçamento foi recusado (campo "Aprovação").' });
+    if (pedido.zen_nota_id) return res.status(409).json({ erro: `Já existe nota fiscal (#${pedido.zen_nota_id}) para este pedido no Zen — cancele a nota no Zen antes.` });
+    let r;
+    try {
+      r = await excluirPedidoVendaZen(pedido);
+    } catch (err) {
+      console.error(`❌ ZenERP cancelar pedido orçamento #${pedido.id}:`, err.message);
+      await query(`UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`, [err.message.slice(0, 1000), pedido.id]);
+      await registrarMovimento(pedido.id, 'erro_zen', {
+        de: pedido.status, para: pedido.status, usuario: req.usuario, detalhes: { acao: 'cancelar_pedido_zen' },
+        descricao: `Falha ao cancelar o pedido #${pedido.zen_pedido_id} no Zen: ${err.message.slice(0, 500)}`,
+      });
+      return res.status(502).json({ erro: `Não foi possível cancelar o pedido no ZenERP: ${err.message}` });
+    }
+    await query(
+      `UPDATE pedidos_orcamento SET zen_cancelado_id = zen_pedido_id, zen_cancelado_em = NOW(),
+              zen_pedido_id = NULL, zen_ordem_separacao_id = NULL, zen_romaneio_id = NULL, zen_erro = NULL, atualizado_em = NOW()
+        WHERE id = $1`, [pedido.id]);
+    await registrarMovimento(pedido.id, 'zen_cancelado', {
+      de: pedido.status, para: pedido.status, usuario: req.usuario,
+      descricao: `Orçamento recusado — pedido de venda #${pedido.zen_pedido_id} cancelado no Zen${r.ordemCancelada ? ` (ordem de separação #${r.ordemCancelada} desfeita, peças de volta ao estoque)` : ''}${r.jaNaoExistia ? ' (já não existia no Zen)' : ''}. O card continua no quadro.`,
+      detalhes: { zen_pedido_id: pedido.zen_pedido_id, ordem_separacao: pedido.zen_ordem_separacao_id },
+    });
+    res.json({ sucesso: true, zen_pedido_id: pedido.zen_pedido_id });
   } catch (err) { next(err); }
 }
 
