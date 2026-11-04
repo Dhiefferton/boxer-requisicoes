@@ -1,5 +1,6 @@
 ﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor, fornecedorZen } from '../controllers/fornecedoresController.js';
 import { Router } from 'express';
+import { autorizarUpload, registrarVisto, alertaBlob, verUsoBlob, salvarLimites, excluirArquivo, conferirNaVercel } from '../controllers/blobController.js';
 import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro, excluirBase, importarBasePipefy, editarBase, excluirRegistro, importarRegistros } from '../controllers/basesController.js';
 import bcrypt from 'bcryptjs';
 import { login, me, trocarSenha, alterarSenha, esqueciSenha, validarTokenSenha, redefinirSenha } from '../controllers/authController.js';
@@ -179,6 +180,14 @@ router.delete('/bases/:id',             autenticar, exigirPerfil('admin'), exclu
 router.get('/bases/:id/registros',      autenticar, listarRegistros);
 router.post('/bases/:id/registros',     autenticar, criarRegistro);
 router.patch('/bases/registros/:id',    autenticar, exigirPerfil('admin'), editarRegistro);
+// Vídeos e arquivos grandes (Vercel Blob) e a tela Armazenamento
+router.post('/blob/upload',             autenticar, autorizarUpload);   // autoriza o envio direto do navegador
+router.post('/blob/visto/:id',          autenticar, registrarVisto);
+router.get('/blob/alerta',              autenticar, alertaBlob);
+router.get('/blob/uso',                 autenticar, exigirPerfil('admin'), verUsoBlob);
+router.put('/blob/limites',             autenticar, exigirPerfil('admin'), salvarLimites);
+router.delete('/blob/arquivos/:id',     autenticar, exigirPerfil('admin'), excluirArquivo);
+router.post('/blob/conferir',           autenticar, exigirPerfil('admin'), conferirNaVercel);
 // Tela Databases (admin ou tela "Databases" liberada no cadastro)
 router.delete('/bases/registros/:id',   autenticar, exigirPerfil('admin'), excluirRegistro);
 router.patch('/bases/:id',              autenticar, exigirPerfil('admin'), editarBase);
