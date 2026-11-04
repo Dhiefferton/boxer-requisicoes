@@ -11,6 +11,7 @@
 // (a partir daí a coluna mostra só os campos configurados aqui).
 // ============================================================
 import { query, transaction } from '../config/db.js';
+import { valoresCondicao, limparCondicao } from './configQuadro.js';
 
 // Colunas do sistema (mesma ordem/ids de frontend/src/utils/fasesOrcamento.js).
 // zen = o que o sistema faz no Zen nessa coluna (só informação; não se edita aqui).
@@ -195,9 +196,9 @@ export async function salvarConfig(req, res, next) {
           // Cor de cada opção (etiquetas): { opção: '#rrggbb' }
           cores: tipo === 'etiquetas' && c?.cores && typeof c.cores === 'object'
             ? Object.fromEntries(opcoes.filter(o => COR_OK.test(String(c.cores[o] || ''))).map(o => [o, c.cores[o]])) : null,
-          uid: String(c?.uid || ''), condicao: c?.condicao?.campo && c?.condicao?.valor ? { campo: String(c.condicao.campo), valor: limpar(c.condicao.valor, 120) } : null,
+          uid: String(c?.uid || ''), condicao: c?.condicao?.campo && valoresCondicao(c?.condicao?.valor).length ? { campo: String(c.condicao.campo), valor: limparCondicao(c.condicao.valor, limpar) } : null,
           // Campo aparece só quando outro campo tem um valor (ex.: "+ Campos - Peça")
-          visivel: c?.visivel?.campo && c?.visivel?.valor ? { campo: String(c.visivel.campo), valor: limpar(c.visivel.valor, 120) } : null });
+          visivel: c?.visivel?.campo && valoresCondicao(c?.visivel?.valor).length ? { campo: String(c.visivel.campo), valor: limparCondicao(c.visivel.valor, limpar) } : null });
     }
 
     await transaction(async (cli) => {

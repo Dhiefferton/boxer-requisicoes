@@ -15,6 +15,12 @@ const LISTAS = ['Modelos de máquina'];
  * Campo obrigatório agora? Sem condição: se marcado obrigatório. Com condição
  * ({ campo: id de outro campo, valor }): só quando o outro campo tem esse valor.
  */
+/** Valores da condição: texto (um) ou lista (vários: "Aprovado" ou "Aprovado parcialmente"). */
+export const valoresCondicao = (v) => (Array.isArray(v) ? v : [v]).map(x => String(x ?? '').trim()).filter(Boolean);
+const bateCondicao = (lista, valor) => { const ok = valoresCondicao(valor); return lista.some(x => ok.includes(String(x).trim())); };
+/** Limpa o valor da condição ao salvar (texto ou lista de até 30 opções) */
+export const limparCondicao = (v, limpar) => (Array.isArray(v) ? [...new Set(v.map(x => limpar(x, 120)).filter(Boolean))].slice(0, 30) : limpar(v, 120));
+
 /** Campo visível agora? Com "visivel" ({ campo, valor }) só aparece quando o outro campo (também visível) tem esse valor. */
 export function visivelAgora(c, todos, valores, idCampo, n = 0) {
   if (!c?.visivel?.campo || n > 10) return true;
@@ -24,7 +30,7 @@ export function visivelAgora(c, todos, valores, idCampo, n = 0) {
   const v = String(valores?.[idCampo(ref)] ?? '').trim();
   let lista = [v];
   if (v.startsWith('[')) { try { const a = JSON.parse(v); if (Array.isArray(a)) lista = a; } catch {} }
-  return lista.map(x => String(x).trim()).includes(String(c.visivel.valor).trim());
+  return bateCondicao(lista, c.visivel.valor);
 }
 
 export function exigidoAgora(c, todos, valores, idCampo) {
@@ -36,7 +42,7 @@ export function exigidoAgora(c, todos, valores, idCampo) {
   const v = String(valores?.[idCampo(ref)] ?? '').trim();
   let lista = [v];
   if (v.startsWith('[')) { try { const a = JSON.parse(v); if (Array.isArray(a)) lista = a; } catch { /* texto */ } }
-  return lista.map(x => String(x).trim()).includes(String(c.condicao.valor).trim());
+  return bateCondicao(lista, c.condicao.valor);
 }
 
 /**
@@ -203,9 +209,9 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'sta
           // Cor de cada opção (etiquetas): { opção: '#rrggbb' }
           cores: tipo === 'etiquetas' && c?.cores && typeof c.cores === 'object'
             ? Object.fromEntries(opcoes.filter(o => COR_OK.test(String(c.cores[o] || ''))).map(o => [o, c.cores[o]])) : null,
-          uid: String(c?.uid || ''), condicao: c?.condicao?.campo && c?.condicao?.valor ? { campo: String(c.condicao.campo), valor: limpar(c.condicao.valor, 120) } : null,
+          uid: String(c?.uid || ''), condicao: c?.condicao?.campo && valoresCondicao(c?.condicao?.valor).length ? { campo: String(c.condicao.campo), valor: limparCondicao(c.condicao.valor, limpar) } : null,
           // Campo aparece só quando outro campo tem um valor (ex.: "+ Campos - Peça")
-          visivel: c?.visivel?.campo && c?.visivel?.valor ? { campo: String(c.visivel.campo), valor: limpar(c.visivel.valor, 120) } : null });
+          visivel: c?.visivel?.campo && valoresCondicao(c?.visivel?.valor).length ? { campo: String(c.visivel.campo), valor: limparCondicao(c.visivel.valor, limpar) } : null });
       }
   
       await transaction(async (cli) => {
