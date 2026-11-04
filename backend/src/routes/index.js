@@ -46,6 +46,7 @@ import {
 } from '../controllers/inventarioController.js';
 import {
   acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, moverPedidoLojinha, editarCamposLojinha, enviarFotoLojinha, verFotoLojinha, excluirFotoLojinha, listarMovimentosLojinha, verConfigLojinha, salvarConfigLojinha, adicionarOpcaoLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
+  buscarPedidoZenLojinha, criarPedidoLojinhaFaturada,
 } from '../controllers/lojinhaController.js';
 import { acessoCif, listarPedidosCif, moverPedidoCif, editarCamposCif, verConfigCif, salvarConfigCif, adicionarOpcaoCif } from '../controllers/logisticaCifController.js';
 import {
@@ -267,6 +268,8 @@ router.get('/lojinha/config',   ...loja, configLojinha);
 router.get('/lojinha/cliente',  ...loja, buscarClienteLojinha);
 router.get('/lojinha/produto',  ...loja, buscarProdutoLojinha);
 router.get('/lojinha/loja-integrada/:numero', ...loja, buscarPedidoLojaIntegrada);
+router.get('/lojinha/zen-pedido/:numero', ...loja, buscarPedidoZenLojinha);
+router.post('/lojinha/pedidos/zen', ...loja, criarPedidoLojinhaFaturada);
 router.get('/lojinha/pedidos',  ...loja, listarPedidosLojinha);
 router.post('/lojinha/pedidos', ...loja, criarPedidoLojinha);
 router.post('/lojinha/pedidos/:id/zen', ...loja, reenviarZenLojinha);
