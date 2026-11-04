@@ -49,6 +49,7 @@ import { buscarPedidoLI } from '../integrations/lojaIntegrada.js';
 import { temBotao } from '../middlewares/telas.js';
 import { registrarArquivoBlob, excluirArquivoBlob, lerEnvioBlob } from './blobController.js';
 import { entrarNoCif } from './logisticaCifController.js';
+import { avisarFaturamentoLojinha } from './faturamentoLojinha.js';
 
 const TIPOS_ENVIO = ['Sedex', 'PAC', 'Próprio', 'Transportadora'];
 const SETORES = ['sac / suporte'];
@@ -476,7 +477,10 @@ export async function moverPedidoLojinha(req, res, next) {
       de: atual, para: status, usuario: req.usuario,
       descricao: `Movido de ${col.get(atual)?.nome || atual} para ${col.get(status)?.nome || status}`,
     });
-    if (status === 'finalizado') await entrarNoCif(req.usuario).catch(e => console.error('[CIF] entrada:', e.message));
+    if (status === 'finalizado') {
+      await entrarNoCif(req.usuario).catch(e => console.error('[CIF] entrada:', e.message));
+      await avisarFaturamentoLojinha(req.usuario); // e-mail ao faturamento (nunca lança erro)
+    }
     res.json({ pedido: r.rows[0] });
   } catch (err) { next(err); }
 }
@@ -487,6 +491,7 @@ export async function listarPedidosLojinha(req, res, next) {
     await garantirEstrutura();
     await sincronizarFasesPipefy().catch(e => console.error('[Lojinha] sync:', e.message));
     await entrarNoCif().catch(e => console.error('[CIF] entrada:', e.message));
+    await avisarFaturamentoLojinha(); // finalizados pelo Pipefy / tentativa que falhou
     const r = await query(
       `SELECT t.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome, 'blob_url', f.blob_url, 'tamanho', f.tamanho) ORDER BY f.id), '[]'::json)
                       FROM loj_fotos f WHERE f.pedido_id = t.id) AS fotos_locais
