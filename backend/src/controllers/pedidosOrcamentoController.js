@@ -20,6 +20,7 @@ import { lerConfigOrcamento, idCampoConfig } from './configOrcamentoController.j
 import { exigidoAgora } from './configQuadro.js';
 import { temBotao } from '../middlewares/telas.js';
 import { registrarArquivoBlob, excluirArquivoBlob, lerEnvioBlob } from './blobController.js';
+import { guardarTratativa } from './tratativaController.js';
 
 const BASE_SELECT = `
   SELECT
@@ -827,6 +828,8 @@ export async function importarEntradaPipefy(req, res, next) {
           descricao: `Card trazido do Pipefy (fase "${faseNome}") pelo botão "Trazer do Pipefy"`,
           detalhes: { pipefy_card_id: card.id },
         });
+        // Tratativa do SAC (formulário inicial): lida uma vez só, agora
+        await guardarTratativa(r.rows[0].id, card.id);
       }
     }
     return { sucesso: true, novos, novos_no_pipefy: cards.length, ns_atualizadas: nsAtualizadas, chamadas_pipefy: chamadas };

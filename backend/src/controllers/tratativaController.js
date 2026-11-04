@@ -2,8 +2,10 @@
 // controllers/tratativaController.js — Tratativa do SAC no card do Orçamento
 // ============================================================
 // GET /pedidos-orcamento/:id/tratativa[?atualizar=1] — dados da tratativa (pipe
-// "Tratativa de manutenção - SAC") para o Formulário inicial do card. Fica
-// guardado no B-Requisições e é relido do Pipefy (só leitura) a cada 30 min.
+// "Tratativa de manutenção - SAC") para o Formulário inicial do card.
+// Lida do Pipefy (só leitura) UMA vez: quando o card vem da Entrada do Pipefy
+// para a Entrada do B-Requisições ("Trazer do Pipefy"). Depois fica guardada aqui.
+// Cards antigos (trazidos antes disso) leem uma vez ao abrir. ?atualizar=1 relê.
 // GET /pedidos-orcamento/:id/tratativa/anexo?caminho= — link novo de um anexo.
 // ============================================================
 import { query } from '../config/db.js';
@@ -14,7 +16,15 @@ const garantir = () => (colunas ||= query(`
   ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS tratativa JSONB;
   ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS tratativa_em TIMESTAMPTZ;`).catch(e => { colunas = null; throw e; }));
 
-const VALIDADE_MS = 30 * 60 * 1000;
+/** Lê a tratativa no Pipefy e guarda no card (chamado ao trazer o card da Entrada). Nunca lança erro. */
+export async function guardarTratativa(pedidoId, pipefyCardId) {
+  try {
+    await garantir();
+    const t = await buscarTratativa(pipefyCardId);
+    await query(`UPDATE pedidos_orcamento SET tratativa = $1::jsonb, tratativa_em = NOW() WHERE id = $2`, [JSON.stringify(t), pedidoId]);
+    return t;
+  } catch (e) { console.error(`⚠️ Tratativa do card ${pipefyCardId}:`, e.message); return null; }
+}
 
 export async function verTratativa(req, res, next) {
   try {
@@ -22,8 +32,7 @@ export async function verTratativa(req, res, next) {
     const p = (await query(`SELECT id, pipefy_card_id, tratativa, tratativa_em FROM pedidos_orcamento WHERE id = $1`, [parseInt(req.params.id) || 0])).rows[0];
     if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
     if (!p.pipefy_card_id) return res.json({ tratativa: null, motivo: 'Card criado no B-Requisições (sem tratativa do SAC).' });
-    const recente = p.tratativa_em && Date.now() - new Date(p.tratativa_em).getTime() < VALIDADE_MS;
-    if (recente && req.query.atualizar !== '1') return res.json({ tratativa: p.tratativa, lido_em: p.tratativa_em });
+    if (p.tratativa_em && req.query.atualizar !== '1') return res.json({ tratativa: p.tratativa, lido_em: p.tratativa_em });
     try {
       const t = await buscarTratativa(p.pipefy_card_id);
       const r = await query(`UPDATE pedidos_orcamento SET tratativa = $1::jsonb, tratativa_em = NOW() WHERE id = $2 RETURNING tratativa_em`,
