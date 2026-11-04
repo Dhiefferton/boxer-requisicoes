@@ -10,6 +10,7 @@ import { importarPecasPipefy } from '../controllers/basesController.js';
 import { usoBlob } from '../controllers/blobController.js';
 import { buscarTratativa } from '../integrations/pipefyTratativa.js';
 import { previaEmailFaturamento } from '../controllers/faturamentoLojinha.js';
+import { lerConfigOrcamento } from '../controllers/configOrcamentoController.js';
 import { lerConfigLojinha, registrarMovLoj, garantirEstrutura } from '../controllers/lojinhaController.js';
 import { lerConfigCif } from '../controllers/logisticaCifController.js';
 import { documentosZen, zenLeitura } from '../integrations/zenPedidoVenda.js';
@@ -126,6 +127,26 @@ router.get('/debug-mov-orcamento', async (req, res) => {
     const p = (await query(`SELECT id, status, pipefy_card_id, pipefy_fase, pipefy_sincronizado_em, zen_erro, created_at FROM pedidos_orcamento WHERE id = $1`, [id])).rows[0];
     const m = (await query(`SELECT tipo, de_status, para_status, descricao, usuario_nome, origem, criado_em FROM pedidos_orcamento_movimentos WHERE pedido_id = $1 ORDER BY criado_em`, [id])).rows;
     res.json({ pedido: p, movimentos: m });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Ex: GET /api/erp/debug-campos-orcamento?secret=...&pedido=796 — colunas/campos do Orçamento e os valores de um card (só leitura)
+// Sem pedido: os últimos cards com algum campo de "remessa" preenchido.
+router.get('/debug-campos-orcamento', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const cfg = await lerConfigOrcamento();
+    const out = {
+      colunas: cfg.colunas.map(c => `${c.chave}=${c.nome}`),
+      campos: cfg.campos.map(c => ({ id: c.id, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, pipefy: c.pipefy_campo || null })),
+    };
+    const id = parseInt(req.query.pedido) || 0;
+    const sel = `SELECT id, status, cliente_nome, frete_por_conta, entregue_por, ns_entrada, zen_pedido_id, zen_nota_id, aprovacao, pipefy_campos, (tratativa IS NOT NULL) AS tem_tratativa FROM pedidos_orcamento`;
+    const ps = id ? (await query(`${sel} WHERE id = $1`, [id])).rows
+      : (await query(`${sel} WHERE pipefy_campos::text ILIKE '%remessa%' AND status != 'cancelado' ORDER BY id DESC LIMIT 3`)).rows;
+    out.pedidos = ps.map(p => ({ ...p, pipefy_campos: (Array.isArray(p.pipefy_campos) ? p.pipefy_campos : []).filter(c => c?.valor != null && String(c.valor).trim() !== '' && String(c.valor) !== '[]')
+      .map(c => ({ id: c.id, nome: c.nome, valor: String(c.valor).slice(0, 120) })) }));
+    res.json(out);
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
