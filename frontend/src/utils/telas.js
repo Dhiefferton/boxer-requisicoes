@@ -48,6 +48,13 @@ export const nomeNivel = (v) => NIVEIS.find(n => n.valor === v)?.nome || v;
 
 /** 'editar' | 'ver' | 'nenhum' para o usuário logado (ou para um usuário da lista do Admin). */
 export function nivelTela(usuario, chave) {
+  // Telas criadas pelo admin (quadro_<id>): admin mexe; os outros só se liberado no cadastro
+  if (/^quadro_\d+$/.test(String(chave || ''))) {
+    if (!usuario) return 'nenhum';
+    if (usuario.perfil === 'admin') return 'editar';
+    const v = usuario.telas?.[chave];
+    return ['ver', 'editar'].includes(v) ? v : 'nenhum';
+  }
   const t = TELAS.find(x => x.chave === chave);
   if (!t || !usuario) return 'nenhum';
   if (usuario.perfil === 'admin') return 'editar';
@@ -61,6 +68,8 @@ export const mexeTela = (usuario, chave) => nivelTela(usuario, chave) === 'edita
 /** Tela da rota atual (ex.: /inventario/12/contar → inventario). */
 export function telaDaRota(caminho) {
   const p = String(caminho || '');
+  const q = p.match(/^\/quadro\/(\d+)/);
+  if (q) return `quadro_${q[1]}`;
   return TELAS.find(t => t.rotas.some(r => p === r || p.startsWith(r + '/')))?.chave || null;
 }
 
@@ -109,4 +118,13 @@ export function temBotao(usuario, chave) {
 /** Botões de uma tela como objeto: podeNaTela(u, 'orcamentos') → { novo_card: true, mover: false, … } */
 export function podeNaTela(usuario, tela) {
   return Object.fromEntries(BOTOES.filter(b => b.tela === tela).map(b => [b.chave.replace(/^[a-z]+_/, ''), temBotao(usuario, b.chave)]));
+}
+
+/** Telas do sistema + telas criadas pelo admin (para Admin > Usuários), com os nomes renomeados. */
+export function telasComQuadros(quadros = [], nomes = {}) {
+  return [
+    ...TELAS.map(t => ({ ...t, nome: nomes?.[t.chave] || t.nome })),
+    ...quadros.filter(q => q.ativo !== false).map(q => ({ chave: `quadro_${q.id}`, nome: q.nome, rotas: [`/quadro/${q.id}`],
+      legado: u => (u?.perfil === 'admin' ? 'editar' : 'nenhum') })),
+  ];
 }
