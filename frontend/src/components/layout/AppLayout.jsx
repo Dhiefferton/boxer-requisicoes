@@ -3,7 +3,7 @@
 // ============================================================
 import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes, Truck, Database, HardDrive, LayoutGrid, Kanban } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes, Truck, Database, HardDrive, LayoutGrid, Kanban, ShieldPlus } from 'lucide-react';
 import { useTelas } from '../../utils/nomesTelas';
 import { blobService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -52,7 +52,7 @@ export default function AppLayout({ children }) {
     { to: '/necessidade-pecas', icon: Package, label: 'Nec. Peças', tela: 'necessidade_pecas' },
     { to: '/recebimento-importacao', icon: Camera, label: 'Recebimento/Importação', tela: 'recebimento_importacao' },
     { to: '/lojinha', icon: Store, label: 'Lojinha Boxer', tela: 'lojinha' },
-    { to: '/logistica-cif', icon: Truck, label: 'Logística CIF (Enviar)', tela: 'logistica_cif' },
+    { to: '/logistica-cif', icon: ShieldPlus, label: 'Garantia - Boxer Soldas', tela: 'logistica_cif' },
     { to: '/databases', icon: Database, label: 'Databases', tela: 'databases' },
     { to: '/armazenamento', icon: HardDrive, label: 'Armazenamento', tela: 'armazenamento' },
     { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', tela: 'orcamentos' },
