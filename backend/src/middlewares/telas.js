@@ -30,6 +30,8 @@ export const TELAS = [
   { chave: 'armazenamento',          nome: 'Armazenamento (vídeos)' },
 ];
 const CHAVES = new Set(TELAS.map(t => t.chave));
+// Telas criadas pelo admin (quadros): quadro_<id>
+const chaveValida = (k) => CHAVES.has(k) || /^quadro_\d{1,9}$/.test(k);
 export const NIVEIS = ['nenhum', 'ver', 'editar'];
 
 // Rotas da API de cada tela: [método (null = todos), caminho, telas]
@@ -129,7 +131,7 @@ export function botoesDaRota(metodo, caminho) {
 export function normalizarTelas(obj) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
   const out = {};
-  for (const [k, v] of Object.entries(obj)) if (CHAVES.has(k) && NIVEIS.includes(v)) out[k] = v;
+  for (const [k, v] of Object.entries(obj)) if (chaveValida(k) && NIVEIS.includes(v)) out[k] = v;
   const bt = obj._botoes;
   if (bt && typeof bt === 'object' && !Array.isArray(bt)) {
     const b = {};
