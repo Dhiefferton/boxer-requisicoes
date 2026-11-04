@@ -209,7 +209,7 @@ router.get('/mover-coluna-lojinha', async (req, res) => {
       for (const p of ps) {
         out.movidos.push({ tela: t.tela, id: p.id, pedido: p.numero_pedido, de: de.nome, para: para.nome });
         if (req.query.executar !== '1') continue;
-        const extra = t.tela === 'lojinha' ? `, finalizado_em = CASE WHEN $2::text = 'finalizado' THEN COALESCE(finalizado_em, NOW()) ELSE NULL END` : '';
+        const extra = t.tela === 'lojinha' ? `, finalizado_em = CASE WHEN $2::text = 'finalizado' THEN COALESCE(finalizado_em, NOW()) ELSE finalizado_em END` : '';
         const r = await query(`UPDATE lojinha_boxer_pedidos SET ${t.campo} = $2::text${extra} WHERE id = $1 AND ${t.campo} = $3 RETURNING *`, [p.id, para.chave, de.chave]);
         if (r.rows[0]) await registrarMovLoj(r.rows[0], t.tipo, { de: de.chave, para: para.chave, origem: 'sistema',
           descricao: `${t.tela === 'cif' ? 'Logística CIF: m' : 'M'}ovido em massa de ${de.nome} para ${para.nome} (pedido do admin)` });
