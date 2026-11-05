@@ -57,6 +57,11 @@ export default function Telas() {
   }
 
   const quadros = dados.quadros || [];
+  // Telas que podem mandar cópias: Orçamentos, Lojinha, Garantia e as outras telas criadas
+  const origensCopia = (q) => [
+    ...['orcamentos', 'lojinha', 'logistica_cif'].map(k => ({ chave: k, nome: dados.nomes?.[k] || TELAS.find(t => t.chave === k)?.nome || k })),
+    ...quadros.filter(o => o.id !== q.id && o.ativo).map(o => ({ chave: `quadro_${o.id}`, nome: o.nome })),
+  ];
   return (
     <div className="space-y-5 max-w-4xl">
       <div>
@@ -82,7 +87,8 @@ export default function Telas() {
         {!quadros.length && <p className="text-xs text-[var(--c-suave)]">Nenhuma tela criada ainda.</p>}
         <div className="divide-y divide-[var(--c-borda)]">
           {quadros.map(q => (
-            <div key={q.id} className={`flex items-center gap-2 py-2 ${q.ativo ? '' : 'opacity-60'}`}>
+            <div key={q.id} className={`py-2 space-y-1.5 ${q.ativo ? '' : 'opacity-60'}`}>
+              <div className="flex items-center gap-2">
               <input value={nomesQ[q.id] ?? ''} onChange={e => setNomesQ(s => ({ ...s, [q.id]: e.target.value }))} className={inp} />
               {nomesQ[q.id]?.trim() && nomesQ[q.id].trim() !== q.nome && (
                 <button onClick={() => editarQuadro(q, { nome: nomesQ[q.id] })} disabled={ocupado === `q${q.id}`} title="Salvar nome"
@@ -96,6 +102,21 @@ export default function Telas() {
                 className={`shrink-0 px-2 py-1 rounded-lg text-[11px] font-semibold border ${q.ativo ? 'border-[var(--c-borda)] text-[var(--c-suave)] hover:text-red-400' : 'border-green-500/40 text-green-400'}`}>
                 {q.ativo ? 'Desativar' : 'Reativar'}
               </button>
+              </div>
+              {/* De quais telas esta tela recebe uma cópia dos cards que chegam em "Liberação de faturamento" */}
+              <div className="flex items-center gap-1.5 flex-wrap pl-1">
+                <span className="text-[11px] text-[var(--c-suave)] mr-1">Copiar cards que chegam em <b className="text-[var(--c-texto)]">Liberação de faturamento</b> de:</span>
+                {origensCopia(q).map(o => {
+                  const marcado = (q.copiar_de || []).includes(o.chave);
+                  return (
+                    <button key={o.chave} disabled={ocupado === `q${q.id}`}
+                      onClick={() => editarQuadro(q, { copiar_de: marcado ? q.copiar_de.filter(k => k !== o.chave) : [...(q.copiar_de || []), o.chave] })}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border disabled:opacity-40 ${marcado ? 'border-[var(--c-destaque)] bg-[var(--c-destaque)]/15 text-[var(--c-destaque-claro)]' : 'border-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
+                      {marcado && <Check size={10} />}{o.nome}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>

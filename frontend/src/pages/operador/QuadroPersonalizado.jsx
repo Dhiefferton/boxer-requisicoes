@@ -7,8 +7,8 @@
 // Acesso: admin; os outros conforme Admin > Usuários (Só ver / Ver e mexer).
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
-import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, Plus, Trash2, Pencil } from 'lucide-react';
+import { useParams, Navigate, Link } from 'react-router-dom';
+import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, Plus, Trash2, Pencil, CornerDownRight } from 'lucide-react';
 import { quadroService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -34,7 +34,7 @@ function montarColunas(cfg) {
 function combina(card, busca) {
   const termos = semAcento(busca).split(/\s+/).filter(Boolean);
   if (!termos.length) return true;
-  const texto = semAcento([card.titulo, `#${card.id}`, ...Object.values(card.valores || {})].join(' '));
+  const texto = semAcento([card.titulo, `#${card.id}`, card.origem_nome, ...(card.origem_dados?.dados || []).map(d => d.valor), ...Object.values(card.valores || {})].join(' '));
   return termos.every(t => texto.includes(t));
 }
 
@@ -188,6 +188,27 @@ function Quadro({ qid, nome: nomeMenu, podeEditar, admin }) {
   );
 }
 
+// Card copiado de outra tela (chegou em "Liberação de faturamento" lá): etiqueta de origem + resumo do card original
+const docFmt = (d) => { const x = String(d || '').replace(/\D/g, '');
+  return x.length === 14 ? x.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : x.length === 11 ? x.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4') : d; };
+function OrigemCard({ p, completo = false }) {
+  if (!p.origem_tela) return null;
+  const dados = (p.origem_dados?.dados || []).filter(d => completo || !['Cliente', 'Card'].includes(d.rotulo)).slice(0, completo ? 20 : 3);
+  return (
+    <div className="space-y-1">
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 text-sky-300 bg-sky-500/15 border border-sky-500/30">
+        <CornerDownRight size={10} /> Veio de: {p.origem_nome || p.origem_tela}
+      </span>
+      {dados.map(d => (
+        <p key={d.rotulo} className="text-[11px] text-[var(--c-suave)] truncate"><span className="text-[var(--c-texto)]">{d.rotulo}:</span> {d.rotulo === 'CPF/CNPJ' ? docFmt(d.valor) : d.valor}</p>
+      ))}
+      {completo && p.origem_dados?.link && (
+        <Link to={p.origem_dados.link} className="inline-block text-[11px] text-[var(--c-destaque-claro)] hover:underline">Abrir a tela de origem →</Link>
+      )}
+    </div>
+  );
+}
+
 // Card do quadro: título, data, etiquetas, anexos e até 3 campos do formulário inicial
 function CardQuadro({ p, cfg, movendo, podeArrastar, onAbrir, onArrastar, onFimArraste }) {
   const parar = (e) => e.stopPropagation();
@@ -204,6 +225,7 @@ function CardQuadro({ p, cfg, movendo, podeArrastar, onAbrir, onArrastar, onFimA
         <span className="font-semibold text-sm text-[var(--c-texto)]">{p.titulo}</span>
         <span className="text-[11px] text-[var(--c-suave)] shrink-0" title="Criado em">{fmtData(p.criado_em)}</span>
       </div>
+      <OrigemCard p={p} />
       <EtiquetasDoCard campos={cfg?.campos || []} valorDe={(id) => valores[id]} />
       {resumo.map(c => (
         <p key={c.id} className="text-[11px] text-[var(--c-suave)] truncate"><span className="text-[var(--c-texto)]">{c.rotulo}:</span> {valorLista(valores[c.id]).join(', ')}</p>
@@ -378,6 +400,7 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
                   </p>}
               <span className="inline-block text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-borda)] text-[var(--c-suave)]">{nomeQuadro} · #{p.id}</span>
               <p className="text-[11px] text-[var(--c-suave)]">Criado em {fmtData(p.criado_em)} · por {p.criado_por_nome || '—'}</p>
+              {p.origem_tela && <div className="pt-2"><OrigemCard p={p} completo /></div>}
             </div>
             {grupos.map(g => {
               const aberta = abertas.has(g.chave);
