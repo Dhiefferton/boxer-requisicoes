@@ -431,7 +431,7 @@ async function sincronizarFasesPipefy() {
     // Chegou pelo Pipefy na coluna Finalizado e ela é a "Liberação de Faturamento": e-mail ao faturamento
     if (novo !== p.status) {
       const nomeCol = (await cfgLojinha.ler()).colunas.find(c => c.chave === novo)?.nome;
-      if (ehLiberacaoFaturamento(nomeCol)) { await liberarFaturamento(p.id); await copiarParaTelas('lojinha', p.id); }
+      if (ehLiberacaoFaturamento(nomeCol)) await liberarFaturamento(p.id); // movido pelo Pipefy: não copia para outras telas
     }
   }
 }

@@ -1247,7 +1247,7 @@ async function executarSincronizacao(req, res, next) {
           });
           {
             const nomeAlvo = ((await lerConfigOrcamento().catch(() => null))?.colunas || []).find(c => c.chave === alvo)?.nome || NOME_STATUS[alvo];
-            if (ehLiberacaoFaturamentoOrc(nomeAlvo)) { await liberarFaturamentoOrcamento(p.id, req.usuario); await copiarParaTelas('orcamentos', p.id, req.usuario); }
+            if (ehLiberacaoFaturamentoOrc(nomeAlvo)) await liberarFaturamentoOrcamento(p.id, req.usuario); // movido pelo Pipefy: não copia para outras telas
           }
         }
       } catch (err) {
