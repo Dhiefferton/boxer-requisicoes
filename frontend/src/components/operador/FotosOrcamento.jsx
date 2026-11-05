@@ -21,7 +21,7 @@ function lista(v) {
 export const ehImagem = (url) => /\.(jpe?g|png|webp|gif|bmp)(\?|$)/i.test(String(url || '').split('#')[0]);
 const nomeArquivo = (url) => { try { return decodeURIComponent(new URL(url).pathname.split('/').pop() || url); } catch { return url; } };
 // Serviço das fotos: Orçamentos (padrão) ou outro quadro (ex.: Lojinha) via <FotosProvider>
-const SERVICO_ORCAMENTO = {
+export const SERVICO_ORCAMENTO = {
   base: '/pedidos-orcamento/fotos',
   imagem: (url) => pedidosOrcamentoService.imagem(url),
   enviarFoto: (id, dados) => pedidosOrcamentoService.enviarFoto(id, dados),
