@@ -13,8 +13,10 @@ import { veTela, nivelTela, telaDaRota } from '../../utils/telas';
 import { useLocation } from 'react-router-dom';
 import BotaoTema from '../ui/BotaoTema';
 import logoBoxer from '../../assets/logo-boxer.svg';
+import BarraTopo from './BarraTopo';
 
-export default function AppLayout({ children }) {
+// semMenu: tela sem a barra lateral (Início) — só o topo, com o conteúdo centralizado
+export default function AppLayout({ children, semMenu = false }) {
   const { usuario, logout } = useAuth();
   const { totalItens }      = useCart();
   const navigate            = useNavigate();
@@ -84,7 +86,7 @@ export default function AppLayout({ children }) {
     <div className="min-h-screen min-h-[100dvh] bg-[var(--c-fundo)] flex flex-col overflow-x-clip">
 
       {/* ── Sidebar (computador) ────────────────────────────── */}
-      <aside className={`hidden md:flex fixed inset-y-0 left-0 z-40 flex-col bg-[var(--c-fundo-2)] border-r border-[var(--c-borda)] transition-[width] duration-200 ${recolhida ? 'w-16' : 'w-56'}`}>
+      <aside className={`${semMenu ? 'hidden' : 'hidden md:flex'} fixed inset-y-0 left-0 z-40 flex-col bg-[var(--c-fundo-2)] border-r border-[var(--c-borda)] transition-[width] duration-200 ${recolhida ? 'w-16' : 'w-56'}`}>
         <div className={`h-14 flex items-center gap-2.5 border-b border-[var(--c-borda)] ${recolhida ? 'justify-center px-0' : 'px-4'}`}>
           <img src={logoBoxer} alt="Boxer" className="w-8 h-8 shrink-0" />
           {!recolhida && <span className="font-semibold text-sm text-[var(--c-texto)] truncate">Boxer Operações</span>}
@@ -136,10 +138,11 @@ export default function AppLayout({ children }) {
         </div>
       </aside>
 
-      <div className={`flex-1 flex flex-col min-w-0 ${recolhida ? 'md:pl-16' : 'md:pl-56'}`}>
+      <div className={`flex-1 flex flex-col min-w-0 ${semMenu ? '' : recolhida ? 'md:pl-16' : 'md:pl-56'}`}>
 
       {/* ── Header (celular) ────────────────────────────────── */}
-      <header className="md:hidden sticky top-0 z-40 bg-[var(--c-fundo)]/95 backdrop-blur border-b border-[var(--c-borda)]">
+      {semMenu && <BarraTopo onSair={handleLogout} />}
+      {!semMenu && <header className={`md:hidden sticky top-0 z-40 bg-[var(--c-fundo)]/95 backdrop-blur border-b border-[var(--c-borda)]`}>
         <div className="w-full px-3 sm:px-4 md:px-6 h-14 flex items-center justify-between gap-3">
 
           <div className="flex items-center gap-2.5 shrink-0">
@@ -207,7 +210,7 @@ export default function AppLayout({ children }) {
             </div>
           </div>
         )}
-      </header>
+      </header>}
 
       <main className="flex-1 w-full min-w-0 px-3 sm:px-4 md:px-6 py-4 sm:py-6">
         {alertaBlob && (
