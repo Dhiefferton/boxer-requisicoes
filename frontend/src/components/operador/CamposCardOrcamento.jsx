@@ -102,8 +102,14 @@ export function Valor({ campo, valor }) {
 export function EtiquetasDoCard({ campos, valorDe }) {
   const marcadas = [];
   for (const c of campos || []) {
-    if (c.tipo !== 'etiquetas') continue;
-    for (const o of valorLista(valorDe(c.pipefy_campo || `bx_${c.id}`))) marcadas.push({ k: `${c.id}-${o}`, o, cor: c.cores?.[o] || '#64748b' });
+    const vals = valorLista(valorDe(c.pipefy_campo || `bx_${c.id}`));
+    // Etiqueta configurada numa opção ("Concluído sem peças" → "Sem pedido de venda")
+    if (c.tipo !== 'etiquetas') {
+      if (!c.marcas) continue;
+      for (const o of vals) { const m = c.marcas[o]; if (m?.texto) marcadas.push({ k: `${c.id}-m-${o}`, o: m.texto, cor: m.cor || '#f59e0b' }); }
+      continue;
+    }
+    for (const o of vals) marcadas.push({ k: `${c.id}-${o}`, o, cor: c.cores?.[o] || '#64748b' });
   }
   if (!marcadas.length) return null;
   return (

@@ -6,7 +6,7 @@
 // campos do botão Novo card. Tudo é editado aqui e gravado em "Salvar".
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { X, Plus, Settings, ChevronUp, ChevronDown, Trash2, Pencil, Check, GripVertical } from 'lucide-react';
+import { X, Plus, Settings, ChevronUp, ChevronDown, Trash2, Pencil, Check, GripVertical, Tag } from 'lucide-react';
 import { pedidosOrcamentoService, basesService } from '../../services/api';
 import { Spinner } from '../ui';
 
@@ -296,7 +296,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
       const { data } = await svc.salvarConfig({
         colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null,
           regras: Array.isArray(c.regras) ? c.regras.filter(r => r?.destino && r?.campo && valoresCondicao(r.valores).length) : null })),
-        campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null, cria_opcoes: !!c.cria_opcoes, cores: c.tipo === 'etiquetas' ? c.cores || null : null,
+        campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null, cria_opcoes: !!c.cria_opcoes, cores: c.tipo === 'etiquetas' ? c.cores || null : null, marcas: c.tipo !== 'etiquetas' && c.marcas && Object.keys(c.marcas).length ? c.marcas : null,
           uid: c.uid, condicao: c.obrigatorio && c.condicao?.campo && valoresCondicao(c.condicao?.valor).length ? c.condicao : null,
           visivel: c.visivel?.campo && valoresCondicao(c.visivel?.valor).length && campos.some(o => o.uid === c.visivel.campo) ? c.visivel : null })),
       });
@@ -518,7 +518,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                     <div className="space-y-1.5">
                       <p className="text-[11px] text-[var(--c-suave)]">Opções</p>
                       {campoAtual.opcoes.map((o, i) => (
-                        <div key={`${o}-${i}`} className="flex items-center gap-2 rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] px-2.5 py-1.5 text-xs text-[var(--c-texto)]">
+                        <div key={`${o}-${i}`} className="space-y-1">
+                        <div className="flex items-center gap-2 rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] px-2.5 py-1.5 text-xs text-[var(--c-texto)]">
                           {campoAtual.tipo === 'etiquetas' && (
                             <label title="Cor da etiqueta" className="relative w-4 h-4 shrink-0 rounded-full cursor-pointer ring-1 ring-white/20" style={{ background: campoAtual.cores?.[o] || '#64748b' }}>
                               <input type="color" value={campoAtual.cores?.[o] || '#64748b'} className="absolute inset-0 opacity-0 cursor-pointer"
@@ -526,7 +527,27 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                             </label>
                           )}
                           <span className="flex-1">{o}</span>
+                          {campoAtual.tipo !== 'etiquetas' && (
+                            <button title="Etiqueta no card quando esta opção for escolhida" aria-label="Etiqueta no card"
+                              onClick={() => mudarCampo(campoAtual.uid, c => {
+                                const m = { ...(c.marcas || {}) };
+                                if (m[o]) delete m[o]; else m[o] = { texto: '', cor: '#f59e0b' };
+                                return { ...c, marcas: m };
+                              })}
+                              className={campoAtual.marcas?.[o] ? 'text-amber-400' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}><Tag size={12} /></button>
+                          )}
                           <button onClick={() => mudarCampo(campoAtual.uid, c => ({ ...c, opcoes: c.opcoes.filter((_, n) => n !== i) }))} aria-label="Remover opção" className="text-[var(--c-suave)] hover:text-red-400"><X size={12} /></button>
+                        </div>
+                        {campoAtual.tipo !== 'etiquetas' && campoAtual.marcas?.[o] && (
+                          <div className="ml-3 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2 py-1.5">
+                            <label title="Cor da etiqueta" className="relative w-4 h-4 shrink-0 rounded-full cursor-pointer ring-1 ring-white/20" style={{ background: campoAtual.marcas[o].cor || '#f59e0b' }}>
+                              <input type="color" value={campoAtual.marcas[o].cor || '#f59e0b'} className="absolute inset-0 opacity-0 cursor-pointer"
+                                onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, marcas: { ...c.marcas, [o]: { ...c.marcas[o], cor: e.target.value } } }))} />
+                            </label>
+                            <input value={campoAtual.marcas[o].texto || ''} placeholder="Etiqueta no card (ex.: Sem pedido de venda)" className="flex-1 min-w-0 bg-transparent text-[11px] text-[var(--c-texto)] outline-none"
+                              onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, marcas: { ...c.marcas, [o]: { ...c.marcas[o], texto: e.target.value } } }))} />
+                          </div>
+                        )}
                         </div>
                       ))}
                       <div className="flex gap-1.5">
@@ -710,5 +731,5 @@ export function campoDaConfig(c, _i, todos = []) {
   const mostrar = cadeia(c);
   return { quando, mostrar, id: c.pipefy_campo || `bx_${c.id}`, pipefy_campo: c.pipefy_campo || null, rotulo: c.rotulo, tipo: TIPO_EDITOR[c.tipo] || 'short_text', opcoes: Array.isArray(c.opcoes) ? c.opcoes : [],
     obrigatorio: !!c.obrigatorio, lista: c.pipefy_campo ? null : c.lista || null, descricao: c.descricao || '', boxer: !c.pipefy_campo,
-    cfg_id: c.id, cria_opcoes: c.tipo === 'lista' && !!c.cria_opcoes, cores: c.tipo === 'etiquetas' && c.cores ? c.cores : null };
+    cfg_id: c.id, cria_opcoes: c.tipo === 'lista' && !!c.cria_opcoes, cores: c.tipo === 'etiquetas' && c.cores ? c.cores : null, marcas: c.marcas || null };
 }
