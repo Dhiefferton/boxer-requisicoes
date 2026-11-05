@@ -14,7 +14,7 @@ import {
 } from '../integrations/pipefyService.js';
 import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
-  retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen, atualizarItensPedidoZen, buscarClienteZen,
+  retirarPecasRecusadasZen, separarCodigos, excluirPedidoVendaZen, atualizarItensPedidoZen, buscarClienteZen, documentosZen,
 } from '../integrations/zenPedidoVenda.js';
 import { lerConfigOrcamento, idCampoConfig } from './configOrcamentoController.js';
 import { liberarFaturamentoOrcamento, avisarFaturamentoOrcamento, ehLiberacaoFaturamentoOrc } from './faturamentoOrcamento.js';
@@ -30,7 +30,7 @@ const BASE_SELECT = `
     p.cliente_nome, p.cliente_cnpj, p.tecnico, p.frete_por_conta,
     p.entregue_por, p.ns_entrada, p.itens,
     p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em, p.aprovacao,
-    p.zen_romaneio_id, p.zen_nota_id, p.zen_cancelado_id, p.zen_cancelado_em,
+    p.zen_romaneio_id, p.zen_nota_id, p.zen_cancelado_id, p.zen_cancelado_em, p.zen_venda_numero, p.zen_nf_numero, p.zen_nf_status,
     p.pecas_recusadas, p.recusadas_retiradas_em, p.itens_recusados, p.itens_alterados_em,
     p.campos_editados, p.pipefy_fase,
     p.created_at, p.atualizado_em,
@@ -49,9 +49,9 @@ function garantirColunas() {
       const r = await query(
         `SELECT COUNT(*)::int AS n FROM information_schema.columns
           WHERE table_name = 'pedidos_orcamento'
-            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em', 'nao_liberado_ignorado_em', 'campos_editados', 'pipefy_fase', 'zen_cancelado_id', 'zen_cancelado_em')`
+            AND column_name IN ('pecas_recusadas', 'recusadas_retiradas_em', 'itens_recusados', 'cancelado_status', 'itens_alterados_em', 'nao_liberado_ignorado_em', 'campos_editados', 'pipefy_fase', 'zen_cancelado_id', 'zen_cancelado_em', 'zen_venda_numero', 'zen_nf_numero', 'zen_nf_status', 'zen_docs_em')`
       );
-      if (r.rows[0].n < 10) {
+      if (r.rows[0].n < 14) {
         await query(
           `ALTER TABLE pedidos_orcamento
               ADD COLUMN IF NOT EXISTS pecas_recusadas        TEXT,
@@ -63,7 +63,11 @@ function garantirColunas() {
               ADD COLUMN IF NOT EXISTS campos_editados        JSONB,
               ADD COLUMN IF NOT EXISTS pipefy_fase            TEXT,
               ADD COLUMN IF NOT EXISTS zen_cancelado_id       BIGINT,
-              ADD COLUMN IF NOT EXISTS zen_cancelado_em       TIMESTAMPTZ`
+              ADD COLUMN IF NOT EXISTS zen_cancelado_em       TIMESTAMPTZ,
+              ADD COLUMN IF NOT EXISTS zen_venda_numero       VARCHAR(40),
+              ADD COLUMN IF NOT EXISTS zen_nf_numero          VARCHAR(40),
+              ADD COLUMN IF NOT EXISTS zen_nf_status          VARCHAR(40),
+              ADD COLUMN IF NOT EXISTS zen_docs_em            TIMESTAMPTZ`
         );
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
@@ -341,10 +345,37 @@ const criarSchema = z.object({
   observacoes: z.string().max(1000).optional().nullable(),
 });
 
+// Nº do pedido de venda e da nota fiscal no Zen (caixa do card, igual à Lojinha).
+// Poucos por vez, cada card no máximo a cada 10 min; só leitura no Zen.
+let docsRodando = null, docsUltima = 0;
+function atualizarDocumentosOrcamento() {
+  if (docsRodando || Date.now() - docsUltima < 20000) return docsRodando || Promise.resolve();
+  docsUltima = Date.now();
+  docsRodando = (async () => {
+    const r = await query(`SELECT id, zen_pedido_id, zen_ordem_separacao_id, zen_venda_numero FROM pedidos_orcamento
+       WHERE zen_pedido_id IS NOT NULL AND status != 'cancelado' AND (zen_venda_numero IS NULL OR zen_nf_numero IS NULL)
+         AND (zen_docs_em IS NULL OR zen_docs_em < NOW() - INTERVAL '10 minutes')
+         AND created_at > NOW() - INTERVAL '90 days'
+       ORDER BY zen_docs_em NULLS FIRST, id DESC LIMIT 4`);
+    await Promise.all(r.rows.map(async (p) => {
+      try {
+        const d = await documentosZen(p);
+        await query(`UPDATE pedidos_orcamento SET zen_venda_numero = COALESCE($2, zen_venda_numero), zen_nf_numero = $3,
+            zen_nota_id = COALESCE($4, zen_nota_id), zen_nf_status = $5, zen_docs_em = NOW() WHERE id = $1`, [p.id, d.vendaNumero, d.nfNumero, d.nfId, d.nfStatus]);
+      } catch (e) {
+        await query(`UPDATE pedidos_orcamento SET zen_docs_em = NOW() WHERE id = $1`, [p.id]).catch(() => {});
+        console.error(`[Orçamento] documentos Zen card ${p.id}:`, e.message);
+      }
+    }));
+  })().catch(e => console.error('[Orçamento] documentos Zen:', e.message)).finally(() => { docsRodando = null; });
+  return docsRodando;
+}
+
 // GET /pedidos-orcamento
 export async function listarPedidos(req, res, next) {
   try {
     await garantirColunas();
+    await atualizarDocumentosOrcamento(); // Nº do pedido de venda e da NF
     await avisarFaturamentoOrcamento(); // e-mails ao faturamento que falharam (tenta de novo)
     const result = await query(`${BASE_SELECT} WHERE p.status != 'cancelado' ORDER BY p.created_at DESC`);
     res.json({ pedidos: result.rows });
