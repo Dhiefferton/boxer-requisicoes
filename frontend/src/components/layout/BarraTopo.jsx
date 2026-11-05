@@ -7,7 +7,7 @@
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Search, X, Lock, LogOut, Sun, Moon } from 'lucide-react';
+import { Search, X, Lock, LogOut, Sun, Moon, ShoppingCart } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTema } from '../../context/TemaContext';
 import { veTela } from '../../utils/telas';
@@ -16,7 +16,7 @@ import logoBoxer from '../../assets/logo-boxer.svg';
 
 const iniciais = (n) => String(n || '?').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toUpperCase();
 
-export default function BarraTopo({ onSair }) {
+export default function BarraTopo({ onSair, carrinho = null }) {
   const { usuario } = useAuth();
   const { tema, alternarTema } = useTema();
   const navigate = useNavigate();
@@ -94,6 +94,14 @@ export default function BarraTopo({ onSair }) {
             </div>
           )}
         </div>
+
+        {/* Carrinho (colaborador) */}
+        {carrinho && (
+          <button onClick={carrinho.abrir} title="Carrinho" className="relative hidden md:flex p-2 rounded-xl text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)]">
+            <ShoppingCart size={18} />
+            {carrinho.total > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-[var(--c-destaque)] rounded-full text-white text-[10px] font-bold flex items-center justify-center">{carrinho.total > 9 ? '9+' : carrinho.total}</span>}
+          </button>
+        )}
 
         {/* Avatar: tema, senha e sair */}
         <div ref={avatar} className="relative shrink-0">

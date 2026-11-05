@@ -15,8 +15,9 @@ import BotaoTema from '../ui/BotaoTema';
 import logoBoxer from '../../assets/logo-boxer.svg';
 import BarraTopo from './BarraTopo';
 
-// semMenu: tela sem a barra lateral (Início) — só o topo, com o conteúdo centralizado
-export default function AppLayout({ children, semMenu = false }) {
+// Sem barra lateral em nenhuma tela: a navegação é pela faixa do topo (BarraTopo) e pela tela Início
+export default function AppLayout({ children }) {
+  const semMenu = true;
   const { usuario, logout } = useAuth();
   const { totalItens }      = useCart();
   const navigate            = useNavigate();
@@ -141,7 +142,7 @@ export default function AppLayout({ children, semMenu = false }) {
       <div className={`flex-1 flex flex-col min-w-0 ${semMenu ? '' : recolhida ? 'md:pl-16' : 'md:pl-56'}`}>
 
       {/* ── Header (celular) ────────────────────────────────── */}
-      {semMenu && <BarraTopo onSair={handleLogout} />}
+      {semMenu && <BarraTopo onSair={handleLogout} carrinho={usuario?.perfil === 'colaborador' ? { total: totalItens, abrir: () => setCartOpen(true) } : null} />}
       {!semMenu && <header className={`md:hidden sticky top-0 z-40 bg-[var(--c-fundo)]/95 backdrop-blur border-b border-[var(--c-borda)]`}>
         <div className="w-full px-3 sm:px-4 md:px-6 h-14 flex items-center justify-between gap-3">
 
@@ -251,7 +252,7 @@ export default function AppLayout({ children, semMenu = false }) {
           )}
           {temMais && (
             <button
-              onClick={() => { setMenuOpen(v => !v); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              onClick={() => navigate('/inicio')}
               className={`flex-1 min-w-0 flex flex-col items-center gap-0.5 px-1 py-1.5 rounded-xl text-[11px] transition-colors ${menuOpen ? 'text-[var(--c-destaque)]' : 'text-[var(--c-suave)]'}`}
             >
               <MoreHorizontal size={20} className="shrink-0" /><span className="w-full truncate text-center">Mais</span>
