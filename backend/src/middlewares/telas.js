@@ -27,6 +27,7 @@ export const TELAS = [
   { chave: 'orcamentos',             nome: 'Orçamentos' },
   { chave: 'logistica_cif',          nome: 'Logística CIF (Enviar)' },
   { chave: 'databases',              nome: 'Databases' },
+  { chave: 'telas',                  nome: 'Telas (criar e renomear)' },
   { chave: 'armazenamento',          nome: 'Armazenamento (vídeos)' },
 ];
 const CHAVES = new Set(TELAS.map(t => t.chave));
@@ -42,6 +43,10 @@ const ROTAS = [
   [null,    /^\/logistica-cif(\/|$)/,               ['logistica_cif']],
   [null,     /^\/blob\/(uso|limites|arquivos|conferir)(\/|$)/, ['armazenamento']],
   // Databases: só o que muda a database (ler e criar registro no card continuam abertos)
+  // Telas: criar, renomear, desativar e copiar cards (Início › Telas)
+  ['POST',   /^\/telas\/quadros$/,                ['telas']],
+  ['PATCH',  /^\/telas\/quadros\/\d+$/,           ['telas']],
+  ['PUT',    /^\/telas\/nomes$/,                   ['telas']],
   ['POST',   /^\/bases(\/importar-pipefy|\/\d+\/importar)?$/, ['databases']],
   ['PATCH',  /^\/bases\/(\d+|registros\/\d+)$/,     ['databases']],
   ['DELETE', /^\/bases\/(\d+|registros\/\d+)$/,     ['databases']],
