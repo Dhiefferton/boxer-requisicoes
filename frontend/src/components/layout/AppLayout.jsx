@@ -3,7 +3,7 @@
 // ============================================================
 import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes, Truck, Database, HardDrive, LayoutGrid, Kanban, ShieldPlus } from 'lucide-react';
+import { Package, ShoppingCart, ClipboardList, LogOut, Menu, X, ChevronRight, MoreHorizontal, LayoutDashboard, ShieldCheck, PackagePlus, BarChart2, FileText, Lock, ClipboardCheck, PanelLeftClose, PanelLeftOpen, Store, Camera, Boxes, Truck, Database, HardDrive, LayoutGrid, Kanban, ShieldPlus, Home } from 'lucide-react';
 import { useTelas } from '../../utils/nomesTelas';
 import { blobService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -12,6 +12,7 @@ import CartDrawer from '../cart/CartDrawer';
 import { veTela, nivelTela, telaDaRota } from '../../utils/telas';
 import { useLocation } from 'react-router-dom';
 import BotaoTema from '../ui/BotaoTema';
+import logoBoxer from '../../assets/logo-boxer.svg';
 
 export default function AppLayout({ children }) {
   const { usuario, logout } = useAuth();
@@ -40,6 +41,7 @@ export default function AppLayout({ children }) {
   // Menu: telas liberadas pelo perfil e pelas telas escolhidas no cadastro do colaborador
   const { nomes: nomesTelas, quadros } = useTelas();
   const navItems = [
+    { to: '/inicio',    icon: Home,          label: 'Início',     tela: 'inicio' },
     { to: '/catalogo',  icon: Package,        label: 'Catálogo',   tela: 'catalogo' },
     { to: '/historico', icon: ClipboardList,   label: 'Histórico',  tela: 'historico' },
     { to: '/operador',  icon: LayoutDashboard, label: 'Operador',   tela: 'operador' },
@@ -58,7 +60,7 @@ export default function AppLayout({ children }) {
     { to: '/pedidos-orcamento', icon: FileText, label: 'Orçamentos', tela: 'orcamentos' },
     // Telas criadas pelo admin (quadros de cards)
     ...quadros.filter(q => q.ativo !== false).map(q => ({ to: `/quadro/${q.id}`, icon: Kanban, label: q.nome, tela: `quadro_${q.id}` })),
-  ].filter(item => veTela(usuario, item.tela))
+  ].filter(item => item.tela === 'inicio' || veTela(usuario, item.tela))
     .map(item => ({ ...item, label: nomesTelas[item.tela] || item.label }));
   // Criar e renomear telas: só o admin
   if (usuario?.perfil === 'admin') navItems.push({ to: '/telas', icon: LayoutGrid, label: 'Telas', tela: 'telas' });
@@ -71,7 +73,7 @@ export default function AppLayout({ children }) {
   const temCarrinho = usuario?.perfil === 'colaborador';
   const limiteNav = temCarrinho ? 4 : 5;
   // Telas de uso diário primeiro na barra de baixo (o resto fica em "Mais")
-  const PRIORIDADE = ['/operador', '/inventario', '/pedidos-orcamento', '/compras', '/necessidade-pecas', '/catalogo', '/historico'];
+  const PRIORIDADE = ['/inicio', '/operador', '/inventario', '/pedidos-orcamento', '/compras', '/necessidade-pecas', '/catalogo', '/historico'];
   const ordemNav = (to) => { const i = PRIORIDADE.indexOf(to); return i === -1 ? 99 : i; };
   const navInferior = navItems.length > limiteNav
     ? [...navItems].sort((a, b) => ordemNav(a.to) - ordemNav(b.to)).slice(0, limiteNav - 1)
@@ -84,10 +86,8 @@ export default function AppLayout({ children }) {
       {/* ── Sidebar (computador) ────────────────────────────── */}
       <aside className={`hidden md:flex fixed inset-y-0 left-0 z-40 flex-col bg-[var(--c-fundo-2)] border-r border-[var(--c-borda)] transition-[width] duration-200 ${recolhida ? 'w-16' : 'w-56'}`}>
         <div className={`h-14 flex items-center gap-2.5 border-b border-[var(--c-borda)] ${recolhida ? 'justify-center px-0' : 'px-4'}`}>
-          <div className="w-8 h-8 rounded-lg bg-[var(--c-destaque)] flex items-center justify-center shrink-0">
-            <Package size={15} className="text-white" />
-          </div>
-          {!recolhida && <span className="font-semibold text-sm text-[var(--c-texto)] truncate">Boxer Requisições</span>}
+          <img src={logoBoxer} alt="Boxer" className="w-8 h-8 shrink-0" />
+          {!recolhida && <span className="font-semibold text-sm text-[var(--c-texto)] truncate">Boxer Operações</span>}
         </div>
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
           {navItems.map(({ to, icon: Icon, label }) => (
@@ -143,10 +143,8 @@ export default function AppLayout({ children }) {
         <div className="w-full px-3 sm:px-4 md:px-6 h-14 flex items-center justify-between gap-3">
 
           <div className="flex items-center gap-2.5 shrink-0">
-            <div className="w-7 h-7 rounded-lg bg-[var(--c-destaque)] flex items-center justify-center">
-              <Package size={14} className="text-white" />
-            </div>
-            <span className="font-semibold text-sm text-[var(--c-texto)] hidden sm:block">Boxer Requisições</span>
+            <img src={logoBoxer} alt="Boxer" className="w-7 h-7" />
+            <span className="font-semibold text-sm text-[var(--c-texto)] hidden sm:block">Boxer Operações</span>
           </div>
 
           <div className="flex items-center gap-2">
