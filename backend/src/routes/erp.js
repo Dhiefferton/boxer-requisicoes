@@ -55,6 +55,34 @@ router.get('/debug-zen', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// DIAGNÓSTICO — lista os caminhos da API do Zen (WADL) que batem com o filtro. Só leitura.
+// Ex: GET /api/erp/debug-zen-rotas?secret=...&filtro=outgoingInvoice
+router.get('/debug-zen-rotas', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const token = await getToken();
+    const r = await fetch('https://api.zenerp.app.br/application.wadl', { headers: { Authorization: `Bearer ${token}`, tenant: 'boxer' } });
+    const wadl = await r.text();
+    const re = new RegExp(String(req.query.filtro || ''), 'i');
+    // monta caminhos completos (resource aninhado) com os métodos
+    const pilha = []; const out = [];
+    for (const m of wadl.matchAll(/<(\/?)(resource|method)\b([^>]*?)(\/?)>/g)) {
+      const [, fecha, tag, attrs, auto] = m;
+      if (tag === 'resource') {
+        if (fecha) { pilha.pop(); continue; }
+        const p = (attrs.match(/path="([^"]*)"/) || [])[1] || '';
+        pilha.push(p);
+        if (auto) pilha.pop();
+      } else if (!fecha) {
+        const nome = (attrs.match(/name="([^"]*)"/) || [])[1] || '';
+        const caminho = '/' + pilha.join('/').replace(/\/+/g, '/').replace(/^\//, '');
+        if (re.test(caminho)) out.push(`${nome} ${caminho}`);
+      }
+    }
+    res.json({ total: out.length, rotas: [...new Set(out)].slice(0, 400) });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // DIAGNÓSTICO — consulta (somente leitura) na API GraphQL do Pipefy.
 // Ex: GET /api/erp/debug-pipefy?secret=...&gql={ phase(id:1){ name } }
 router.get('/debug-pipefy', async (req, res) => {
