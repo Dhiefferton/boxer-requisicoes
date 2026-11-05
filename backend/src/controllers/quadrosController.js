@@ -12,7 +12,19 @@
 import { query } from '../config/db.js';
 import { criarConfigQuadro, exigidoAgora, bloqueioRegra } from './configQuadro.js';
 import { telasDoUsuario } from '../middlewares/telas.js';
-import { registrarArquivoBlob, excluirArquivoBlob, lerEnvioBlob } from './blobController.js';
+import { registrarArquivoBlob, excluirArquivoBlob as excluirBlobDireto, lerEnvioBlob } from './blobController.js';
+import { pedidoOrcamentoCompleto } from './pedidosOrcamentoController.js';
+import { emailsFaturamentoCard } from './faturamentoOrcamento.js';
+import { arquivoNotaZen } from '../integrations/zenPedidoVenda.js';
+
+// Cópias de cards compartilham o arquivo (blob) com o card original: só apaga se ninguém mais usa
+async function excluirArquivoBlob(url) {
+  if (!url) return;
+  const uso = await query(`SELECT (SELECT COUNT(*) FROM bx_quadro_fotos WHERE blob_url = $1)
+      + (SELECT COUNT(*) FROM orc_fotos WHERE blob_url = $1) AS n`, [url]).catch(() => ({ rows: [{ n: 1 }] }));
+  if (Number(uso.rows[0]?.n) > 0) return;
+  return excluirBlobDireto(url);
+}
 
 let estrutura = null;
 export function garantirQuadros() {
@@ -274,9 +286,71 @@ export async function copiarCardParaQuadro(qid, tela, id, usuario = null) {
      VALUES ($1, $2, $3, '{}'::jsonb, $4, $5, $6, $7, $8, $9::jsonb) ON CONFLICT DO NOTHING RETURNING *`,
     [Number(qid), String(r.titulo || `Card #${id}`).slice(0, 200), col?.chave || 'entrada', usuario?.id || null, usuario?.nome || 'Sistema',
      tela, id, nome.slice(0, 80), JSON.stringify({ dados: r.dados, link: r.link })]);
-  if (ins.rows[0]) await movimento(Number(qid), ins.rows[0], 'criado', { para: ins.rows[0].status, usuario,
-    descricao: `Cópia do card de ${nome} (chegou em Liberação de faturamento)`, detalhes: { origem: tela, origem_id: id } });
+  if (ins.rows[0]) {
+    await movimento(Number(qid), ins.rows[0], 'criado', { para: ins.rows[0].status, usuario,
+      descricao: `Cópia do card de ${nome} (chegou em Liberação de faturamento)`, detalhes: { origem: tela, origem_id: id } });
+    await fotografarCard(Number(qid), ins.rows[0].id).catch(e => console.error('[Quadros] cópia completa:', e.message));
+  }
   return ins.rows[0] || null;
+}
+
+/**
+ * Cópia fixa: grava no card desta tela tudo do card original naquele momento — campos de todas as fases,
+ * peças, Zen (pedido/ordem/NF), e-mails de Notas de serviço/Retorno de conserto, fotos (copiadas para esta
+ * tela) e o histórico (copiado para o histórico desta tela). Depois disso o card não depende mais do original.
+ */
+export async function fotografarCard(qid, cardId, { refazer = false } = {}) {
+  const c = (await query(`SELECT * FROM bx_quadro_cards WHERE id = $1 AND quadro_id = $2`, [cardId, qid])).rows[0];
+  if (!c || c.origem_tela !== 'orcamentos') return null;
+  if (c.origem_dados?.snapshot && !refazer) return c;
+  const pedido = await pedidoOrcamentoCompleto(c.origem_id);
+  if (!pedido) return null;
+  const emails = await emailsFaturamentoCard(c.origem_id).catch(() => null);
+  const movs = (await query(`SELECT tipo, de_status, para_status, descricao, detalhes, usuario_id, usuario_nome, origem, criado_em
+      FROM pedidos_orcamento_movimentos WHERE pedido_id = $1 ORDER BY criado_em, id`, [c.origem_id])).rows;
+  // Fotos: copia para esta tela (o arquivo é o mesmo; só não apaga enquanto alguém usa)
+  const jaTem = Number((await query(`SELECT COUNT(*) AS n FROM bx_quadro_fotos WHERE pedido_id = $1 AND quadro_id = $2`, [cardId, qid])).rows[0].n);
+  if (!jaTem) {
+    await query(`INSERT INTO bx_quadro_fotos (quadro_id, pedido_id, campo_id, imagem, miniatura, mime, nome, blob_url, tamanho, usuario_id, usuario_nome, created_at)
+      SELECT $1, $2, campo_id, imagem, miniatura, mime, nome, blob_url, tamanho, usuario_id, usuario_nome, created_at FROM orc_fotos WHERE pedido_id = $3 ORDER BY id`,
+      [qid, cardId, c.origem_id]);
+  }
+  // Histórico: as linhas do Orçamento entram no histórico desta tela (sem mexer nas fases daqui)
+  const jaHist = Number((await query(`SELECT COUNT(*) AS n FROM bx_quadro_movimentos WHERE quadro_id = $1 AND pedido_id = $2 AND tipo LIKE 'orcamento:%'`, [qid, cardId])).rows[0].n);
+  if (!jaHist) {
+    for (const m of movs) {
+      await query(`INSERT INTO bx_quadro_movimentos (quadro_id, pedido_id, referencia, tipo, descricao, detalhes, usuario_id, usuario_nome, origem, criado_em)
+                   VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)`,
+        [qid, cardId, c.titulo, `orcamento:${m.tipo}`, `[Orçamento] ${m.descricao || m.tipo}`,
+         JSON.stringify({ ...(m.detalhes || {}), de_orcamento: m.de_status, para_orcamento: m.para_status }),
+         m.usuario_id, m.usuario_nome, m.origem || 'usuario', m.criado_em]);
+    }
+  }
+  const snapshot = {
+    pedido: { ...pedido, fotos_locais: undefined },
+    movimentos: movs.map(m => ({ de_status: m.de_status, para_status: m.para_status, criado_em: m.criado_em })),
+    emails, copiado_em: new Date().toISOString(),
+  };
+  const r = await query(`UPDATE bx_quadro_cards SET origem_dados = COALESCE(origem_dados, '{}'::jsonb) || jsonb_build_object('snapshot', $2::jsonb), atualizado_em = NOW()
+                          WHERE id = $1 RETURNING *`, [cardId, JSON.stringify(snapshot)]);
+  return r.rows[0];
+}
+
+// GET /quadros/:qid/cards/:id/nf/:tipo — XML/PDF da nota do card copiado (nota guardada na cópia)
+export async function arquivoNotaCardQuadro(req, res) {
+  try {
+    const tipo = req.params.tipo === 'xml' ? 'xml' : req.params.tipo === 'pdf' ? 'pdf' : null;
+    if (!tipo) return res.status(400).json({ erro: 'Tipo inválido (xml ou pdf).' });
+    const c = await cardDoQuadro(req.quadro.id, req.params.id);
+    if (!c) return res.status(404).json({ erro: 'Card não encontrado.' });
+    const nf = c.origem_dados?.snapshot?.pedido?.zen_nota_id;
+    if (!nf) return res.status(409).json({ erro: 'Este card não tem nota fiscal no Zen.' });
+    const a = await arquivoNotaZen(nf, tipo);
+    res.setHeader('Content-Type', a.contentType);
+    res.setHeader('Content-Disposition', `${tipo === 'pdf' ? 'inline' : 'attachment'}; filename="${a.nome}"`);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(a.buffer);
+  } catch (e) { res.status(e.status || 502).json({ erro: e.message }); }
 }
 
 // ── Cards ───────────────────────────────────────────────────
@@ -411,8 +485,8 @@ export async function excluirCard(req, res, next) {
     const p = await cardDoQuadro(qid, req.params.id);
     if (!p) return res.status(404).json({ erro: 'Card não encontrado.' });
     const blobs = (await query(`SELECT blob_url FROM bx_quadro_fotos WHERE pedido_id = $1 AND blob_url IS NOT NULL`, [p.id])).rows;
-    for (const b of blobs) await excluirArquivoBlob(b.blob_url).catch(() => {});
     await query(`DELETE FROM bx_quadro_fotos WHERE pedido_id = $1`, [p.id]);
+    for (const b of blobs) await excluirArquivoBlob(b.blob_url).catch(() => {});
     await query(`DELETE FROM bx_quadro_cards WHERE id = $1`, [p.id]);
     await movimento(qid, p, 'excluido', { de: p.status, usuario: req.usuario, descricao: 'Card excluído' });
     res.json({ ok: true });

@@ -42,6 +42,12 @@ const BASE_SELECT = `
   LEFT JOIN usuarios u ON u.id = p.criado_por
 `;
 
+/** Card do Orçamento completo (como a tela recebe), para a cópia fixa em outra tela. */
+export async function pedidoOrcamentoCompleto(id) {
+  await garantirColunas();
+  return (await query(`${BASE_SELECT} WHERE p.id = $1`, [id])).rows[0] || null;
+}
+
 // Colunas do Aprovado Parcial (migration 020) — cria se ainda não existirem
 let colunasOk = null;
 function garantirColunas() {
