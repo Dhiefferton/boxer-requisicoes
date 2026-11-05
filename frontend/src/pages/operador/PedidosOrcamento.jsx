@@ -513,7 +513,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
         </div>
       )}
       {pedido.zen_erro && (
-        <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg px-2 py-1 break-words">ZenERP: {pedido.zen_erro}</p>
+        <p className="text-[11px] text-red-400 bg-red-500/10 rounded-lg px-2 py-1 break-words">{/^(Reparo sem peças|Card sem peças com código)/.test(pedido.zen_erro) ? 'Reparo sem peças' : `ZenERP: ${pedido.zen_erro}`}</p>
       )}
     </>
   );
