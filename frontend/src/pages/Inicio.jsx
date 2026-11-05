@@ -71,7 +71,7 @@ export default function Inicio() {
   const { usuario } = useAuth();
   const navigate = useNavigate();
   const { nomes, quadros } = useTelas();
-  const admin = usuario?.perfil === 'admin';
+  const admin = veTela(usuario, 'telas'); // "Criar tela": quem tem a tela Telas liberada
   const [dados, setDados] = useState(null);
   const [aba, setAba] = useState('telas');
   const chaveFav = `boxer_favoritas_${usuario?.id || ''}`;
