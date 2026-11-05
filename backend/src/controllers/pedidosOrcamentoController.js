@@ -230,7 +230,7 @@ async function enviarParaSeparacaoAuto(id, usuario) {
     return null;
   };
   if (!(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)) {
-    return registrarErro(PIPEFY_ATIVO ? 'Card sem peças com código e quantidade. Lance as peças no card do Pipefy — o sistema tenta de novo sozinho.' : 'Card sem peças com código e quantidade. Preencha as peças no card e mova de novo.');
+    return registrarErro('Reparo sem peças');
   }
   try {
     // Card que já tinha pedido no Zen e voltou para Requisitar Peças (ex.: revertido para
