@@ -58,6 +58,7 @@ import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/aut
 import { relatorioUsoPipefy, chamadasPipefy } from '../integrations/usoPipefy.js';
 import { verConfig as verConfigOrcamento, salvarConfig as salvarConfigOrcamento, adicionarOpcao as adicionarOpcaoOrcamento } from '../controllers/configOrcamentoController.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
+import { arquivoNotaLojinha, arquivoNotaOrcamento } from '../controllers/notaArquivoController.js';
 import { saidasMarketplace, reposicaoMarketplace, relatoriosMarketplace, relatorioMarketplace, gerarRelatorioMarketplace, sincronizarMarketplace } from '../controllers/marketplaceController.js';
 
 const router = Router();
@@ -172,6 +173,7 @@ router.get('/pedidos-orcamento',                autenticar, exigirLeituraOrcamen
 router.get('/pedidos-orcamento/movimentos',     autenticar, exigirPerfil('admin'), listarMovimentos);
 router.get('/pedidos-orcamento/estrutura',      autenticar, exigirLeituraOrcamentos, estruturaOrcamento);
 router.get('/pedidos-orcamento/:id/tratativa',  autenticar, exigirLeituraOrcamentos, verTratativa);
+router.get('/pedidos-orcamento/:id/nf/:tipo',  autenticar, exigirLeituraOrcamentos, arquivoNotaOrcamento);
 router.get('/pedidos-orcamento/:id/tratativa/anexo', autenticar, exigirLeituraOrcamentos, anexoTratativa);
 router.patch('/pedidos-orcamento/:id/campos',   autenticar, exigirPerfil('admin'), editarCampos);
 router.post('/pedidos-orcamento/novo-card',     autenticar, exigirPerfil('admin'), criarCardBoxer);
@@ -269,6 +271,7 @@ router.get('/lojinha/cliente',  ...loja, buscarClienteLojinha);
 router.get('/lojinha/produto',  ...loja, buscarProdutoLojinha);
 router.get('/lojinha/loja-integrada/:numero', ...loja, buscarPedidoLojaIntegrada);
 router.get('/lojinha/zen-pedido/:numero', ...loja, buscarPedidoZenLojinha);
+router.get('/lojinha/pedidos/:id/nf/:tipo', ...loja, arquivoNotaLojinha);
 router.post('/lojinha/pedidos/zen', ...loja, criarPedidoLojinhaFaturada);
 router.get('/lojinha/pedidos',  ...loja, listarPedidosLojinha);
 router.post('/lojinha/pedidos', ...loja, criarPedidoLojinha);
@@ -307,6 +310,7 @@ router.post('/quadros/:qid/config/campos/:id/opcoes', ...qd, adicionarOpcaoQuadr
 
 const cif = [autenticar, acessoCif];
 router.get('/logistica-cif/pedidos',              ...cif, listarPedidosCif);
+router.get('/logistica-cif/pedidos/:id/nf/:tipo', ...cif, arquivoNotaLojinha);
 router.post('/logistica-cif/pedidos/:id/mover',   ...cif, moverPedidoCif);
 router.post('/logistica-cif/pedidos/:id/campos',  ...cif, editarCamposCif);
 router.post('/logistica-cif/pedidos/:id/fotos',   ...cif, enviarFotoLojinha);
