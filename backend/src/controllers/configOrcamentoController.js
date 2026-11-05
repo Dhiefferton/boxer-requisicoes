@@ -11,7 +11,7 @@
 // (a partir daí a coluna mostra só os campos configurados aqui).
 // ============================================================
 import { query, transaction } from '../config/db.js';
-import { valoresCondicao, limparCondicao } from './configQuadro.js';
+import { valoresCondicao, limparCondicao, limparRegras } from './configQuadro.js';
 
 // Colunas do sistema (mesma ordem/ids de frontend/src/utils/fasesOrcamento.js).
 // zen = o que o sistema faz no Zen nessa coluna (só informação; não se edita aqui).
@@ -71,6 +71,7 @@ function garantirConfig() {
         ALTER TABLE orc_campos  ADD COLUMN IF NOT EXISTS pipefy_campo VARCHAR(80);
         ALTER TABLE orc_colunas ADD COLUMN IF NOT EXISTS campos_importados BOOLEAN NOT NULL DEFAULT FALSE;
           ALTER TABLE orc_colunas ADD COLUMN IF NOT EXISTS destinos JSONB;
+          ALTER TABLE orc_colunas ADD COLUMN IF NOT EXISTS regras JSONB;
           ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS condicao JSONB;
           ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS cria_opcoes BOOLEAN NOT NULL DEFAULT FALSE;
           ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS cores JSONB;
@@ -93,7 +94,7 @@ export async function lerConfigOrcamento() {
   if (cache && Date.now() - cache.em < 30000) return cache.dados;
   await garantirConfig();
   const [col, cam] = await Promise.all([
-    query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados, destinos FROM orc_colunas WHERE ativo ORDER BY ordem, chave`),
+    query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados, destinos, regras FROM orc_colunas WHERE ativo ORDER BY ordem, chave`),
     query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao, cria_opcoes, cores, visivel
              FROM orc_campos WHERE ativo ORDER BY coluna, ordem, id`),
   ]);
@@ -148,7 +149,7 @@ export async function salvarConfig(req, res, next) {
       }
       return { chave, nome, cor: COR_OK.test(c?.cor || '') ? c.cor : '#64748b', ordem: (i + 1) * 10,
         so_admin: c?.so_admin !== false, arquivada: !!c?.arquivada, campos_importados: !!c?.campos_importados,
-          destinos: Array.isArray(c?.destinos) ? c.destinos.map(String) : null };
+          destinos: Array.isArray(c?.destinos) ? c.destinos.map(String) : null, regras: limparRegras(c?.regras, limpar) };
     });
     const nomes = lista.map(c => c.nome.toLowerCase());
     const repetido = nomes.find((n, i) => nomes.indexOf(n) !== i);
@@ -157,6 +158,8 @@ export async function salvarConfig(req, res, next) {
     // Para onde cada coluna pode mover (null = todas): chaves novas trocadas, só colunas que ficam
     const chavesFinais = new Set(lista.map(c => c.chave));
     for (const c of lista) if (c.destinos) c.destinos = [...new Set(c.destinos.map(k => novasChaves[k] || k))].filter(k => k !== c.chave && chavesFinais.has(k));
+    // Regras para mover: chaves novas trocadas, só destinos que ficam
+    for (const c of lista) if (c.regras) { c.regras = c.regras.map(r => ({ ...r, destino: novasChaves[r.destino] || r.destino })).filter(r => r.destino !== c.chave && chavesFinais.has(r.destino)); if (!c.regras.length) c.regras = null; }
 
     // Colunas que saíram: as do sistema não podem ser excluídas; as criadas aqui só se estiverem vazias
     const ficam = new Set(lista.map(c => c.chave));
@@ -204,12 +207,12 @@ export async function salvarConfig(req, res, next) {
     await transaction(async (cli) => {
       for (const c of lista) {
         await cli.query(
-          `INSERT INTO orc_colunas (chave, nome, cor, ordem, so_admin, arquivada, campos_importados, destinos, sistema, ativo, atualizado_em)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,FALSE,TRUE,NOW())
+          `INSERT INTO orc_colunas (chave, nome, cor, ordem, so_admin, arquivada, campos_importados, destinos, regras, sistema, ativo, atualizado_em)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,FALSE,TRUE,NOW())
            ON CONFLICT (chave) DO UPDATE SET nome = EXCLUDED.nome, cor = EXCLUDED.cor, ordem = EXCLUDED.ordem,
-             so_admin = EXCLUDED.so_admin, arquivada = EXCLUDED.arquivada, destinos = EXCLUDED.destinos,
+             so_admin = EXCLUDED.so_admin, arquivada = EXCLUDED.arquivada, destinos = EXCLUDED.destinos, regras = EXCLUDED.regras,
              campos_importados = orc_colunas.campos_importados OR EXCLUDED.campos_importados, ativo = TRUE, atualizado_em = NOW()`,
-          [c.chave, c.nome, c.cor, c.ordem, c.so_admin, c.arquivada, c.campos_importados, c.destinos ? JSON.stringify(c.destinos) : null]);
+          [c.chave, c.nome, c.cor, c.ordem, c.so_admin, c.arquivada, c.campos_importados, c.destinos ? JSON.stringify(c.destinos) : null, c.regras ? JSON.stringify(c.regras) : null]);
       }
       if (saem.length) await cli.query(`UPDATE orc_colunas SET ativo = FALSE, atualizado_em = NOW() WHERE chave = ANY($1::text[])`, [saem.map(c => c.chave)]);
       // Campos que saíram ficam desativados (os valores já preenchidos nos cards continuam guardados)

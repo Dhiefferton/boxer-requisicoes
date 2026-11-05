@@ -8,7 +8,7 @@
 // (ids cif_bx_<id>); colunas e campos configuráveis (cif_colunas / cif_campos).
 // ============================================================
 import { query } from '../config/db.js';
-import { criarConfigQuadro, exigidoAgora } from './configQuadro.js';
+import { criarConfigQuadro, exigidoAgora, bloqueioRegra } from './configQuadro.js';
 import { garantirEstrutura, registrarMovLoj, atualizarDocumentosZen } from './lojinhaController.js';
 import { temBotao } from '../middlewares/telas.js';
 import { liberarFaturamento, ehLiberacaoFaturamento } from './faturamentoLojinha.js';
@@ -95,6 +95,9 @@ export async function moverPedidoCif(req, res, next) {
       return res.status(400).json({ erro: `De "${col.get(atual)?.nome || atual}" não dá para mover para "${col.get(status)?.nome || status}". Ajuste em Configurar.` });
     }
     const valores = p.cif_valores || {};
+    // Regras da coluna (Configurar → "Regras para mover")
+    const motivoRegra = bloqueioRegra(col.get(atual), status, cfg.campos, valores, cfgCif.idCampoConfig);
+    if (motivoRegra) return res.status(400).json({ erro: `Não dá para mover para "${col.get(status)?.nome || status}": ${motivoRegra} (regra da coluna "${col.get(atual)?.nome || atual}").` });
     const faltando = cfg.campos.filter(c => c.coluna === atual && exigidoAgora(c, cfg.campos, valores, cfgCif.idCampoConfig) && c.tipo !== 'anexo'
       && !String(valores[cfgCif.idCampoConfig(c)] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha antes de sair de "${col.get(atual)?.nome || atual}": ${faltando.map(c => c.rotulo).join(', ')}.` });

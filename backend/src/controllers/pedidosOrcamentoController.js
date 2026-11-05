@@ -18,7 +18,7 @@ import {
 } from '../integrations/zenPedidoVenda.js';
 import { lerConfigOrcamento, idCampoConfig } from './configOrcamentoController.js';
 import { liberarFaturamentoOrcamento, avisarFaturamentoOrcamento, ehLiberacaoFaturamentoOrc } from './faturamentoOrcamento.js';
-import { exigidoAgora } from './configQuadro.js';
+import { exigidoAgora, bloqueioRegra } from './configQuadro.js';
 import { temBotao } from '../middlewares/telas.js';
 import { registrarArquivoBlob, excluirArquivoBlob, lerEnvioBlob } from './blobController.js';
 import { guardarTratativa } from './tratativaController.js';
@@ -404,6 +404,13 @@ export async function moverPedido(req, res, next) {
     const destinosCol = colCfg.get(pedido.status)?.destinos;
     if (Array.isArray(destinosCol) && status !== pedido.status && !destinosCol.includes(status)) {
       return res.status(400).json({ erro: `De "${nomeCol(pedido.status)}" não dá para mover para "${nomeCol(status)}". Ajuste em Configurar.` });
+    }
+    // Regras da coluna (Configurar → "Regras para mover"): ex. sem peças retiradas não vai para Envio de orçamento
+    if (status !== pedido.status) {
+      const valoresRegra = { ...Object.fromEntries((Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).filter(c => c?.id).map(c => [c.id, c.valor])),
+        ...(pedido.campos_editados && typeof pedido.campos_editados === 'object' ? pedido.campos_editados : {}) };
+      const motivoRegra = bloqueioRegra(colCfg.get(pedido.status), status, cfg?.campos, valoresRegra, idCampoConfig);
+      if (motivoRegra) return res.status(400).json({ erro: `Não dá para mover para "${nomeCol(status)}": ${motivoRegra} (regra da coluna "${nomeCol(pedido.status)}").` });
     }
     const detalhesMov = {};
 

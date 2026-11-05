@@ -10,7 +10,7 @@
 // Também guarda os nomes das telas renomeadas (bx_config 'telas_nomes').
 // ============================================================
 import { query } from '../config/db.js';
-import { criarConfigQuadro, exigidoAgora } from './configQuadro.js';
+import { criarConfigQuadro, exigidoAgora, bloqueioRegra } from './configQuadro.js';
 import { telasDoUsuario } from '../middlewares/telas.js';
 import { registrarArquivoBlob, excluirArquivoBlob, lerEnvioBlob } from './blobController.js';
 
@@ -276,6 +276,9 @@ export async function moverCard(req, res, next) {
       return res.status(400).json({ erro: `De "${col.get(atual)?.nome || atual}" não dá para mover para "${col.get(status)?.nome || status}". Ajuste em Configurar.` });
     }
     const valores = p.valores || {};
+    // Regras da coluna (Configurar → "Regras para mover")
+    const motivo = bloqueioRegra(col.get(atual), status, cfg.campos, valores, c.idCampoConfig);
+    if (motivo) return res.status(400).json({ erro: `Não dá para mover para "${col.get(status)?.nome || status}": ${motivo} (regra da coluna "${col.get(atual)?.nome || atual}").` });
     const faltando = cfg.campos.filter(f => f.coluna === atual && f.tipo !== 'anexo' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
       && !String(valores[c.idCampoConfig(f)] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha antes de sair de "${col.get(atual)?.nome || atual}": ${faltando.map(f => f.rotulo).join(', ')}.` });
