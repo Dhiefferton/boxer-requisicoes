@@ -225,6 +225,12 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
   const qtdPorColuna = useMemo(() => campos.reduce((m, c) => ({ ...m, [c.coluna]: (m[c.coluna] || 0) + 1 }), {}), [campos]);
 
   const mudou = () => setAlterado(true);
+  // Campos com opções que podem condicionar outro: os desta coluna primeiro, depois os das outras colunas (o valor fica no card)
+  const nomeColuna = (k) => colunas.find(c => keyCol(c) === k)?.nome || 'Formulário inicial';
+  const refsCondicao = (alvo) => {
+    const ok = campos.filter(o => o.uid !== alvo.uid && COM_OPCOES.includes(o.tipo) && (o.opcoes || []).length);
+    return [...ok.filter(o => o.coluna === alvo.coluna), ...ok.filter(o => o.coluna !== alvo.coluna)];
+  };
   const mudarCampo = (uid, fn) => { setCampos(l => l.map(c => (c.uid === uid ? fn({ ...c }) : c))); mudou(); };
   const mudarColuna = (k, fn) => { setColunas(l => l.map(c => (keyCol(c) === k ? fn({ ...c }) : c))); mudou(); };
 
@@ -443,8 +449,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       <Sigla tipo={c.tipo} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-[var(--c-texto)]">{c.obrigatorio && <span className="text-red-400">* </span>}{c.rotulo}
-                          {c.visivel?.campo && <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-sky-400 bg-sky-500/10 rounded px-1 py-0.5" title={`Aparece só quando "${camposAtuais.find(o => o.uid === c.visivel.campo)?.rotulo || '?'}" for "${valoresCondicao(c.visivel.valor).join('" ou "')}"`}>aparece se</span>}
-                          {c.obrigatorio && c.condicao?.campo && <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-amber-400 bg-amber-500/10 rounded px-1 py-0.5" title={`Obrigatório só quando "${camposAtuais.find(o => o.uid === c.condicao.campo)?.rotulo || '?'}" for "${valoresCondicao(c.condicao.valor).join('" ou "')}"`}>condicional</span>}
+                          {c.visivel?.campo && <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-sky-400 bg-sky-500/10 rounded px-1 py-0.5" title={`Aparece só quando "${campos.find(o => o.uid === c.visivel.campo)?.rotulo || '?'}" for "${valoresCondicao(c.visivel.valor).join('" ou "')}"`}>aparece se</span>}
+                          {c.obrigatorio && c.condicao?.campo && <span className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-amber-400 bg-amber-500/10 rounded px-1 py-0.5" title={`Obrigatório só quando "${campos.find(o => o.uid === c.condicao.campo)?.rotulo || '?'}" for "${valoresCondicao(c.condicao.valor).join('" ou "')}"`}>condicional</span>}
                           {c.pipefy_campo && <span title="Campo que já existia na fase do Pipefy (o valor do card vem de lá)" className="ml-1.5 align-middle text-[9px] font-bold uppercase tracking-wide text-sky-400 bg-sky-500/10 rounded px-1 py-0.5">Pipefy</span>}</p>
                         {c.descricao && <p className="text-[11px] text-[var(--c-suave)]">{c.descricao}</p>}
                       </div>
@@ -475,7 +481,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                   </label>
                   {(() => {
                     // Mostrar este campo só quando outro campo (com opções) desta coluna tiver um valor
-                    const refs = camposAtuais.filter(o => o.uid !== campoAtual.uid && COM_OPCOES.includes(o.tipo) && (o.opcoes || []).length);
+                    const refs = refsCondicao(campoAtual);
                     const ref = refs.find(o => o.uid === campoAtual.visivel?.campo) || null;
                     if (!refs.length) return null;
                     return (
@@ -484,7 +490,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                         <select value={ref ? ref.uid : ''} className={inp}
                           onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, visivel: e.target.value ? { campo: e.target.value, valor: (refs.find(o => o.uid === e.target.value)?.opcoes || []).slice(0, 1) } : null }))}>
                           <option value="">Sempre</option>
-                          {refs.map(o => <option key={o.uid} value={o.uid}>Só quando "{o.rotulo}" for…</option>)}
+                          {refs.map(o => <option key={o.uid} value={o.uid}>Só quando "{o.rotulo}"{o.coluna !== campoAtual.coluna ? ` (${nomeColuna(o.coluna)})` : ''} for…</option>)}
                         </select>
                         {ref && (
                           <OpcoesCondicao opcoes={ref.opcoes} valor={campoAtual.visivel?.valor}
@@ -496,7 +502,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                   })()}
                   {campoAtual.obrigatorio && (() => {
                     // Obrigatório só quando outro campo (com opções) desta coluna tiver um valor
-                    const refs = camposAtuais.filter(o => o.uid !== campoAtual.uid && COM_OPCOES.includes(o.tipo) && (o.opcoes || []).length);
+                    const refs = refsCondicao(campoAtual);
                     const ref = refs.find(o => o.uid === campoAtual.condicao?.campo) || null;
                     return (
                       <div className="rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 space-y-1.5">
@@ -504,13 +510,13 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                         <select value={ref ? ref.uid : ''} className={inp}
                           onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: e.target.value ? { campo: e.target.value, valor: (refs.find(o => o.uid === e.target.value)?.opcoes || []).slice(0, 1) } : null }))}>
                           <option value="">Sempre</option>
-                          {refs.map(o => <option key={o.uid} value={o.uid}>Só quando "{o.rotulo}" for…</option>)}
+                          {refs.map(o => <option key={o.uid} value={o.uid}>Só quando "{o.rotulo}"{o.coluna !== campoAtual.coluna ? ` (${nomeColuna(o.coluna)})` : ''} for…</option>)}
                         </select>
                         {ref && (
                           <OpcoesCondicao opcoes={ref.opcoes} valor={campoAtual.condicao?.valor}
                             onChange={v => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: { ...c.condicao, valor: v } }))} />
                         )}
-                        {!refs.length && <p className="text-[10px] text-[var(--c-suave)]">Para condicionar, crie antes nesta coluna um campo com opções (lista, única opção ou checkbox).</p>}
+                        {!refs.length && <p className="text-[10px] text-[var(--c-suave)]">Para condicionar, crie antes um campo com opções (lista, única opção ou checkbox).</p>}
                       </div>
                     );
                   })()}
