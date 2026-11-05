@@ -327,6 +327,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
   const [retirando, setRetirando] = useState(false);
   const proxima = precisaRetirar || !PROXIMA[pedido.status] ? null : COLUNAS.find(c => c.status === PROXIMA[pedido.status]);
   const [movendoPara, setMovendoPara] = useState(false);
+  const { usuario: eu } = useAuth();
   // Admin: mover para qualquer coluna
   registrarMover?.((st) => moverPara(st));
   async function moverPara(status) {
@@ -337,7 +338,9 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
         ? '\n\nIsso fecha o romaneio e cria a nota fiscal no Zen.' : '';
     // Card criado aqui: avisa os campos obrigatórios da fase atual ainda vazios (como no Pipefy)
     let avisoCampos = '';
-    if (!pedido.pipefy_card_id && colunaAtual?.faseId) {
+    // Admin voltando para uma coluna anterior: os obrigatórios da coluna atual não são exigidos
+    const voltandoAdmin = eu?.perfil === 'admin' && COLUNAS.findIndex(c => c.status === status) < COLUNAS.findIndex(c => c.status === pedido.status);
+    if (!pedido.pipefy_card_id && colunaAtual?.faseId && !voltandoAdmin) {
       try {
         const fases = await carregarEstrutura();
         const valores = Object.fromEntries((pedido.pipefy_campos || []).filter(c => c?.id).map(c => [c.id, c.valor]));
