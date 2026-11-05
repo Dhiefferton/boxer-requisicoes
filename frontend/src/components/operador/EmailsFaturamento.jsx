@@ -7,7 +7,7 @@
 // Os que ainda não saíram aparecem como prévia.
 // ============================================================
 import { useEffect, useState } from 'react';
-import { Mail, ChevronDown, ChevronRight, Check, Copy } from 'lucide-react';
+import { ReceiptText, ChevronDown, ChevronRight, Check, Copy } from 'lucide-react';
 import api from '../../services/api';
 import { Spinner } from '../ui';
 
@@ -35,7 +35,7 @@ export default function EmailsFaturamento({ pedidoId }) {
       <button type="button" onClick={() => setAberto(a => !a)}
         className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold text-[var(--c-texto)] hover:bg-[var(--c-borda)]/30 rounded-lg">
         {aberto ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-        <Mail size={13} /> <span className="flex-1 text-left">Email</span>
+        <ReceiptText size={13} /> <span className="flex-1 text-left">Notas de serviço/Retorno de conserto</span>
         {dados ? <span className="text-[10px] font-bold rounded-full px-1.5 py-0.5 bg-[var(--c-destaque)] text-white">{dados.enviados.length + dados.pendentes.length}</span> : !erro && <Spinner size={11} />}
       </button>
       {aberto && (
