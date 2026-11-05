@@ -84,3 +84,37 @@ export async function resumoInicio(req, res, next) {
     res.json(dados);
   } catch (err) { next(err); }
 }
+
+// GET /inicio/busca?q= — procura card em todas as telas (cliente, CPF/CNPJ, NS, pedido, pedido de venda, NF, título)
+export async function buscaInicio(req, res, next) {
+  try {
+    const q = String(req.query.q || '').trim().slice(0, 80);
+    if (q.length < 2) return res.json({ resultados: [] });
+    const like = `%${q}%`;
+    const dig = q.replace(/\D/g, '');
+    const doc = dig.length >= 3 ? `%${dig}%` : '___nada___';
+    const [orc, loj, qd] = await Promise.all([
+      seguro(query(`SELECT id, cliente_nome, ns_entrada, zen_venda_numero, zen_nf_numero, status FROM pedidos_orcamento
+         WHERE status <> 'cancelado' AND (cliente_nome ILIKE $1 OR referencia ILIKE $1 OR ns_entrada::text ILIKE $1 OR zen_venda_numero ILIKE $1
+           OR zen_nf_numero ILIKE $1 OR pipefy_card_id::text ILIKE $1 OR regexp_replace(COALESCE(cliente_cnpj, ''), '[^0-9]', '', 'g') LIKE $2)
+         ORDER BY id DESC LIMIT 8`, [like, doc])),
+      seguro(query(`SELECT id, numero_pedido, cliente_nome, zen_venda_numero, zen_nf_numero, cif_status FROM lojinha_boxer_pedidos
+         WHERE numero_pedido ILIKE $1 OR cliente_nome ILIKE $1 OR zen_venda_numero ILIKE $1 OR zen_nf_numero ILIKE $1
+           OR regexp_replace(COALESCE(documento, ''), '[^0-9]', '', 'g') LIKE $2
+         ORDER BY id DESC LIMIT 8`, [like, doc])),
+      seguro(query(`SELECT c.id, c.titulo, c.quadro_id, q.nome FROM bx_quadro_cards c JOIN bx_quadros q ON q.id = c.quadro_id
+         WHERE q.ativo AND (c.titulo ILIKE $1 OR c.valores::text ILIKE $1 OR COALESCE(c.origem_dados::text, '') ILIKE $1)
+         ORDER BY c.id DESC LIMIT 8`, [like])),
+    ]);
+    const r = [];
+    for (const p of orc?.rows || []) r.push({ tela: 'orcamentos', rota: '/pedidos-orcamento', busca: q, titulo: p.cliente_nome || `Orçamento #${p.id}`,
+      sub: ['Orçamentos', p.ns_entrada && `NS ${p.ns_entrada}`, p.zen_venda_numero && `PV ${p.zen_venda_numero}`, p.zen_nf_numero && `NF ${p.zen_nf_numero}`].filter(Boolean).join(' · ') });
+    for (const p of loj?.rows || []) {
+      r.push({ tela: 'lojinha', rota: '/lojinha', busca: q, titulo: `Pedido ${p.numero_pedido}${p.cliente_nome ? ` — ${p.cliente_nome}` : ''}`,
+        sub: ['Lojinha Boxer', p.zen_venda_numero && `PV ${p.zen_venda_numero}`, p.zen_nf_numero && `NF ${p.zen_nf_numero}`].filter(Boolean).join(' · ') });
+      if (p.cif_status) r.push({ tela: 'logistica_cif', rota: '/logistica-cif', busca: q, titulo: `Pedido ${p.numero_pedido}${p.cliente_nome ? ` — ${p.cliente_nome}` : ''}`, sub: 'Garantia' });
+    }
+    for (const c of qd?.rows || []) r.push({ tela: `quadro_${c.quadro_id}`, rota: `/quadro/${c.quadro_id}`, busca: q, titulo: c.titulo, sub: c.nome });
+    res.json({ resultados: r });
+  } catch (err) { next(err); }
+}
