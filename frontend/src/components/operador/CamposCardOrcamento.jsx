@@ -55,6 +55,22 @@ export function visivelAgora(campo, valorDe) {
   return true;
 }
 
+/**
+ * Regra da coluna atual esconde o botão de mover para "destino"? (Configurar → "Regras para mover")
+ * campos = campos da configuração (id, rotulo, pipefy_campo); idDe = id do valor do campo no card.
+ * Devolve o motivo (texto) ou null.
+ */
+export function regraBloqueiaMover(col, destino, campos, valorDe, idDe = (c) => c.pipefy_campo || `bx_${c.id}`) {
+  for (const r of (Array.isArray(col?.regras) ? col.regras : [])) {
+    if (r?.destino !== destino) continue;
+    const c = (campos || []).find(x => Number(x.id) === Number(r.campo));
+    if (!c) continue;
+    const atuais = valorLista(valorDe(idDe(c)));
+    if (bate(atuais, r.valores)) return `"${c.rotulo}" está "${atuais.join(', ')}"`;
+  }
+  return null;
+}
+
 export function obrigatorioAgora(campo, valorDe) {
   if (!campo?.obrigatorio) return false;
   if (!visivelAgora(campo, valorDe)) return false;

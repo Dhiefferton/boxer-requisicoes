@@ -12,8 +12,8 @@ import { X, Settings, ArrowRight, ArrowLeft, Save, ExternalLink, History, Ban, P
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
 import { FotosCampo } from './FotosOrcamento';
-import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA, obrigatorioAgora, visivelAgora, lerRegistro } from './CamposCardOrcamento';
-import { COLUNAS_ORCAMENTO, STATUS_SO_ADMIN } from '../../utils/fasesOrcamento';
+import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA, obrigatorioAgora, visivelAgora, lerRegistro, regraBloqueiaMover } from './CamposCardOrcamento';
+import { COLUNAS_ORCAMENTO, STATUS_SO_ADMIN, CONFIG_ORCAMENTO } from '../../utils/fasesOrcamento';
 import { useFasesPassadas, CaixaFase } from './FaseAnterior';
 import TratativaSAC from './TratativaSAC';
 
@@ -125,7 +125,9 @@ export default function CardAbertoOrcamento({
   const idxAtual = COLUNAS_ORCAMENTO.findIndex(c => c.status === pedido.status);
   let proxima = proximaProp;
   // Configurar → "Pode mover cards desta coluna para" (sem lista = todas)
-  const permitido = (c) => !Array.isArray(colunaAtual?.destinos) || colunaAtual.destinos.includes(c.status);
+  // + Regras para mover: esconde o botão quando o campo da regra tem o valor marcado
+  const permitido = (c) => (!Array.isArray(colunaAtual?.destinos) || colunaAtual.destinos.includes(c.status))
+    && !regraBloqueiaMover(colunaAtual, c.status, CONFIG_ORCAMENTO.campos, valorDe);
   if (proxima && !permitido(proxima)) proxima = null;
   const destinos = botoes.mover
     ? COLUNAS_ORCAMENTO.filter(c => c.status !== pedido.status && permitido(c))

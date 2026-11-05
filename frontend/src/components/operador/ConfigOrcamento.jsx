@@ -294,7 +294,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
     setSalvando(true); setErro('');
     try {
       const { data } = await svc.salvarConfig({
-        colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null })),
+        colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null,
+          regras: Array.isArray(c.regras) ? c.regras.filter(r => r?.destino && r?.campo && valoresCondicao(r.valores).length) : null })),
         campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null, cria_opcoes: !!c.cria_opcoes, cores: c.tipo === 'etiquetas' ? c.cores || null : null,
           uid: c.uid, condicao: c.obrigatorio && c.condicao?.campo && valoresCondicao(c.condicao?.valor).length ? c.condicao : null,
           visivel: c.visivel?.campo && valoresCondicao(c.visivel?.valor).length && campos.some(o => o.uid === c.visivel.campo) ? c.visivel : null })),
@@ -600,6 +601,47 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                     })}
                     <p className="text-[10px] text-[var(--c-suave)]">Os botões de mover do card mostram só as colunas marcadas. Movimentos automáticos (Zen) não mudam.</p>
                   </div>
+                  {/* Regras para mover: esconde o botão de uma coluna conforme o valor de um campo */}
+                  {(() => {
+                    const refs = campos.filter(c => c.id && COM_OPCOES.includes(c.tipo) && (c.opcoes || []).length);
+                    const regras = Array.isArray(colAtual.regras) ? colAtual.regras : [];
+                    const outras = colunas.filter(o => keyCol(o) !== colSel);
+                    const nomeDaColuna = (k) => (k === 'inicio' ? 'Formulário inicial' : colunas.find(o => keyCol(o) === k)?.nome || k);
+                    const mudarRegra = (i, fn) => mudarColuna(colSel, c => ({ ...c, regras: (c.regras || []).map((r, j) => (j === i ? fn({ ...r }) : r)) }));
+                    return (
+                      <div className="rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 space-y-2">
+                        <p className="text-[11px] font-semibold text-[var(--c-texto)]">Regras para mover</p>
+                        {regras.map((r, i) => {
+                          const ref = refs.find(c => Number(c.id) === Number(r.campo)) || null;
+                          return (
+                            <div key={i} className="rounded-lg border border-[var(--c-borda)] p-2 space-y-1.5">
+                              <div className="flex items-center gap-2">
+                                <p className="flex-1 text-[11px] text-[var(--c-suave)]">Esconder o botão para</p>
+                                <button onClick={() => mudarColuna(colSel, c => ({ ...c, regras: (c.regras || []).filter((_, j) => j !== i) }))} aria-label="Remover regra" className="text-[var(--c-suave)] hover:text-red-400"><Trash2 size={12} /></button>
+                              </div>
+                              <select value={r.destino || ''} className={inp} onChange={e => mudarRegra(i, x => ({ ...x, destino: e.target.value }))}>
+                                {outras.map(o => <option key={keyCol(o)} value={keyCol(o)}>{o.nome}</option>)}
+                              </select>
+                              <p className="text-[11px] text-[var(--c-suave)]">quando o campo</p>
+                              <select value={r.campo || ''} className={inp}
+                                onChange={e => mudarRegra(i, x => ({ ...x, campo: Number(e.target.value) || null, valores: (refs.find(c => String(c.id) === e.target.value)?.opcoes || []).slice(0, 1) }))}>
+                                <option value="">Escolha o campo…</option>
+                                {refs.map(c => <option key={c.id} value={c.id}>{nomeDaColuna(c.coluna)} › {c.rotulo}</option>)}
+                              </select>
+                              {ref && <><p className="text-[11px] text-[var(--c-suave)]">for</p>
+                                <OpcoesCondicao opcoes={ref.opcoes} valor={r.valores} onChange={v => mudarRegra(i, x => ({ ...x, valores: v }))} /></>}
+                            </div>
+                          );
+                        })}
+                        <button disabled={!outras.length}
+                          onClick={() => mudarColuna(colSel, c => ({ ...c, regras: [...(c.regras || []), { destino: keyCol(outras[0]), campo: null, valores: [] }] }))}
+                          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-[var(--c-borda)] text-[11px] text-[var(--c-texto)] hover:border-[var(--c-destaque)] disabled:opacity-40">
+                          <Plus size={12} /> Nova regra
+                        </button>
+                        <p className="text-[10px] text-[var(--c-suave)]">Com a regra valendo, o botão some do card e o sistema não deixa mover para essa coluna (nem arrastando). Campo criado agora: salve antes para usar numa regra.</p>
+                      </div>
+                    );
+                  })()}
                   <div className="text-[11px] text-[var(--c-suave)] rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 leading-relaxed">
                     <b className="text-[var(--c-texto)]">Ação no Zen</b><br />{colAtual.zen || 'Nenhuma. O card só muda de coluna.'}
                     {colAtual.fase_pipefy && <><br /><b className="text-[var(--c-texto)]">Pipefy</b><br />Segue a fase do Pipefy desta coluna.</>}
