@@ -14,7 +14,7 @@ import { lerConfigOrcamento } from '../controllers/configOrcamentoController.js'
 import { previaEmailsOrcamento } from '../controllers/faturamentoOrcamento.js';
 import { lerConfigLojinha, registrarMovLoj, garantirEstrutura } from '../controllers/lojinhaController.js';
 import { lerConfigCif } from '../controllers/logisticaCifController.js';
-import { copiarCardParaQuadro } from '../controllers/quadrosController.js';
+import { copiarCardParaQuadro, fotografarCard } from '../controllers/quadrosController.js';
 import { documentosZen, zenLeitura, arquivoNotaZen } from '../integrations/zenPedidoVenda.js';
 import { SQL_CATEGORIA_USO_CONSUMO } from '../controllers/mrpController.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
@@ -266,6 +266,16 @@ router.get('/copiar-cards-quadro', async (req, res) => {
     const cards = (await query(sql, [colunas])).rows;
     const ja = new Set((await query(`SELECT origem_id FROM bx_quadro_cards WHERE quadro_id = $1 AND origem_tela = $2`, [q.id, origem]).catch(() => ({ rows: [] }))).rows.map(r => r.origem_id));
     const novos = cards.filter(c => !ja.has(c.id));
+    // atualizar=1: refaz a cópia completa (campos, fotos, histórico, e-mails) das cópias que já existem nesta tela
+    if (req.query.atualizar === '1') {
+      const copias = (await query(`SELECT id, origem_dados ? 'snapshot' AS tem FROM bx_quadro_cards WHERE quadro_id = $1 AND origem_tela = $2`, [q.id, origem])).rows;
+      if (req.query.executar !== '1') return res.json({ quadro: q, copias: copias.length, sem_copia_completa: copias.filter(x => !x.tem).length });
+      let feitos = 0; const erros = [];
+      for (const x of copias) {
+        try { if (await fotografarCard(q.id, x.id, { refazer: true })) feitos++; } catch (e) { erros.push({ id: x.id, erro: e.message }); }
+      }
+      return res.json({ quadro: q, atualizados: feitos, erros });
+    }
     if (req.query.executar !== '1') return res.json({ quadro: q, total: cards.length, ja_copiados: cards.length - novos.length, a_copiar: novos.length, por_coluna: colunas.map(k => ({ coluna: k, cards: novos.filter(c => c.coluna === k).length })) });
     let copiados = 0; const erros = [];
     for (const c of novos) {

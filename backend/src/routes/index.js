@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { verTratativa, anexoTratativa } from '../controllers/tratativaController.js';
 import { acessoQuadro, verTelas, criarQuadro, editarQuadro, salvarNomesTelas, verConfigQuadro, salvarConfigQuadroDin, adicionarOpcaoQuadro,
-  listarCards, criarCard, moverCard, editarCamposCard, excluirCard, listarMovimentosQuadro, enviarFotoQuadro, verFotoQuadro, excluirFotoQuadro } from '../controllers/quadrosController.js';
+  listarCards, criarCard, moverCard, editarCamposCard, excluirCard, listarMovimentosQuadro, enviarFotoQuadro, verFotoQuadro, excluirFotoQuadro, arquivoNotaCardQuadro } from '../controllers/quadrosController.js';
 import { autorizarUpload, registrarVisto, alertaBlob, verUsoBlob, salvarLimites, excluirArquivo, conferirNaVercel } from '../controllers/blobController.js';
 import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro, excluirBase, importarBasePipefy, editarBase, excluirRegistro, importarRegistros } from '../controllers/basesController.js';
 import bcrypt from 'bcryptjs';
@@ -306,6 +306,7 @@ router.post('/quadros/:qid/cards/:id/fotos',  ...qd, enviarFotoQuadro);
 router.get('/quadros/:qid/fotos/:fotoId',     ...qd, verFotoQuadro);
 router.delete('/quadros/:qid/fotos/:fotoId',  ...qd, excluirFotoQuadro);
 router.get('/quadros/:qid/movimentos',        ...qd, listarMovimentosQuadro);
+router.get('/quadros/:qid/cards/:id/nf/:tipo', ...qd, arquivoNotaCardQuadro);
 router.get('/quadros/:qid/config',            ...qd, verConfigQuadro);
 router.post('/quadros/:qid/config',           ...qd, exigirPerfil('admin'), salvarConfigQuadroDin);
 router.post('/quadros/:qid/config/campos/:id/opcoes', ...qd, adicionarOpcaoQuadro);
