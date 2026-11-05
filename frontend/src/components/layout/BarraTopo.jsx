@@ -51,7 +51,7 @@ export default function BarraTopo({ onSair, carrinho = null }) {
 
   const links = [
     { to: '/inicio', label: 'Início', ok: true },
-    { to: '/telas', label: 'Telas', ok: usuario?.perfil === 'admin' },
+    { to: '/telas', label: 'Telas', ok: veTela(usuario, 'telas') },
     { to: '/databases', label: 'Bases', ok: veTela(usuario, 'databases') },
   ].filter(l => l.ok);
   const abrir = (r) => { setAberto(false); setQ(''); navigate(`${r.rota}?busca=${encodeURIComponent(r.busca)}`); };
