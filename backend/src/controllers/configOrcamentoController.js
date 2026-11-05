@@ -75,7 +75,8 @@ function garantirConfig() {
           ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS condicao JSONB;
           ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS cria_opcoes BOOLEAN NOT NULL DEFAULT FALSE;
           ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS cores JSONB;
-          ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS visivel JSONB;`);
+          ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS visivel JSONB;
+          ALTER TABLE orc_campos ADD COLUMN IF NOT EXISTS marcas JSONB;`);
       // Colunas do sistema que ainda não estão na tabela (primeira vez ou coluna nova no código)
       const tem = new Set((await query(`SELECT chave FROM orc_colunas`)).rows.map(r => r.chave));
       for (const [i, c] of COLUNAS_PADRAO.entries()) {
@@ -95,7 +96,7 @@ export async function lerConfigOrcamento() {
   await garantirConfig();
   const [col, cam] = await Promise.all([
     query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados, destinos, regras FROM orc_colunas WHERE ativo ORDER BY ordem, chave`),
-    query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao, cria_opcoes, cores, visivel
+    query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao, cria_opcoes, cores, visivel, marcas
              FROM orc_campos WHERE ativo ORDER BY coluna, ordem, id`),
   ]);
   const dados = {
@@ -199,6 +200,10 @@ export async function salvarConfig(req, res, next) {
           // Cor de cada opção (etiquetas): { opção: '#rrggbb' }
           cores: tipo === 'etiquetas' && c?.cores && typeof c.cores === 'object'
             ? Object.fromEntries(opcoes.filter(o => COR_OK.test(String(c.cores[o] || ''))).map(o => [o, c.cores[o]])) : null,
+          // Etiqueta no card quando uma opção é escolhida: { opção: { texto, cor } }
+          marcas: tipo !== 'etiquetas' && c?.marcas && typeof c.marcas === 'object'
+            ? (m => Object.keys(m).length ? m : null)(Object.fromEntries(opcoes.filter(o => limpar(c.marcas[o]?.texto, 60))
+                .map(o => [o, { texto: limpar(c.marcas[o].texto, 60), cor: COR_OK.test(String(c.marcas[o].cor || '')) ? c.marcas[o].cor : '#f59e0b' }]))) : null,
           uid: String(c?.uid || ''), condicao: c?.condicao?.campo && valoresCondicao(c?.condicao?.valor).length ? { campo: String(c.condicao.campo), valor: limparCondicao(c.condicao.valor, limpar) } : null,
           // Campo aparece só quando outro campo tem um valor (ex.: "+ Campos - Peça")
           visivel: c?.visivel?.campo && valoresCondicao(c?.visivel?.valor).length ? { campo: String(c.visivel.campo), valor: limparCondicao(c.visivel.valor, limpar) } : null });
@@ -238,9 +243,9 @@ export async function salvarConfig(req, res, next) {
         if (!id) continue;
         const ref = c.condicao ? (idPorUid[c.condicao.campo] || Number(String(c.condicao.campo).replace(/^id_/, '')) || null) : null;
           const vis = c.visivel ? (idPorUid[c.visivel.campo] || Number(String(c.visivel.campo).replace(/^id_/, '')) || null) : null;
-        await cli.query(`UPDATE orc_campos SET condicao = $1::jsonb, cria_opcoes = $3, cores = $4::jsonb, visivel = $5::jsonb WHERE id = $2`,
+        await cli.query(`UPDATE orc_campos SET condicao = $1::jsonb, cria_opcoes = $3, cores = $4::jsonb, visivel = $5::jsonb, marcas = $6::jsonb WHERE id = $2`,
           [ref && ref !== id ? JSON.stringify({ campo: ref, valor: c.condicao.valor }) : null, id, c.cria_opcoes, c.cores && Object.keys(c.cores).length ? JSON.stringify(c.cores) : null,
-             vis && vis !== id ? JSON.stringify({ campo: vis, valor: c.visivel.valor }) : null]);
+             vis && vis !== id ? JSON.stringify({ campo: vis, valor: c.visivel.valor }) : null, c.marcas ? JSON.stringify(c.marcas) : null]);
       }
     });
     cache = null;
