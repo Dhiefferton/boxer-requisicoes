@@ -36,6 +36,7 @@ export const TELAS = [
     legado: u => (perfilEm(u, 'operador', 'admin') || doSetor(u, 'Sac / Suporte')) ? 'editar' : 'nenhum' },
   { chave: 'armazenamento', nome: 'Armazenamento (vídeos)', rotas: ['/armazenamento'], legado: u => perfilEm(u, 'admin') ? 'editar' : 'nenhum' },
   { chave: 'databases',  nome: 'Databases',             rotas: ['/databases'],            legado: u => perfilEm(u, 'admin') ? 'editar' : 'nenhum' },
+  { chave: 'telas',      nome: 'Telas (criar e renomear)', rotas: ['/telas'],             legado: u => perfilEm(u, 'admin') ? 'editar' : 'nenhum' },
   { chave: 'orcamentos', nome: 'Orçamentos',            rotas: ['/pedidos-orcamento'],
     legado: u => perfilEm(u, 'operador', 'admin') ? 'editar' : ORCAMENTOS_SOMENTE_LEITURA.includes(email(u)) ? 'ver' : 'nenhum' },
 ];
