@@ -114,7 +114,7 @@ async function emailServico(p) {
     if (d?.vendaNumero) pedidoZen = Number.isFinite(Number(d.vendaNumero)) ? Number(d.vendaNumero).toLocaleString('en-US') : d.vendaNumero;
   }
   const nsBruto = campo(p, /^ns entrada/) || String(p.ns_entrada || '').trim();
-  const ns = /^\d+$/.test(nsBruto) ? Number(nsBruto).toLocaleString('en-US') : nsBruto;
+  const ns = nsBruto.replace(/[.,\s]/g, ''); // só os dígitos, sem pontos e vírgulas
   const pagamento = campo(p, /^prazo de pagamento/) || campo(p, /^forma de pagamento/);
   const modelo = campo(p, /^modelo (da )?maquina/);
   const pecasServico = campo(p, /pecas utilizadas para emissao de prestacao de servico/);
