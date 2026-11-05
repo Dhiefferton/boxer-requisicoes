@@ -1,7 +1,7 @@
 {
-  "name": "Boxer Requisições",
+  "name": "Boxer Operações",
   "short_name": "Boxer",
-  "description": "Requisições, separação e pedidos de orçamento — Boxer Soldas",
+  "description": "Boxer Operações — orçamentos, lojinha, garantia, requisições e estoque — Boxer Soldas",
   "id": "/",
   "start_url": "/",
   "scope": "/",
