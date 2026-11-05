@@ -257,21 +257,26 @@ export async function copiarParaTelas(tela, id, usuario = null) {
     const qs = (await query(`SELECT id, nome FROM bx_quadros WHERE ativo AND copiar_de @> jsonb_build_array($1::text)`, [tela])).rows
       .filter(q => tela !== `quadro_${q.id}`);
     if (!qs.length) return;
-    const r = await resumoOrigem(tela, id);
-    if (!r) return;
-    const nome = await nomeTela(tela);
-    for (const q of qs) {
-      const cfg = await cfgDe(q.id).ler();
-      const col = cfg.colunas.find(x => !x.arquivada) || cfg.colunas[0];
-      const ins = await query(
-        `INSERT INTO bx_quadro_cards (quadro_id, titulo, status, valores, criado_por, criado_por_nome, origem_tela, origem_id, origem_nome, origem_dados)
-         VALUES ($1, $2, $3, '{}'::jsonb, $4, $5, $6, $7, $8, $9::jsonb) ON CONFLICT DO NOTHING RETURNING *`,
-        [q.id, String(r.titulo || `Card #${id}`).slice(0, 200), col?.chave || 'entrada', usuario?.id || null, usuario?.nome || 'Sistema',
-         tela, id, nome.slice(0, 80), JSON.stringify({ dados: r.dados, link: r.link })]);
-      if (ins.rows[0]) await movimento(q.id, ins.rows[0], 'criado', { para: ins.rows[0].status, usuario,
-        descricao: `Cópia do card de ${nome} (chegou em Liberação de faturamento)`, detalhes: { origem: tela, origem_id: id } });
-    }
+    for (const q of qs) await copiarCardParaQuadro(q.id, tela, id, usuario);
   } catch (e) { console.error('[Quadros] copiar card:', e.message); }
+}
+
+/** Copia um card de `tela` para o quadro `qid` (sem duplicar). Devolve o card novo, ou null se já existia. */
+export async function copiarCardParaQuadro(qid, tela, id, usuario = null) {
+  await garantirCopia();
+  const r = await resumoOrigem(tela, id);
+  if (!r) return null;
+  const nome = await nomeTela(tela);
+  const cfg = await cfgDe(qid).ler();
+  const col = cfg.colunas.find(x => !x.arquivada) || cfg.colunas[0];
+  const ins = await query(
+    `INSERT INTO bx_quadro_cards (quadro_id, titulo, status, valores, criado_por, criado_por_nome, origem_tela, origem_id, origem_nome, origem_dados)
+     VALUES ($1, $2, $3, '{}'::jsonb, $4, $5, $6, $7, $8, $9::jsonb) ON CONFLICT DO NOTHING RETURNING *`,
+    [Number(qid), String(r.titulo || `Card #${id}`).slice(0, 200), col?.chave || 'entrada', usuario?.id || null, usuario?.nome || 'Sistema',
+     tela, id, nome.slice(0, 80), JSON.stringify({ dados: r.dados, link: r.link })]);
+  if (ins.rows[0]) await movimento(Number(qid), ins.rows[0], 'criado', { para: ins.rows[0].status, usuario,
+    descricao: `Cópia do card de ${nome} (chegou em Liberação de faturamento)`, detalhes: { origem: tela, origem_id: id } });
+  return ins.rows[0] || null;
 }
 
 // ── Cards ───────────────────────────────────────────────────
