@@ -205,8 +205,10 @@ async function enviarZen(pedido) {
     const final = await enviarPipefy(r.rows[0]);
     await registrarMovLoj(final, 'zen_pedido_criado', {
       de: pedido.status, para: final.status, origem: 'sistema',
-      descricao: `Pedido de venda #${z.zenPedidoId} criado no Zen — ordem de separação #${z.ordemSeparacaoId}`,
-      detalhes: { zen_pedido_id: z.zenPedidoId, ordem_separacao: z.ordemSeparacaoId },
+      descricao: `Pedido de venda #${z.zenPedidoId} criado no Zen — ordem de separação #${z.ordemSeparacaoId}`
+        + (z.descontoImpostos?.desconto > 0 ? ` — desconto de R$ ${z.descontoImpostos.desconto.toFixed(2).replace('.', ',')} para os impostos por fora (total R$ ${z.descontoImpostos.total.toFixed(2).replace('.', ',')})` : '')
+        + (z.avisoDesconto ? ` — ATENÇÃO: não consegui descontar os impostos por fora (${z.avisoDesconto})` : ''),
+      detalhes: { zen_pedido_id: z.zenPedidoId, ordem_separacao: z.ordemSeparacaoId, desconto_impostos: z.descontoImpostos || null, aviso_desconto: z.avisoDesconto || null },
     });
     return final;
   } catch (e) {
