@@ -247,7 +247,8 @@ export async function descontarImpostosPorFora(zenPedidoId, alvos) {
       const valorLojinha = Number(alvos?.[String(it.productPacking?.code || '')]);
       const total = Number(it.totalValue || 0);
       if (!Number.isFinite(valorLojinha) || valorLojinha <= 0 || Math.abs(total - valorLojinha) < 0.005) continue;
-      if (Number(it.outsideTaxValue || 0) <= 0.004 && total <= valorLojinha) continue; // sem imposto por fora: não mexe
+      // Só peça com imposto por fora (IPI) e total acima do valor da Lojinha; sem IPI segue sem desconto
+      if (Number(it.outsideTaxValue || 0) <= 0.004 || total <= valorLojinha) continue;
       const bruto = Number(it.grossProductValue || 0);
       const operacao = Number(it.operationValue || 0);
       const frete = Number(it.otherValues?.freightValue || 0) + Number(it.otherValues?.insuranceValue || 0) + Number(it.otherValues?.otherExpensesValue || 0);
