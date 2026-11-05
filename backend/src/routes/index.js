@@ -59,6 +59,7 @@ import { relatorioUsoPipefy, chamadasPipefy } from '../integrations/usoPipefy.js
 import { verConfig as verConfigOrcamento, salvarConfig as salvarConfigOrcamento, adicionarOpcao as adicionarOpcaoOrcamento } from '../controllers/configOrcamentoController.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
 import { arquivoNotaLojinha, arquivoNotaOrcamento } from '../controllers/notaArquivoController.js';
+import { verEmailsFaturamento } from '../controllers/faturamentoOrcamento.js';
 import { saidasMarketplace, reposicaoMarketplace, relatoriosMarketplace, relatorioMarketplace, gerarRelatorioMarketplace, sincronizarMarketplace } from '../controllers/marketplaceController.js';
 
 const router = Router();
@@ -174,6 +175,7 @@ router.get('/pedidos-orcamento/movimentos',     autenticar, exigirPerfil('admin'
 router.get('/pedidos-orcamento/estrutura',      autenticar, exigirLeituraOrcamentos, estruturaOrcamento);
 router.get('/pedidos-orcamento/:id/tratativa',  autenticar, exigirLeituraOrcamentos, verTratativa);
 router.get('/pedidos-orcamento/:id/nf/:tipo',  autenticar, exigirLeituraOrcamentos, arquivoNotaOrcamento);
+router.get('/pedidos-orcamento/:id/emails-faturamento', autenticar, exigirLeituraOrcamentos, verEmailsFaturamento);
 router.get('/pedidos-orcamento/:id/tratativa/anexo', autenticar, exigirLeituraOrcamentos, anexoTratativa);
 router.patch('/pedidos-orcamento/:id/campos',   autenticar, exigirPerfil('admin'), editarCampos);
 router.post('/pedidos-orcamento/novo-card',     autenticar, exigirPerfil('admin'), criarCardBoxer);
