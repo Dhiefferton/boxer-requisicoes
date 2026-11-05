@@ -294,7 +294,9 @@ function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = f
 }
 
 // espelho: o mesmo card mostrado numa tela que recebeu a cópia (ex.: Notas de Serviços) — tudo igual, sem mover o original
-export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColuna, registrarMover, onArrastar, onFimArraste, espelho = false, FaseExterna = null, faseExternaProps = null }) {
+export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColuna, registrarMover, onArrastar, onFimArraste, espelho = false, FaseExterna = null, faseExternaProps = null, fixo = null }) {
+  // fixo: cópia fixa noutra tela { movimentos, emails, baseNF } — nada é lido do card original
+  const baseNF = fixo?.baseNF || `/pedidos-orcamento/${pedido.id}`;
   // Card aberto noutra tela: <FaseExterna {...faseExternaProps}>{fx => …}</FaseExterna> dá a fase de lá (só monta quando abre)
   const ComFase = FaseExterna || SemFaseExterna;
   const [mudando, setMudando] = useState(false);
@@ -450,7 +452,7 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
   // Caixa do Zen igual à da Lojinha: pedido de venda, ordem de separação e nota fiscal (+ PDF/XML faturada)
   const caixaZen = pedido.zen_ordem_separacao_id ? (
     <div onClick={parar}>
-      <InfoLiberacao itens={[]} baseNF={`/pedidos-orcamento/${pedido.id}`}
+      <InfoLiberacao itens={[]} baseNF={baseNF}
         p={{ id: pedido.id, qtd_cards: 1, zen_pedido_id: pedido.zen_pedido_id, zen_venda_numero: pedido.zen_venda_numero,
           zen_ordem_separacao_id: pedido.zen_ordem_separacao_id, zen_nf_id: pedido.zen_nota_id, zen_nf_numero: pedido.zen_nf_numero }} />
     </div>
@@ -587,7 +589,7 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
             className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
         )}
       </div>
-      {espelho && colunaAtual && (
+      {espelho && !fixo && colunaAtual && (
         <span className="inline-block mr-1 text-[10px] font-semibold rounded px-1.5 py-0.5 border" style={{ color: colunaAtual.hex, borderColor: `${colunaAtual.hex}66`, background: `${colunaAtual.hex}1a` }}>No Orçamento: {colunaAtual.titulo}</span>
       )}
       {pedido.aprovacao && (
@@ -632,7 +634,7 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
 
     {aberto && (
       <ComFase {...(faseExternaProps || {})}>{(faseExterna) => (
-      <CardAbertoOrcamento pedido={pedido} botoes={botoes} podeEditar={podeEditar} faseExterna={faseExterna}
+      <CardAbertoOrcamento pedido={pedido} botoes={botoes} podeEditar={podeEditar} faseExterna={faseExterna} movimentosFixos={fixo ? fixo.movimentos || [] : null}
         onFechar={() => setAberto(false)} onAtualizar={onAtualizar}
         resumo={(tagsZen || alertas || espelho) && (
           <div className="space-y-2">
@@ -640,12 +642,12 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
             {caixaZen}
             {/* Liberação de faturamento: e-mails mandados ao faturamento (como no Pipefy) */}
             {(espelho || /libera\w*\s+(de\s+|para\s+)?fatura/.test(String(colunaAtual?.titulo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()))
-              && <EmailsFaturamento pedidoId={pedido.id} />}
+              && <EmailsFaturamento pedidoId={pedido.id} dadosFixos={fixo ? (fixo.emails || { enviados: [], pendentes: [] }) : null} />}
             {/* Nota do Zen sem ordem de separação (raro): PDF (DANFE) e XML */}
             {pedido.zen_nota_id && !caixaZen && (
               <div className="rounded-lg border border-[var(--c-borda)] p-2">
                 <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)] mb-1">Nota fiscal #{pedido.zen_nota_id}</p>
-                <ArquivosNota base={`/pedidos-orcamento/${pedido.id}`} />
+                <ArquivosNota base={baseNF} />
               </div>
             )}
             {alertas}

@@ -16,12 +16,10 @@ import { nivelTela } from '../../utils/telas';
 import { useTelas } from '../../utils/nomesTelas';
 import ConfigOrcamento, { campoDaConfig } from '../../components/operador/ConfigOrcamento';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
-import { FotosProvider, FaixaFotosCard, FotosCampo, SERVICO_ORCAMENTO } from '../../components/operador/FotosOrcamento';
+import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
 import { CardPedido } from './PedidosOrcamento';
 import { pedidosOrcamentoService } from '../../services/api';
 import { aplicarConfigOrcamento, CONFIG_ORCAMENTO } from '../../utils/fasesOrcamento';
-import { podeEditarOrcamentos } from '../../utils/acessoOrcamentos';
-import { podeNaTela } from '../../utils/telas';
 import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnterior';
 import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro, regraBloqueiaMover } from '../../components/operador/CamposCardOrcamento';
 import { Pilula, Coluna } from './LojinhaBoxer';
@@ -74,16 +72,12 @@ function Quadro({ qid, nome: nomeMenu, podeEditar, admin }) {
   const [soltando, setSoltando] = useState(null);
   const [movendoId, setMovendoId] = useState(null);
 
-  // Cards copiados do Orçamento: mostra o card original inteiro (fotos, fases, peças, Zen, NF, e-mails, histórico)
-  const [origOrc, setOrigOrc] = useState({});
+  // Cópias fixas de cards do Orçamento: o card é desta tela; os campos/fases do Orçamento vêm da cópia guardada.
+  // Só a estrutura dos campos (nomes das fases e campos) é lida da configuração do Orçamento.
+  const [cfgOrc, setCfgOrc] = useState(CONFIG_ORCAMENTO.carregada);
   async function carregarOrigens(lista) {
-    const ids = [...new Set((lista || []).filter(c => c.origem_tela === 'orcamentos' && c.origem_id).map(c => c.origem_id))];
-    if (!ids.length) return;
-    try {
-      if (!CONFIG_ORCAMENTO.carregada) aplicarConfigOrcamento((await pedidosOrcamentoService.config()).data);
-      const { data } = await pedidosOrcamentoService.listar({ ids: ids.join(',') });
-      setOrigOrc(Object.fromEntries((data.pedidos || []).map(p => [p.id, p])));
-    } catch { /* sem acesso ao Orçamento: fica o resumo da cópia */ }
+    if (cfgOrc || !(lista || []).some(c => c.origem_dados?.snapshot)) return;
+    try { aplicarConfigOrcamento((await pedidosOrcamentoService.config()).data); setCfgOrc(true); } catch { /* sem a estrutura: mostra o resumo */ }
   }
   async function carregar() {
     try { const { data } = await svc.cards(); setCards(data.cards); setQuadro(data.quadro); setErro(''); carregarOrigens(data.cards); }
@@ -172,8 +166,8 @@ function Quadro({ qid, nome: nomeMenu, podeEditar, admin }) {
                   <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
                     <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem cards'}</p>
                   </div>
-                ) : doStatus.map(p => (p.origem_tela === 'orcamentos' && origOrc[p.origem_id] ? (
-                  <CardEspelhoOrcamento key={p.id} p={p} pedido={origOrc[p.origem_id]} nomeQuadro={nome} movendo={movendoId === p.id} podeArrastar={podeEditar}
+                ) : doStatus.map(p => (p.origem_tela === 'orcamentos' && p.origem_dados?.snapshot?.pedido && cfgOrc ? (
+                  <CardEspelhoOrcamento key={p.id} p={p} qid={qid} nomeQuadro={nome} movendo={movendoId === p.id} podeArrastar={podeEditar}
                     onAbrirQuadro={() => setAbertoId(p.id)} onAtualizar={carregar}
                     cfg={cfg} colunas={colunas} svc={svc} podeEditar={podeEditar} admin={admin} servicoFotos={servicoFotos}
                     onHistoricoQuadro={() => setHistorico({ id: p.id, nome: p.titulo })}
@@ -234,10 +228,13 @@ function OrigemCard({ p, completo = false }) {
 // Cópia de um card do Orçamento: o card original inteiro, igual à tela de Orçamento (abre o mesmo card,
 // com fases, campos, fotos, peças, pedido/NF do Zen, Notas de serviço/Retorno de conserto e histórico).
 // Arrastar muda só a coluna aqui; o card original continua na coluna dele no Orçamento.
-function CardEspelhoOrcamento({ p, pedido, nomeQuadro, movendo, podeArrastar, onAbrirQuadro, onAtualizar, onArrastar, onFimArraste,
+function CardEspelhoOrcamento({ p, qid, nomeQuadro, movendo, podeArrastar, onAbrirQuadro, onAtualizar, onArrastar, onFimArraste,
   cfg, colunas, svc, podeEditar, admin, servicoFotos, onHistoricoQuadro }) {
-  const { usuario } = useAuth();
-  const botoes = { ...podeNaTela(usuario, 'orcamentos'), mover: false, configurar: false };
+  const snap = p.origem_dados.snapshot;
+  // O card é desta tela: fotos copiadas para cá; campos do Orçamento só para ver (não muda o original)
+  const pedido = useMemo(() => ({ ...snap.pedido, fotos_locais: p.fotos_locais || [] }), [snap, p.fotos_locais]);
+  const fixo = useMemo(() => ({ movimentos: snap.movimentos || [], emails: snap.emails || null, baseNF: `/quadros/${qid}/cards/${p.id}` }), [snap, qid, p.id]);
+  const botoes = { mover: false, configurar: false, historico: false, movimentacao: false, campos: false, editar_fase: false, pecas_zen: false };
 
   return (
     <div draggable={podeArrastar && !movendo}
@@ -252,9 +249,9 @@ function CardEspelhoOrcamento({ p, pedido, nomeQuadro, movendo, podeArrastar, on
         <button onClick={onAbrirQuadro} title={`Campos e histórico deste card em ${nomeQuadro}`}
           className="ml-auto text-[10px] font-semibold text-[var(--c-suave)] hover:text-[var(--c-destaque-claro)]">Campos de {nomeQuadro}</button>
       </div>
-      <FotosProvider servico={SERVICO_ORCAMENTO}>
-        <CardPedido pedido={pedido} espelho FaseExterna={FaseQuadro}
-          faseExternaProps={{ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, nomeQuadro, carregar: onAtualizar, onHistorico: onHistoricoQuadro }} botoes={botoes} podeEditar={podeEditarOrcamentos(usuario)} onAtualizar={onAtualizar} />
+      <FotosProvider servico={servicoFotos}>
+        <CardPedido pedido={pedido} espelho fixo={fixo} FaseExterna={FaseQuadro}
+          faseExternaProps={{ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, nomeQuadro, carregar: onAtualizar, onHistorico: onHistoricoQuadro }} botoes={botoes} podeEditar={false} onAtualizar={onAtualizar} />
       </FotosProvider>
     </div>
   );
