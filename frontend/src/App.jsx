@@ -23,6 +23,7 @@ import LojinhaBoxer from './pages/operador/LojinhaBoxer';
 import LogisticaCif from './pages/operador/LogisticaCif';
 import QuadroPersonalizado from './pages/operador/QuadroPersonalizado';
 import Telas from './pages/operador/Telas';
+import Inicio from './pages/Inicio';
 import Databases from './pages/operador/Databases';
 import Armazenamento from './pages/operador/Armazenamento';
 import RecebimentoImportacao from './pages/operador/RecebimentoImportacao';
@@ -58,7 +59,7 @@ function RotaTela({ tela, recontagem, children }) {
   );
   if (!usuario) return <Navigate to="/login" replace />;
   if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
-  if (!veTela(usuario, tela)) return <Navigate to={tela === 'catalogo' ? '/minha-senha' : '/catalogo'} replace />;
+  if (!veTela(usuario, tela)) return <Navigate to="/inicio" replace />;
   if (recontagem && !podeRecontar(usuario)) return <Navigate to="/inventario" replace />;
   return <AppLayout>{children}</AppLayout>;
 }
@@ -144,8 +145,9 @@ export default function App() {
             <Route path="/inventario/:id/recontar" element={
               <RotaTela tela="inventario" recontagem><InventarioContagem key="recontagem" modo="recontagem" /></RotaTela>
             } />
-            <Route path="/"  element={<Navigate to="/catalogo" replace />} />
-            <Route path="*"  element={<Navigate to="/catalogo" replace />} />
+            <Route path="/inicio" element={<RotaProtegida><Inicio /></RotaProtegida>} />
+            <Route path="/"  element={<Navigate to="/inicio" replace />} />
+            <Route path="*"  element={<Navigate to="/inicio" replace />} />
           </Routes>
         </CartProvider>
       </AuthProvider>
