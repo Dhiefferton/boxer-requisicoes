@@ -16,7 +16,12 @@ import { nivelTela } from '../../utils/telas';
 import { useTelas } from '../../utils/nomesTelas';
 import ConfigOrcamento, { campoDaConfig } from '../../components/operador/ConfigOrcamento';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
-import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
+import { FotosProvider, FaixaFotosCard, FotosCampo, SERVICO_ORCAMENTO } from '../../components/operador/FotosOrcamento';
+import { CardPedido } from './PedidosOrcamento';
+import { pedidosOrcamentoService } from '../../services/api';
+import { aplicarConfigOrcamento, CONFIG_ORCAMENTO } from '../../utils/fasesOrcamento';
+import { podeEditarOrcamentos } from '../../utils/acessoOrcamentos';
+import { podeNaTela } from '../../utils/telas';
 import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnterior';
 import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro, regraBloqueiaMover } from '../../components/operador/CamposCardOrcamento';
 import { Pilula, Coluna } from './LojinhaBoxer';
@@ -69,8 +74,19 @@ function Quadro({ qid, nome: nomeMenu, podeEditar, admin }) {
   const [soltando, setSoltando] = useState(null);
   const [movendoId, setMovendoId] = useState(null);
 
+  // Cards copiados do Orçamento: mostra o card original inteiro (fotos, fases, peças, Zen, NF, e-mails, histórico)
+  const [origOrc, setOrigOrc] = useState({});
+  async function carregarOrigens(lista) {
+    const ids = [...new Set((lista || []).filter(c => c.origem_tela === 'orcamentos' && c.origem_id).map(c => c.origem_id))];
+    if (!ids.length) return;
+    try {
+      if (!CONFIG_ORCAMENTO.carregada) aplicarConfigOrcamento((await pedidosOrcamentoService.config()).data);
+      const { data } = await pedidosOrcamentoService.listar({ ids: ids.join(',') });
+      setOrigOrc(Object.fromEntries((data.pedidos || []).map(p => [p.id, p])));
+    } catch { /* sem acesso ao Orçamento: fica o resumo da cópia */ }
+  }
   async function carregar() {
-    try { const { data } = await svc.cards(); setCards(data.cards); setQuadro(data.quadro); setErro(''); }
+    try { const { data } = await svc.cards(); setCards(data.cards); setQuadro(data.quadro); setErro(''); carregarOrigens(data.cards); }
     catch (e) { setErro(e.response?.data?.erro || 'Não consegui carregar a tela.'); setCards(c => c || []); }
   }
   useEffect(() => {
@@ -156,10 +172,14 @@ function Quadro({ qid, nome: nomeMenu, podeEditar, admin }) {
                   <div className="border-2 border-dashed border-[var(--c-borda)] rounded-2xl py-8 text-center">
                     <p className="text-xs text-[var(--c-suave)]">{busca ? 'Nada encontrado' : 'Sem cards'}</p>
                   </div>
-                ) : doStatus.map(p => (
+                ) : doStatus.map(p => (p.origem_tela === 'orcamentos' && origOrc[p.origem_id] ? (
+                  <CardEspelhoOrcamento key={p.id} p={p} pedido={origOrc[p.origem_id]} nomeQuadro={nome} movendo={movendoId === p.id} podeArrastar={podeEditar}
+                    onAbrirQuadro={() => setAbertoId(p.id)} onAtualizar={carregar}
+                    onArrastar={() => setArrastando(p)} onFimArraste={() => { setArrastando(null); setSoltando(null); }} />
+                ) : (
                   <CardQuadro key={p.id} p={p} cfg={cfg} movendo={movendoId === p.id} podeArrastar={podeEditar} onAbrir={() => setAbertoId(p.id)}
                     onArrastar={() => setArrastando(p)} onFimArraste={() => { setArrastando(null); setSoltando(null); }} />
-                ))}
+                )))}
               </Coluna>
             );
           })}
@@ -205,6 +225,32 @@ function OrigemCard({ p, completo = false }) {
       {completo && p.origem_dados?.link && (
         <Link to={p.origem_dados.link} className="inline-block text-[11px] text-[var(--c-destaque-claro)] hover:underline">Abrir a tela de origem →</Link>
       )}
+    </div>
+  );
+}
+
+// Cópia de um card do Orçamento: o card original inteiro, igual à tela de Orçamento (abre o mesmo card,
+// com fases, campos, fotos, peças, pedido/NF do Zen, Notas de serviço/Retorno de conserto e histórico).
+// Arrastar muda só a coluna aqui; o card original continua na coluna dele no Orçamento.
+function CardEspelhoOrcamento({ p, pedido, nomeQuadro, movendo, podeArrastar, onAbrirQuadro, onAtualizar, onArrastar, onFimArraste }) {
+  const { usuario } = useAuth();
+  const botoes = { ...podeNaTela(usuario, 'orcamentos'), mover: false, configurar: false };
+  return (
+    <div draggable={podeArrastar && !movendo}
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(p.id)); onArrastar?.(); }}
+      onDragEnd={() => onFimArraste?.()}
+      title={podeArrastar ? 'Segure e arraste para mudar de coluna nesta tela' : undefined}
+      className={`${movendo ? 'opacity-50 pointer-events-none ' : ''}space-y-1 min-w-0`}>
+      <div className="flex items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold rounded-full px-2 py-0.5 text-sky-300 bg-sky-500/15 border border-sky-500/30">
+          <CornerDownRight size={10} /> Veio de: {p.origem_nome || 'Orçamentos'}
+        </span>
+        <button onClick={onAbrirQuadro} title={`Campos e histórico deste card em ${nomeQuadro}`}
+          className="ml-auto text-[10px] font-semibold text-[var(--c-suave)] hover:text-[var(--c-destaque-claro)]">Campos de {nomeQuadro}</button>
+      </div>
+      <FotosProvider servico={SERVICO_ORCAMENTO}>
+        <CardPedido pedido={pedido} espelho botoes={botoes} podeEditar={podeEditarOrcamentos(usuario)} onAtualizar={onAtualizar} />
+      </FotosProvider>
     </div>
   );
 }

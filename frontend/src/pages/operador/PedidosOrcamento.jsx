@@ -293,7 +293,8 @@ function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = f
   );
 }
 
-function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColuna, registrarMover, onArrastar, onFimArraste }) {
+// espelho: o mesmo card mostrado numa tela que recebeu a cópia (ex.: Notas de Serviços) — tudo igual, sem mover o original
+export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColuna, registrarMover, onArrastar, onFimArraste, espelho = false }) {
   const [mudando, setMudando] = useState(false);
   // Peça vinda do campo "Registro" gravada antes da correção: mostra descrição e valor do registro
   const itens = (pedido.itens || []).map(it => {
@@ -325,7 +326,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
   const faseDiferente = null;
   const itensRetirados = Array.isArray(pedido.itens_recusados) ? pedido.itens_recusados : [];
   const [retirando, setRetirando] = useState(false);
-  const proxima = precisaRetirar || !PROXIMA[pedido.status] ? null : COLUNAS.find(c => c.status === PROXIMA[pedido.status]);
+  const proxima = espelho || precisaRetirar || !PROXIMA[pedido.status] ? null : COLUNAS.find(c => c.status === PROXIMA[pedido.status]);
   const [movendoPara, setMovendoPara] = useState(false);
   const { usuario: eu } = useAuth();
   // Admin: mover para qualquer coluna
@@ -572,8 +573,8 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
   return (
     <>
     <div onClick={() => setAberto(true)} title={botoes.mover ? 'Abrir card (segure e arraste para mudar de coluna)' : 'Abrir card'}
-      draggable={botoes.mover && !movendoPara}
-      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(pedido.id)); onArrastar?.(); }}
+      draggable={botoes.mover && !movendoPara && !espelho}
+      onDragStart={e => { if (espelho) return; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(pedido.id)); onArrastar?.(); }}
       onDragEnd={() => onFimArraste?.()}
       className={`${movendoPara ? 'opacity-50 pointer-events-none ' : ''}p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors`}>
       <div className="flex items-center gap-1.5">
@@ -584,6 +585,9 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
             className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
         )}
       </div>
+      {espelho && colunaAtual && (
+        <span className="inline-block mr-1 text-[10px] font-semibold rounded px-1.5 py-0.5 border" style={{ color: colunaAtual.hex, borderColor: `${colunaAtual.hex}66`, background: `${colunaAtual.hex}1a` }}>No Orçamento: {colunaAtual.titulo}</span>
+      )}
       {pedido.aprovacao && (
         <span className={`inline-block mr-1 text-[10px] font-bold uppercase rounded px-1.5 py-0.5 ${
           parcial ? 'text-amber-300 bg-amber-500/20'
@@ -627,12 +631,12 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
     {aberto && (
       <CardAbertoOrcamento pedido={pedido} botoes={botoes} podeEditar={podeEditar}
         onFechar={() => setAberto(false)} onAtualizar={onAtualizar}
-        resumo={(tagsZen || alertas) && (
+        resumo={(tagsZen || alertas || espelho) && (
           <div className="space-y-2">
             <div>{tagsZen}</div>
             {caixaZen}
             {/* Liberação de faturamento: e-mails mandados ao faturamento (como no Pipefy) */}
-            {/libera\w*\s+(de\s+|para\s+)?fatura/.test(String(colunaAtual?.titulo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())
+            {(espelho || /libera\w*\s+(de\s+|para\s+)?fatura/.test(String(colunaAtual?.titulo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()))
               && <EmailsFaturamento pedidoId={pedido.id} />}
             {/* Nota do Zen sem ordem de separação (raro): PDF (DANFE) e XML */}
             {pedido.zen_nota_id && !caixaZen && (
