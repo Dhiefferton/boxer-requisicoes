@@ -12,7 +12,7 @@ import { LayoutGrid, Plus, Save, ExternalLink, RotateCcw, Check } from 'lucide-r
 import { telasService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
-import { TELAS } from '../../utils/telas';
+import { TELAS, veTela } from '../../utils/telas';
 import { recarregarTelas } from '../../utils/nomesTelas';
 
 const inp = 'w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-[var(--c-destaque)]';
@@ -32,7 +32,7 @@ export default function Telas() {
     setNomesQ(Object.fromEntries((d.quadros || []).map(q => [q.id, q.nome])));
   }
   useEffect(() => { carregar(); }, []);
-  if (usuario?.perfil !== 'admin') return <Navigate to="/catalogo" replace />;
+  if (!veTela(usuario, 'telas')) return <Navigate to="/inicio" replace />;
   if (!dados) return <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>;
 
   const aviso = (ok, txt) => { setMsg({ ok, txt }); setTimeout(() => setMsg(null), 4000); };
