@@ -64,10 +64,18 @@ export default function NovoCardOrcamento({ onFechar, onCriado }) {
 
   useEffect(() => {
     // Formulário configurado pelo admin (Configurar › Formulário inicial); sem campos lá, usa o de hoje
-    const cfg = (CONFIG_ORCAMENTO.campos || []).filter(c => c.coluna === 'inicio' && c.tipo !== 'anexo').map(campoDaConfig);
-    if (cfg.length) { setCampos(cfg); return; }
+    const todos = CONFIG_ORCAMENTO.campos || [];
+    const cfg = todos.filter(c => c.coluna === 'inicio' && c.tipo !== 'anexo').map(c => campoDaConfig(c, 0, todos));
+    // NS já no formulário inicial: usa o campo "NS Entrada" (mesmo campo da fase Entrada, o valor já fica preenchido lá)
+    const ehNS = (r) => /^ns\b|n[uú]mero de s[eé]rie/i.test(String(r || '').trim());
+    const comNS = (lista) => {
+      if (lista.some(c => ehNS(c.rotulo))) return lista;
+      const ns = todos.find(c => c.coluna !== 'inicio' && ehNS(c.rotulo));
+      return ns ? [...lista, { ...campoDaConfig(ns, 0, todos), quando: null, mostrar: null }] : lista;
+    };
+    if (cfg.length) { setCampos(comNS(cfg)); return; }
     carregarEstrutura()
-      .then(f => setCampos((f.find(x => x.faseId === 'inicio')?.campos || []).filter(c => !['id', 'attachment'].includes(c.tipo))))
+      .then(f => setCampos(comNS((f.find(x => x.faseId === 'inicio')?.campos || []).filter(c => !['id', 'attachment'].includes(c.tipo)))))
       .catch(e => setErro(e.response?.data?.erro || 'Não consegui ler o formulário do Pipefy.'));
   }, []);
 
