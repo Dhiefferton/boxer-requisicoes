@@ -8,6 +8,7 @@
 // (ids cif_bx_<id>); colunas e campos configuráveis (cif_colunas / cif_campos).
 // ============================================================
 import { query } from '../config/db.js';
+import { copiarParaTelas } from './quadrosController.js';
 import { criarConfigQuadro, exigidoAgora, bloqueioRegra } from './configQuadro.js';
 import { garantirEstrutura, registrarMovLoj, atualizarDocumentosZen } from './lojinhaController.js';
 import { temBotao } from '../middlewares/telas.js';
@@ -109,7 +110,7 @@ export async function moverPedidoCif(req, res, next) {
       de: atual, para: status, usuario: req.usuario,
       descricao: `Logística CIF: movido de ${col.get(atual)?.nome || atual} para ${col.get(status)?.nome || status}`,
     });
-    if (ehLiberacaoFaturamento(col.get(status)?.nome)) await liberarFaturamento(p.id, req.usuario);
+    if (ehLiberacaoFaturamento(col.get(status)?.nome)) { await liberarFaturamento(p.id, req.usuario); await copiarParaTelas('logistica_cif', p.id, req.usuario); }
     res.json({ pedido: r.rows[0] });
   } catch (err) { next(err); }
 }

@@ -13,6 +13,7 @@
 // Acesso: admin, operador e o setor SAC / Suporte.
 // ============================================================
 import { query } from '../config/db.js';
+import { copiarParaTelas } from './quadrosController.js';
 import { buscarClienteZen, excluirPedidoVendaZen, consultarOrdemSeparacao, documentosZen } from '../integrations/zenPedidoVenda.js';
 import { PIPEFY_ATIVO } from '../integrations/pipefyService.js';
 import { criarConfigQuadro, exigidoAgora, bloqueioRegra } from './configQuadro.js';
@@ -430,7 +431,7 @@ async function sincronizarFasesPipefy() {
     // Chegou pelo Pipefy na coluna Finalizado e ela é a "Liberação de Faturamento": e-mail ao faturamento
     if (novo !== p.status) {
       const nomeCol = (await cfgLojinha.ler()).colunas.find(c => c.chave === novo)?.nome;
-      if (ehLiberacaoFaturamento(nomeCol)) await liberarFaturamento(p.id);
+      if (ehLiberacaoFaturamento(nomeCol)) { await liberarFaturamento(p.id); await copiarParaTelas('lojinha', p.id); }
     }
   }
 }
@@ -526,7 +527,7 @@ export async function moverPedidoLojinha(req, res, next) {
       descricao: `Movido de ${col.get(atual)?.nome || atual} para ${col.get(status)?.nome || status}`,
     });
     // Chegou na "Liberação de Faturamento": e-mail ao faturamento (nunca lança erro)
-    if (ehLiberacaoFaturamento(col.get(status)?.nome)) await liberarFaturamento(p.id, req.usuario);
+    if (ehLiberacaoFaturamento(col.get(status)?.nome)) { await liberarFaturamento(p.id, req.usuario); await copiarParaTelas('lojinha', p.id, req.usuario); }
     res.json({ pedido: r.rows[0] });
   } catch (err) { next(err); }
 }

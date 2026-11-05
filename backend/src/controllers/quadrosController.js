@@ -129,10 +129,10 @@ export async function acessoQuadro(req, res, next) {
 // GET /telas — quadros criados + nomes das telas renomeadas (para o menu)
 export async function verTelas(req, res, next) {
   try {
-    await garantirQuadros();
+    await garantirCopia();
     const admin = req.usuario?.perfil === 'admin';
     const [q, n] = await Promise.all([
-      query(`SELECT id, nome, ativo, ordem FROM bx_quadros ${admin ? '' : 'WHERE ativo'} ORDER BY ordem, id`),
+      query(`SELECT id, nome, ativo, ordem, COALESCE(copiar_de, '[]'::jsonb) AS copiar_de FROM bx_quadros ${admin ? '' : 'WHERE ativo'} ORDER BY ordem, id`),
       query(`SELECT valor FROM bx_config WHERE chave = 'telas_nomes'`),
     ]);
     res.json({ quadros: q.rows, nomes: n.rows[0]?.valor || {} });
@@ -164,7 +164,13 @@ export async function editarQuadro(req, res, next) {
     const nome = req.body?.nome !== undefined ? limpar(req.body.nome, 80) : q.nome;
     if (!nome) return res.status(400).json({ erro: 'Dê um nome para a tela.' });
     const ativo = req.body?.ativo !== undefined ? !!req.body.ativo : q.ativo;
-    const r = await query(`UPDATE bx_quadros SET nome = $2, ativo = $3 WHERE id = $1 RETURNING id, nome, ativo, ordem`, [id, nome, ativo]);
+    await garantirCopia();
+    // De quais telas copiar os cards que chegam em "Liberação de faturamento"
+    const copiar = Array.isArray(req.body?.copiar_de)
+      ? [...new Set(req.body.copiar_de.map(String).filter(k => (ORIGENS_COPIA[k] || /^quadro_\d+$/.test(k)) && k !== `quadro_${id}`))].slice(0, 20)
+      : (q.copiar_de || []);
+    const r = await query(`UPDATE bx_quadros SET nome = $2, ativo = $3, copiar_de = $4::jsonb WHERE id = $1 RETURNING id, nome, ativo, ordem, COALESCE(copiar_de, '[]'::jsonb) AS copiar_de`,
+      [id, nome, ativo, JSON.stringify(copiar)]);
     res.json({ quadro: r.rows[0] });
   } catch (err) { next(err); }
 }
@@ -191,6 +197,82 @@ export async function salvarNomesTelas(req, res, next) {
 export const verConfigQuadro = (req, res, next) => cfgDe(req.params.qid).verConfig(req, res, next);
 export const salvarConfigQuadroDin = (req, res, next) => cfgDe(req.params.qid).salvarConfig(req, res, next);
 export const adicionarOpcaoQuadro = (req, res, next) => cfgDe(req.params.qid).adicionarOpcao(req, res, next);
+
+// ── Cópia de cards de outras telas ──────────────────────────
+// Em Telas, cada tela criada escolhe de quais telas recebe uma cópia dos cards
+// que chegam na coluna "Liberação de faturamento" (ex.: "Notas de Serviços").
+// A cópia guarda de onde veio (etiqueta no card) e um resumo do card original.
+export const ORIGENS_COPIA = { orcamentos: 'Orçamentos', lojinha: 'Lojinha Boxer', logistica_cif: 'Garantia - Boxer Soldas' };
+let colCopia = null;
+function garantirCopia() {
+  return (colCopia ||= garantirQuadros().then(() => query(`
+    ALTER TABLE bx_quadros ADD COLUMN IF NOT EXISTS copiar_de JSONB;
+    ALTER TABLE bx_quadro_cards ADD COLUMN IF NOT EXISTS origem_tela VARCHAR(40);
+    ALTER TABLE bx_quadro_cards ADD COLUMN IF NOT EXISTS origem_id INTEGER;
+    ALTER TABLE bx_quadro_cards ADD COLUMN IF NOT EXISTS origem_nome VARCHAR(80);
+    ALTER TABLE bx_quadro_cards ADD COLUMN IF NOT EXISTS origem_dados JSONB;
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_bx_quadro_cards_origem ON bx_quadro_cards (quadro_id, origem_tela, origem_id) WHERE origem_tela IS NOT NULL;`))
+    .catch(e => { colCopia = null; throw e; }));
+}
+const normTxt = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+export const ehLiberacao = (nome) => /libera\w*\s+(de\s+|para\s+)?fatura/.test(normTxt(nome));
+
+async function nomeTela(tela) {
+  const m = /^quadro_(\d+)$/.exec(tela);
+  if (m) return (await query(`SELECT nome FROM bx_quadros WHERE id = $1`, [Number(m[1])])).rows[0]?.nome || 'Tela';
+  const nomes = (await query(`SELECT valor FROM bx_config WHERE chave = 'telas_nomes'`)).rows[0]?.valor || {};
+  return nomes[tela] || ORIGENS_COPIA[tela] || tela;
+}
+
+// Resumo do card original (vai na cópia)
+async function resumoOrigem(tela, id) {
+  const v = (rotulo, valor) => (valor == null || String(valor).trim() === '' ? null : { rotulo, valor: String(valor).trim() });
+  if (tela === 'orcamentos') {
+    const p = (await query(`SELECT * FROM pedidos_orcamento WHERE id = $1`, [id])).rows[0];
+    if (!p) return null;
+    return { titulo: p.cliente_nome || p.referencia || `Orçamento #${p.id}`, link: '/pedidos-orcamento', dados: [
+      v('Card', `#${p.id}${p.pipefy_card_id ? ` · Pipefy #${p.pipefy_card_id}` : ''}`), v('Cliente', p.cliente_nome), v('CPF/CNPJ', p.cliente_cnpj),
+      v('NS', p.ns_entrada), v('Pedido de venda', p.zen_venda_numero), v('Nota fiscal', p.zen_nf_numero), v('Aprovação', p.aprovacao)].filter(Boolean) };
+  }
+  if (tela === 'lojinha' || tela === 'logistica_cif') {
+    const p = (await query(`SELECT * FROM lojinha_boxer_pedidos WHERE id = $1`, [id])).rows[0];
+    if (!p) return null;
+    return { titulo: `Pedido ${p.numero_pedido}${p.cliente_nome ? ` — ${p.cliente_nome}` : ''}`, link: tela === 'lojinha' ? '/lojinha' : '/logistica-cif', dados: [
+      v('Pedido', p.numero_pedido), v('Cliente', p.cliente_nome), v('CPF/CNPJ', p.documento), v('Vendedora', p.vendedora),
+      v('Envio', [p.tipo_envio, p.transportadora].filter(Boolean).join(' · ')), v('Pedido de venda', p.zen_venda_numero), v('Nota fiscal', p.zen_nf_numero)].filter(Boolean) };
+  }
+  const m = /^quadro_(\d+)$/.exec(tela);
+  if (m) {
+    const c = (await query(`SELECT * FROM bx_quadro_cards WHERE id = $1 AND quadro_id = $2`, [id, Number(m[1])])).rows[0];
+    if (!c) return null;
+    return { titulo: c.titulo, link: `/quadro/${m[1]}`, dados: [v('Card', `#${c.id}`)].filter(Boolean) };
+  }
+  return null;
+}
+
+/** Card chegou em "Liberação de faturamento" na tela `tela`: copia para as telas que pediram. Nunca lança erro. */
+export async function copiarParaTelas(tela, id, usuario = null) {
+  try {
+    await garantirCopia();
+    const qs = (await query(`SELECT id, nome FROM bx_quadros WHERE ativo AND copiar_de @> jsonb_build_array($1::text)`, [tela])).rows
+      .filter(q => tela !== `quadro_${q.id}`);
+    if (!qs.length) return;
+    const r = await resumoOrigem(tela, id);
+    if (!r) return;
+    const nome = await nomeTela(tela);
+    for (const q of qs) {
+      const cfg = await cfgDe(q.id).ler();
+      const col = cfg.colunas.find(x => !x.arquivada) || cfg.colunas[0];
+      const ins = await query(
+        `INSERT INTO bx_quadro_cards (quadro_id, titulo, status, valores, criado_por, criado_por_nome, origem_tela, origem_id, origem_nome, origem_dados)
+         VALUES ($1, $2, $3, '{}'::jsonb, $4, $5, $6, $7, $8, $9::jsonb) ON CONFLICT DO NOTHING RETURNING *`,
+        [q.id, String(r.titulo || `Card #${id}`).slice(0, 200), col?.chave || 'entrada', usuario?.id || null, usuario?.nome || 'Sistema',
+         tela, id, nome.slice(0, 80), JSON.stringify({ dados: r.dados, link: r.link })]);
+      if (ins.rows[0]) await movimento(q.id, ins.rows[0], 'criado', { para: ins.rows[0].status, usuario,
+        descricao: `Cópia do card de ${nome} (chegou em Liberação de faturamento)`, detalhes: { origem: tela, origem_id: id } });
+    }
+  } catch (e) { console.error('[Quadros] copiar card:', e.message); }
+}
 
 // ── Cards ───────────────────────────────────────────────────
 const SELECT_CARD = `SELECT c.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome,
@@ -288,6 +370,7 @@ export async function moverCard(req, res, next) {
     const r = await query(`UPDATE bx_quadro_cards SET status = $2, entrou_em = NOW(), atualizado_em = NOW() WHERE id = $1 RETURNING *`, [p.id, status]);
     await movimento(qid, r.rows[0], 'movido', { de: atual, para: status, usuario: req.usuario,
       descricao: `Movido de ${col.get(atual)?.nome || atual} para ${col.get(status)?.nome || status}` });
+    if (ehLiberacao(col.get(status)?.nome)) await copiarParaTelas(`quadro_${qid}`, p.id, req.usuario);
     res.json({ card: r.rows[0] });
   } catch (err) { next(err); }
 }

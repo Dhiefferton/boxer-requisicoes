@@ -6,6 +6,7 @@
 // em passos seguintes.
 
 import { z } from 'zod';
+import { copiarParaTelas } from './quadrosController.js';
 import { query } from '../config/db.js';
 import {
   pipefyQuery, listarCardsDaFase, extrairDadosOrcamento, listarCardsNovosOrcamento,
@@ -526,7 +527,7 @@ export async function moverPedido(req, res, next) {
         : `Movido de ${nomeCol(pedido.status)} para ${nomeCol(status)}`,
     });
     // Chegou na "Liberação de Faturamento": e-mails ao faturamento (nunca lança erro)
-    if (status !== pedido.status && ehLiberacaoFaturamentoOrc(nomeCol(status))) await liberarFaturamentoOrcamento(pedido.id, req.usuario);
+    if (status !== pedido.status && ehLiberacaoFaturamentoOrc(nomeCol(status))) { await liberarFaturamentoOrcamento(pedido.id, req.usuario); await copiarParaTelas('orcamentos', pedido.id, req.usuario); }
     // Sem o Pipefy: entrou em Requisitar Peças -> cria o pedido no Zen e vai para Em Separação
     // (se o Zen falhar, o card fica em Requisitar Peças com o erro na tela)
     if (!PIPEFY_ATIVO && status === 'solicitacao' && pedido.status !== 'solicitacao') {
@@ -1246,7 +1247,7 @@ async function executarSincronizacao(req, res, next) {
           });
           {
             const nomeAlvo = ((await lerConfigOrcamento().catch(() => null))?.colunas || []).find(c => c.chave === alvo)?.nome || NOME_STATUS[alvo];
-            if (ehLiberacaoFaturamentoOrc(nomeAlvo)) await liberarFaturamentoOrcamento(p.id, req.usuario);
+            if (ehLiberacaoFaturamentoOrc(nomeAlvo)) { await liberarFaturamentoOrcamento(p.id, req.usuario); await copiarParaTelas('orcamentos', p.id, req.usuario); }
           }
         }
       } catch (err) {
