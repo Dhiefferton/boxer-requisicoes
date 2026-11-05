@@ -14,6 +14,7 @@ import { lerConfigOrcamento } from '../controllers/configOrcamentoController.js'
 import { previaEmailsOrcamento } from '../controllers/faturamentoOrcamento.js';
 import { lerConfigLojinha, registrarMovLoj, garantirEstrutura } from '../controllers/lojinhaController.js';
 import { lerConfigCif } from '../controllers/logisticaCifController.js';
+import { copiarCardParaQuadro } from '../controllers/quadrosController.js';
 import { documentosZen, zenLeitura, arquivoNotaZen } from '../integrations/zenPedidoVenda.js';
 import { SQL_CATEGORIA_USO_CONSUMO } from '../controllers/mrpController.js';
 import { voltarParaSeparacao } from '../controllers/pedidosOrcamentoController.js';
@@ -243,6 +244,36 @@ router.get('/debug-campos-lojinha', async (req, res) => {
     const cols = (await query(`SELECT column_name FROM information_schema.columns WHERE table_name = 'lojinha_boxer_pedidos' ORDER BY ordinal_position`)).rows.map(r => r.column_name);
     res.json({ loj: await campos('loj_campos'), cif: await campos('cif_campos'), colunas: cols, pedidos: ped });
   } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// Ex: GET /api/erp/copiar-cards-quadro?secret=...&quadro=Notas de Serviços&origem=orcamentos&colunas=nao_liberado,liberado_saida[&executar=1]
+// Copia para uma tela criada os cards que estão hoje nessas colunas (Orçamentos: pedidos_orcamento.status;
+// Lojinha: status; Garantia: cif_status). Não duplica. Sem executar=1 só mostra o que seria copiado.
+router.get('/copiar-cards-quadro', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const nomeQ = String(req.query.quadro || '').trim();
+    const q = (await query(`SELECT id, nome FROM bx_quadros WHERE ativo AND (id::text = $1 OR LOWER(nome) = LOWER($1)) ORDER BY id LIMIT 1`, [nomeQ])).rows[0];
+    if (!q) return res.status(404).json({ erro: `Tela "${nomeQ}" não encontrada.` });
+    const origem = String(req.query.origem || '');
+    const colunas = String(req.query.colunas || '').split(',').map(x => x.trim()).filter(Boolean);
+    if (!colunas.length) return res.status(400).json({ erro: 'Informe colunas=chave1,chave2' });
+    const sql = origem === 'orcamentos' ? `SELECT id, status AS coluna, cliente_nome AS nome FROM pedidos_orcamento WHERE status = ANY($1::text[]) ORDER BY id`
+      : origem === 'lojinha' ? `SELECT id, status AS coluna, numero_pedido AS nome FROM lojinha_boxer_pedidos WHERE status = ANY($1::text[]) ORDER BY id`
+      : origem === 'logistica_cif' ? `SELECT id, cif_status AS coluna, numero_pedido AS nome FROM lojinha_boxer_pedidos WHERE cif_status = ANY($1::text[]) ORDER BY id`
+      : null;
+    if (!sql) return res.status(400).json({ erro: 'origem = orcamentos | lojinha | logistica_cif' });
+    const cards = (await query(sql, [colunas])).rows;
+    const ja = new Set((await query(`SELECT origem_id FROM bx_quadro_cards WHERE quadro_id = $1 AND origem_tela = $2`, [q.id, origem]).catch(() => ({ rows: [] }))).rows.map(r => r.origem_id));
+    const novos = cards.filter(c => !ja.has(c.id));
+    if (req.query.executar !== '1') return res.json({ quadro: q, total: cards.length, ja_copiados: cards.length - novos.length, a_copiar: novos.length, por_coluna: colunas.map(k => ({ coluna: k, cards: novos.filter(c => c.coluna === k).length })) });
+    let copiados = 0; const erros = [];
+    for (const c of novos) {
+      try { if (await copiarCardParaQuadro(q.id, origem, c.id, null)) copiados++; }
+      catch (e) { erros.push({ id: c.id, erro: e.message }); }
+    }
+    res.json({ quadro: q, copiados, erros });
+  } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
 // Ex: GET /api/erp/mover-coluna-lojinha?secret=...&de=Liberação de Faturamento&para=Concluído[&executar=1]
