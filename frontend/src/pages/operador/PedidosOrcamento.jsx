@@ -15,6 +15,7 @@ import { podeNaTela } from '../../utils/telas';
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { carregarEstrutura, valorLista, EtiquetasDoCard } from '../../components/operador/CamposCardOrcamento';
 import CardAbertoOrcamento from '../../components/operador/CardAbertoOrcamento';
+import ArquivosNota from '../../components/operador/ArquivosNota';
 import NovoCardOrcamento from '../../components/operador/NovoCardOrcamento';
 import { FaixaFotosCard } from '../../components/operador/FotosOrcamento';
 import { COLUNAS_ORCAMENTO as COLUNAS, STATUS_SO_ADMIN, aplicarConfigOrcamento, CONFIG_ORCAMENTO } from '../../utils/fasesOrcamento';
@@ -615,6 +616,13 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
         resumo={(tagsZen || alertas) && (
           <div className="space-y-2">
             <div>{tagsZen}</div>
+            {/* Nota do Zen: PDF (DANFE) e XML depois de faturada */}
+            {pedido.zen_nota_id && (
+              <div className="rounded-lg border border-[var(--c-borda)] p-2">
+                <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)] mb-1">Nota fiscal #{pedido.zen_nota_id}</p>
+                <ArquivosNota base={`/pedidos-orcamento/${pedido.id}`} />
+              </div>
+            )}
             {alertas}
           </div>
         )}

@@ -21,6 +21,7 @@ import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/oper
 import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnterior';
 import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro, regraBloqueiaMover } from '../../components/operador/CamposCardOrcamento';
 import { NomeTela } from '../../utils/nomesTelas';
+import ArquivosNota from '../../components/operador/ArquivosNota';
 
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
@@ -348,7 +349,7 @@ function StatusZen({ p, carregar }) {
 }
 
 // Dados da coluna Liberação: Nº da ordem de separação e cards (7 itens por card)
-export function InfoLiberacao({ p, itens }) {
+export function InfoLiberacao({ p, itens, baseNF = null }) {
   const qtd = p.qtd_cards || Math.max(1, Math.ceil(itens.length / ITENS_POR_CARD));
   const grupos = Array.from({ length: qtd }, (_, i) => itens.slice(i * ITENS_POR_CARD, (i + 1) * ITENS_POR_CARD));
   return (
@@ -390,6 +391,8 @@ export function InfoLiberacao({ p, itens }) {
           )}
         </div>
       </div>
+      {/* Nota faturada: XML e PDF (DANFE) vindos do Zen */}
+      {p.zen_nf_id && p.zen_nf_numero && <ArquivosNota base={baseNF || `/lojinha/pedidos/${p.id}`} />}
       {false && qtd > 1 && (
         <ul className="text-[11px] text-[var(--c-texto)] space-y-0.5">
           {grupos.map((g, i) => (

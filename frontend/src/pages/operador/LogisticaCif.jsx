@@ -189,7 +189,7 @@ function CardCif({ p, campos, movendo, onAbrir, onArrastar, onFimArraste }) {
         <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
         <span className="text-[11px] text-[var(--c-suave)]" title="Entrou na Garantia">{fmtData(p.cif_entrou_em)}</span>
       </div>
-      {p.zen_ordem_separacao_id && <div onClick={parar}><InfoLiberacao p={p} itens={Array.isArray(p.itens) ? p.itens : []} /></div>}
+      {p.zen_ordem_separacao_id && <div onClick={parar}><InfoLiberacao p={p} itens={Array.isArray(p.itens) ? p.itens : []} baseNF={`/logistica-cif/pedidos/${p.id}`} /></div>}
       <EtiquetasDoCard campos={campos} valorDe={(id) => valores[pref(id)]} />
       <div onClick={parar}><FaixaFotosCard pedido={p} onVerTodas={onAbrir} /></div>
       <DadosPedido p={p} />
