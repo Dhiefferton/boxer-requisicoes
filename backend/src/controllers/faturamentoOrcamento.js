@@ -17,6 +17,9 @@ import { documentosZen } from '../integrations/zenPedidoVenda.js';
 import { cnpjTransportadora } from './faturamentoLojinha.js';
 
 const PARA = process.env.EMAIL_FATURAMENTO || 'faturamento@boxersoldas.com.br';
+// Envio desligado (pedido do Dhiefferton, 05/11/2026): o e-mail só aparece no card (botão "Email").
+// Para voltar a enviar: variável ORC_EMAIL_FATURAMENTO_ENVIAR=1 na Vercel.
+const ENVIO_LIGADO = process.env.ORC_EMAIL_FATURAMENTO_ENVIAR === '1';
 
 let colunas = null;
 const garantir = () => (colunas ||= query(`
@@ -143,7 +146,7 @@ export async function emailsFaturamentoCard(pedidoId) {
   const remetente = String(process.env.EMAIL_FROM || '').replace(/\s*<.*$/, '').replace(/"/g, '').trim() || 'Boxer Requisições';
   if (!tipos.has('remessa')) { const m = await emailRemessa(p).catch(() => null); if (m) pendentes.push({ tipo: 'remessa', assunto: m.assunto, de: remetente, para: PARA, texto: m.texto }); }
   if (!tipos.has('servico') && !recusado(p)) { const m = await emailServico(p).catch(() => null); if (m) pendentes.push({ tipo: 'servico', assunto: m.assunto, de: remetente, para: PARA, texto: m.texto }); }
-  return { enviados, pendentes, liberado_em: p.fat_liberado_em, erro: p.email_fat_erro || null, configurado: emailConfigurado() };
+  return { enviados, pendentes, liberado_em: p.fat_liberado_em, erro: p.email_fat_erro || null, configurado: emailConfigurado(), envio_ligado: ENVIO_LIGADO };
 }
 
 /** Card chegou na Liberação de Faturamento: marca e manda os e-mails. Nunca lança erro. */
@@ -164,7 +167,7 @@ async function registrar(p, descricao, usuario) {
 /** Manda os e-mails pendentes dos cards liberados para faturamento. Nunca lança erro. */
 export async function avisarFaturamentoOrcamento(usuario = null) {
   try {
-    if (!emailConfigurado()) return;
+    if (!ENVIO_LIGADO || !emailConfigurado()) return;
     await garantir();
     const r = await query(`SELECT * FROM pedidos_orcamento
        WHERE fat_liberado_em IS NOT NULL AND status != 'cancelado' AND email_fat_tentativas < 3
