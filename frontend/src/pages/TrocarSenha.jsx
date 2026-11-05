@@ -2,6 +2,7 @@
 // pages/TrocarSenha.jsx — Tela obrigatória de troca de senha
 // ============================================================
 import { useState } from 'react';
+import logoBoxer from '../assets/logo-boxer.svg';
 import { useNavigate } from 'react-router-dom';
 import { Package, Eye, EyeOff, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -25,7 +26,7 @@ export default function TrocarSenha() {
     setLoading(true);
     try {
       await trocarSenha(senha);
-      navigate('/catalogo', { replace: true });
+      navigate('/inicio', { replace: true });
     } catch (err) {
       setErro(err.response?.data?.erro || 'Erro ao trocar a senha. Tente novamente.');
     } finally {
@@ -46,11 +47,9 @@ export default function TrocarSenha() {
 
         {/* Logo */}
         <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-[var(--c-destaque)] flex items-center justify-center shadow-lg shadow-[var(--c-destaque)]/20">
-            <Package size={28} className="text-white" />
-          </div>
+          <img src={logoBoxer} alt="Boxer" className="w-14 h-14" />
           <div className="text-center">
-            <h1 className="text-xl font-bold text-[var(--c-texto)]">Boxer Requisições</h1>
+            <h1 className="text-xl font-bold text-[var(--c-texto)]">Boxer Operações</h1>
             <p className="text-sm text-[var(--c-suave)] mt-0.5">Sistema interno de materiais</p>
           </div>
         </div>
