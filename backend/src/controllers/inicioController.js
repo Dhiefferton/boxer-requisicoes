@@ -53,11 +53,13 @@ export async function resumoInicio(req, res, next) {
       seguro(query(movidosSql(`${HOJE} - 1`))),
       seguro(query(concluidosSql(7, 0), finais)),
       seguro(query(concluidosSql(14, 7), finais)),
+      // Cards que chegaram em "Aprovado/Recusado" (ou tiveram a aprovação marcada) neste mês, pela aprovação atual do card
       seguro(query(`SELECT
-          COUNT(DISTINCT pedido_id) FILTER (WHERE detalhes->>'aprovacao' ILIKE 'aprov%') AS aprovados,
-          COUNT(DISTINCT pedido_id) FILTER (WHERE detalhes->>'aprovacao' ILIKE 'recus%') AS recusados
-        FROM pedidos_orcamento_movimentos
-        WHERE date_trunc('month', criado_em AT TIME ZONE ${TZ}) = date_trunc('month', NOW() AT TIME ZONE ${TZ})`)),
+          COUNT(DISTINCT m.pedido_id) FILTER (WHERE p.aprovacao ILIKE 'aprov%') AS aprovados,
+          COUNT(DISTINCT m.pedido_id) FILTER (WHERE p.aprovacao ILIKE 'recus%') AS recusados
+        FROM pedidos_orcamento_movimentos m JOIN pedidos_orcamento p ON p.id = m.pedido_id
+        WHERE (m.para_status = 'aprovado_recusado' OR m.detalhes ? 'aprovacao')
+          AND date_trunc('month', m.criado_em AT TIME ZONE ${TZ}) = date_trunc('month', NOW() AT TIME ZONE ${TZ})`)),
       seguro(query(`SELECT
           (SELECT COUNT(*) FROM lojinha_boxer_pedidos WHERE ${DIA('fat_liberado_em')} = ${HOJE}) AS lojinha,
           (SELECT COUNT(*) FROM pedidos_orcamento WHERE ${DIA('fat_liberado_em')} = ${HOJE}) AS orcamento`)),
