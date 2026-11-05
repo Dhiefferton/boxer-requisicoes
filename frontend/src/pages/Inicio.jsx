@@ -104,7 +104,7 @@ export default function Inicio() {
   const primeiroNome = String(usuario?.nome || '').split(' ')[0];
 
   return (
-    <div className="space-y-6 max-w-[1500px]">
+    <div className="space-y-6 max-w-[1500px] mx-auto">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-[var(--c-texto)]">
           {saudacao()}, {primeiroNome} <span className="font-normal text-[var(--c-suave)]">· produtividade de hoje</span>
