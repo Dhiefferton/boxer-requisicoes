@@ -19,7 +19,7 @@ import ConfigOrcamento, { campoDaConfig } from '../../components/operador/Config
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
 import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnterior';
-import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro } from '../../components/operador/CamposCardOrcamento';
+import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro, regraBloqueiaMover } from '../../components/operador/CamposCardOrcamento';
 import { NomeTela } from '../../utils/nomesTelas';
 
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
@@ -106,7 +106,7 @@ export function montarColunas(cfg) {
     ...(padrao.get(c.chave) || {}),
     status: c.chave, inclui: c.chave === 'entrada' ? ['entrada', 'liberacao'] : [c.chave],
     titulo: c.nome, hex: c.cor, admin: !!c.so_admin, arquivada: !!c.arquivada, zen: c.zen || null,
-    destinos: Array.isArray(c.destinos) ? c.destinos : null,
+    destinos: Array.isArray(c.destinos) ? c.destinos : null, regras: Array.isArray(c.regras) ? c.regras : null,
   }));
 }
 
@@ -554,7 +554,8 @@ function CardAbertoLojinha({ p, cfg, colunas, botoes = {}, carregar, onFechar, o
 
   // Mover: a próxima coluna em destaque e as outras (Entrada é automática, via Zen)
   const podeMover = !!p.zen_ordem_separacao_id;
-  const permitido = (c) => !Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status);
+  const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
+    && !regraBloqueiaMover(colAtual, c.status, campos, valorDe);
   const destinos = colunas.filter(c => c.status !== atual && c.status !== 'entrada' && permitido(c) && !(c.admin && !botoes.mover_admin) && !(colAtual?.admin && !botoes.mover_admin));
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);

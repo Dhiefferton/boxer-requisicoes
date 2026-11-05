@@ -17,7 +17,7 @@ import ConfigOrcamento, { campoDaConfig } from '../../components/operador/Config
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
 import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnterior';
-import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro } from '../../components/operador/CamposCardOrcamento';
+import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro, regraBloqueiaMover } from '../../components/operador/CamposCardOrcamento';
 import { combinaBusca, montarColunas as colunasLojinha, Pilula, Coluna, InfoLiberacao, DadosPedido } from './LojinhaBoxer';
 import { NomeTela } from '../../utils/nomesTelas';
 
@@ -38,7 +38,7 @@ function colunasCif(cfg) {
   const lista = cfg?.colunas?.length ? cfg.colunas : [{ chave: 'aguardando_envio', nome: 'Aguardando envio', cor: '#3b82f6' }];
   return lista.map(c => ({
     status: c.chave, inclui: [c.chave], titulo: c.nome, hex: c.cor, admin: !!c.so_admin, arquivada: !!c.arquivada,
-    destinos: Array.isArray(c.destinos) ? c.destinos : null,
+    destinos: Array.isArray(c.destinos) ? c.destinos : null, regras: Array.isArray(c.regras) ? c.regras : null,
   }));
 }
 // Campos do CIF: ids com prefixo "cif_" (os valores ficam separados dos da Lojinha)
@@ -264,7 +264,8 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
     finally { setMovendo(false); }
   }
 
-  const permitido = (c) => !Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status);
+  const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
+    && !regraBloqueiaMover(colAtual, c.status, camposCif, valorCif, (x) => `cif_${x.pipefy_campo || `bx_${x.id}`}`);
   const destinos = colunas.filter(c => c.status !== atual && permitido(c) && !(c.admin && !botoes.mover_admin) && !(colAtual?.admin && !botoes.mover_admin));
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);

@@ -18,7 +18,7 @@ import ConfigOrcamento, { campoDaConfig } from '../../components/operador/Config
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
 import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnterior';
-import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro } from '../../components/operador/CamposCardOrcamento';
+import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro, regraBloqueiaMover } from '../../components/operador/CamposCardOrcamento';
 import { Pilula, Coluna } from './LojinhaBoxer';
 
 const fmtData = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
@@ -28,7 +28,7 @@ function montarColunas(cfg) {
   const lista = cfg?.colunas?.length ? cfg.colunas : [{ chave: 'entrada', nome: 'Entrada', cor: '#3b82f6' }];
   return lista.map(c => ({
     status: c.chave, inclui: [c.chave], titulo: c.nome, hex: c.cor, admin: !!c.so_admin, arquivada: !!c.arquivada,
-    destinos: Array.isArray(c.destinos) ? c.destinos : null,
+    destinos: Array.isArray(c.destinos) ? c.destinos : null, regras: Array.isArray(c.regras) ? c.regras : null,
   }));
 }
 function combina(card, busca) {
@@ -328,7 +328,8 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
     catch (e) { setErro(e.response?.data?.erro || 'Erro ao excluir.'); }
   }
 
-  const permitido = (c) => !Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status);
+  const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
+    && !regraBloqueiaMover(colAtual, c.status, cfg?.campos, valorDe);
   const destinos = podeEditar ? colunas.filter(c => c.status !== atual && permitido(c) && !(c.admin && !admin) && !(colAtual?.admin && !admin)) : [];
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
