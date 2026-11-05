@@ -175,6 +175,8 @@ function Quadro({ qid, nome: nomeMenu, podeEditar, admin }) {
                 ) : doStatus.map(p => (p.origem_tela === 'orcamentos' && origOrc[p.origem_id] ? (
                   <CardEspelhoOrcamento key={p.id} p={p} pedido={origOrc[p.origem_id]} nomeQuadro={nome} movendo={movendoId === p.id} podeArrastar={podeEditar}
                     onAbrirQuadro={() => setAbertoId(p.id)} onAtualizar={carregar}
+                    cfg={cfg} colunas={colunas} svc={svc} podeEditar={podeEditar} admin={admin} servicoFotos={servicoFotos}
+                    onHistoricoQuadro={() => setHistorico({ id: p.id, nome: p.titulo })}
                     onArrastar={() => setArrastando(p)} onFimArraste={() => { setArrastando(null); setSoltando(null); }} />
                 ) : (
                   <CardQuadro key={p.id} p={p} cfg={cfg} movendo={movendoId === p.id} podeArrastar={podeEditar} onAbrir={() => setAbertoId(p.id)}
@@ -232,9 +234,11 @@ function OrigemCard({ p, completo = false }) {
 // Cópia de um card do Orçamento: o card original inteiro, igual à tela de Orçamento (abre o mesmo card,
 // com fases, campos, fotos, peças, pedido/NF do Zen, Notas de serviço/Retorno de conserto e histórico).
 // Arrastar muda só a coluna aqui; o card original continua na coluna dele no Orçamento.
-function CardEspelhoOrcamento({ p, pedido, nomeQuadro, movendo, podeArrastar, onAbrirQuadro, onAtualizar, onArrastar, onFimArraste }) {
+function CardEspelhoOrcamento({ p, pedido, nomeQuadro, movendo, podeArrastar, onAbrirQuadro, onAtualizar, onArrastar, onFimArraste,
+  cfg, colunas, svc, podeEditar, admin, servicoFotos, onHistoricoQuadro }) {
   const { usuario } = useAuth();
   const botoes = { ...podeNaTela(usuario, 'orcamentos'), mover: false, configurar: false };
+
   return (
     <div draggable={podeArrastar && !movendo}
       onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(p.id)); onArrastar?.(); }}
@@ -249,10 +253,138 @@ function CardEspelhoOrcamento({ p, pedido, nomeQuadro, movendo, podeArrastar, on
           className="ml-auto text-[10px] font-semibold text-[var(--c-suave)] hover:text-[var(--c-destaque-claro)]">Campos de {nomeQuadro}</button>
       </div>
       <FotosProvider servico={SERVICO_ORCAMENTO}>
-        <CardPedido pedido={pedido} espelho botoes={botoes} podeEditar={podeEditarOrcamentos(usuario)} onAtualizar={onAtualizar} />
+        <CardPedido pedido={pedido} espelho FaseExterna={FaseQuadro}
+          faseExternaProps={{ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, nomeQuadro, carregar: onAtualizar, onHistorico: onHistoricoQuadro }} botoes={botoes} podeEditar={podeEditarOrcamentos(usuario)} onAtualizar={onAtualizar} />
       </FotosProvider>
     </div>
   );
+}
+
+// Fase do card nesta tela, para o card do Orçamento aberto aqui: campos da coluna atual (meio),
+// botões de mover entre as colunas desta tela (direita) e as fases já passadas aqui (esquerda, histórico)
+function FaseQuadro({ children, ...props }) { return children(useFaseQuadro(props)); }
+function useFaseQuadro({ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, nomeQuadro, carregar, onHistorico }) {
+  const [rascunho, setRascunho] = useState({});
+  const [salvando, setSalvando] = useState(false);
+  const [movendo, setMovendo] = useState(false);
+  const [erro, setErro] = useState('');
+  const [abertas, setAbertas] = useState(() => new Set());
+  const fasesPassadas = useFasesPassadas(() => svc.movimentos({ pedido: p.id }), `${p.id}-${p.status}`,
+    p.status, colunas.map(c => c.status), p.criado_em);
+  const atual = p.status;
+  const colAtual = colunas.find(c => c.status === atual);
+  const idx = colunas.findIndex(c => c.status === atual);
+  const valores = p.valores || {};
+  const valorDe = (id) => (id in rascunho ? rascunho[id] : valores[id]);
+  const temFoto = (id) => (p.fotos_locais || []).some(f => f.campo === id);
+  const sujo = Object.keys(rascunho).length > 0;
+  const camposDe = (k) => (cfg?.campos || []).filter(c => c.coluna === k).map(c => campoDaConfig(c, 0, cfg?.campos || []));
+  const camposAtuais = camposDe(atual).filter(c => visivelAgora(c, valorDe));
+  const preenchido = (f) => valorLista(valorDe(f.id)).length || (f.tipo === 'attachment' && temFoto(f.id));
+
+  async function salvar() {
+    if (!sujo) return true;
+    setSalvando(true); setErro('');
+    try { await svc.editarCampos(p.id, rascunho); setRascunho({}); await carregar?.(); return true; }
+    catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar.'); return false; }
+    finally { setSalvando(false); }
+  }
+  async function mover(status) {
+    if (sujo && !(await salvar())) return;
+    setMovendo(true); setErro('');
+    try { await svc.mover(p.id, status); await carregar?.(); }
+    catch (e) { setErro(e.response?.data?.erro || 'Erro ao mover.'); }
+    finally { setMovendo(false); }
+  }
+  const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
+    && !regraBloqueiaMover(colAtual, c.status, cfg?.campos, valorDe);
+  const destinos = podeEditar ? colunas.filter(c => c.status !== atual && permitido(c) && !(c.admin && !admin) && !(colAtual?.admin && !admin)) : [];
+  const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
+  const outros = destinos.filter(c => c !== proxima);
+
+  const blocoCampo = (c, editavel) => (
+    <div key={c.id} className="min-w-0">
+      <dt className="text-xs font-semibold text-[var(--c-texto)]">{editavel && obrigatorioAgora(c, valorDe) && <span className="text-red-400">* </span>}{c.rotulo}</dt>
+      {c.descricao && editavel && <p className="text-[11px] text-[var(--c-suave)]">{c.descricao}</p>}
+      <dd className="text-xs text-[var(--c-texto)] mt-1">
+        {c.tipo === 'attachment'
+          ? <FotosCampo pedido={p} campo={c} valor={null} podeEnviar={editavel} onMudou={carregar} />
+          : editavel && !SO_LEITURA.includes(c.tipo) && !(c.tipo !== 'registro' && lerRegistro(valorDe(c.id)))
+          ? <Editor campo={c} valor={valorDe(c.id)} onChange={v => setRascunho(r => ({ ...r, [c.id]: v }))} />
+          : <Valor campo={c} valor={valorDe(c.id)} />}
+      </dd>
+    </div>
+  );
+  const botao = (c, principal = false) => {
+    const antes = colunas.indexOf(c) < idx;
+    return (
+      <button key={c.status} onClick={() => mover(c.status)} disabled={movendo || salvando}
+        className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold text-left transition-colors disabled:opacity-40 ${
+          principal ? 'border-[var(--c-destaque)]/50 bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25'
+          : 'border-[var(--c-borda)] text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40'}`}>
+        {!principal && antes && <ArrowLeft size={13} className="shrink-0 text-[var(--c-suave)]" />}
+        <span className="flex-1 truncate">{c.titulo}</span>
+        {(principal || !antes) && <ArrowRight size={13} className="shrink-0" />}
+      </button>
+    );
+  };
+  const passadas = colunas.filter(c => c.status !== atual && fasesPassadas.passou(c.status))
+    .map(c => ({ col: c, campos: camposDe(c.status).filter(f => visivelAgora(f, valorDe)).filter(preenchido) }))
+    .filter(g => g.campos.length);
+
+  return {
+    coluna: colAtual ? { titulo: `${colAtual.titulo} · ${nomeQuadro}`, hex: colAtual.hex } : null,
+    conteudo: (
+      <FotosProvider servico={servicoFotos}>
+        <div className="space-y-4">
+          {erro && <p className="text-xs text-red-400">{erro}</p>}
+          {camposAtuais.length
+            ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, podeEditar))}</dl>
+            : <p className="text-xs text-[var(--c-suave)] py-2">Esta coluna de {nomeQuadro} não tem campos para preencher.</p>}
+          {sujo && (
+            <div className="sticky bottom-0 flex items-center justify-end gap-2 py-2 bg-[var(--c-fundo)] border-t border-[var(--c-borda)]">
+              <p className="flex-1 text-[11px] text-amber-400">Alterações não salvas.</p>
+              <button onClick={() => setRascunho({})} className="px-3 py-1.5 rounded-lg text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">Descartar</button>
+              <button onClick={salvar} disabled={salvando}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
+                {salvando ? <Spinner size={12} /> : <Check size={12} />} Salvar
+              </button>
+            </div>
+          )}
+        </div>
+      </FotosProvider>
+    ),
+    mover: (
+      <div className="space-y-1.5">
+        {proxima && botao(proxima, true)}
+        {movendo && <p className="flex items-center gap-2 text-[11px] text-[var(--c-suave)]"><Spinner size={12} /> Movendo…</p>}
+        {outros.length > 0 && <div className="space-y-1.5 pt-3 border-t border-[var(--c-borda)]">{outros.map(c => botao(c))}</div>}
+        {!podeEditar && <p className="text-[11px] text-[var(--c-suave)]">Mover este card não está liberado para você.</p>}
+        {podeEditar && !destinos.length && <p className="text-[11px] text-[var(--c-suave)]">Esta coluna não tem para onde mover.</p>}
+        <p className="text-[10px] text-[var(--c-suave)] pt-1">Move só em {nomeQuadro}. O card no Orçamento não muda de fase.</p>
+      </div>
+    ),
+    anteriores: passadas.length ? (
+      <FotosProvider servico={servicoFotos}>
+        {passadas.map(g => {
+          const aberta = abertas.has(g.col.status);
+          return (
+            <CaixaFase key={`q-${g.col.status}`} titulo="" pilula={<Pilula col={{ ...g.col, titulo: `${g.col.titulo} · ${nomeQuadro}` }} />}
+              tempo={fasesPassadas.tempo(g.col.status)} aberta={aberta}
+              onAlternar={() => setAbertas(s => { const n = new Set(s); aberta ? n.delete(g.col.status) : n.add(g.col.status); return n; })}>
+              <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, false))}</dl>
+            </CaixaFase>
+          );
+        })}
+      </FotosProvider>
+    ) : null,
+    historico: (
+      <button onClick={onHistorico}
+        className="w-full flex items-center gap-2 rounded-xl border border-[var(--c-borda)] px-3 py-2 text-xs font-semibold text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40">
+        <History size={13} /> <span className="flex-1 text-left">Histórico em {nomeQuadro}</span>
+      </button>
+    ),
+  };
 }
 
 // Card do quadro: título, data, etiquetas, anexos e até 3 campos do formulário inicial

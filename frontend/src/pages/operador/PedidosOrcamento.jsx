@@ -294,7 +294,9 @@ function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = f
 }
 
 // espelho: o mesmo card mostrado numa tela que recebeu a cópia (ex.: Notas de Serviços) — tudo igual, sem mover o original
-export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColuna, registrarMover, onArrastar, onFimArraste, espelho = false }) {
+export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColuna, registrarMover, onArrastar, onFimArraste, espelho = false, FaseExterna = null, faseExternaProps = null }) {
+  // Card aberto noutra tela: <FaseExterna {...faseExternaProps}>{fx => …}</FaseExterna> dá a fase de lá (só monta quando abre)
+  const ComFase = FaseExterna || SemFaseExterna;
   const [mudando, setMudando] = useState(false);
   // Peça vinda do campo "Registro" gravada antes da correção: mostra descrição e valor do registro
   const itens = (pedido.itens || []).map(it => {
@@ -629,7 +631,8 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
     </div>
 
     {aberto && (
-      <CardAbertoOrcamento pedido={pedido} botoes={botoes} podeEditar={podeEditar}
+      <ComFase {...(faseExternaProps || {})}>{(faseExterna) => (
+      <CardAbertoOrcamento pedido={pedido} botoes={botoes} podeEditar={podeEditar} faseExterna={faseExterna}
         onFechar={() => setAberto(false)} onAtualizar={onAtualizar}
         resumo={(tagsZen || alertas || espelho) && (
           <div className="space-y-2">
@@ -653,6 +656,7 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
         cancelar={cancelar} cancelando={cancelando} acoesZen={acoesZen}
         onConfigurarMover={botoes.configurar && onConfigurarColuna ? () => { setAberto(false); onConfigurarColuna(pedido.status); } : null}
         onHistorico={botoes.historico ? () => setVerHistorico(true) : null} />
+      )}</ComFase>
     )}
     {botoes.historico && verHistorico && (
       <PainelMovimentacao pedidoInicial={{ id: pedido.id, nome: pedido.cliente_nome || pedido.referencia }}
@@ -661,6 +665,8 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
     </>
   );
 }
+
+const SemFaseExterna = ({ children }) => children(null);
 
 // "123, 456\n789" -> ['123', '456', '789'] (mesma regra do backend)
 function separarCodigos(texto) {
