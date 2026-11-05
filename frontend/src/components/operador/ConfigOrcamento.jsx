@@ -225,10 +225,23 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
   const qtdPorColuna = useMemo(() => campos.reduce((m, c) => ({ ...m, [c.coluna]: (m[c.coluna] || 0) + 1 }), {}), [campos]);
 
   const mudou = () => setAlterado(true);
+  // Campo "Selecionar na lista" com lista salva (base:<id>): as opções são os registros da lista
+  const baseDoCampo = (o) => (o?.tipo === 'conexao' && /^base:\d+$/.test(String(o.lista || '')) ? Number(String(o.lista).slice(5)) : 0);
+  const [opcBase, setOpcBase] = useState({});
+  useEffect(() => {
+    const ids = [...new Set(campos.map(baseDoCampo).filter(Boolean))].filter(id => !(id in opcBase));
+    for (const id of ids) {
+      setOpcBase(m => ({ ...m, [id]: null }));
+      basesService.registros(id)
+        .then(r => setOpcBase(m => ({ ...m, [id]: [...new Set((r.data.registros || []).map(x => String(x.descricao || '').trim()).filter(Boolean))] })))
+        .catch(() => setOpcBase(m => ({ ...m, [id]: [] })));
+    }
+  }, [campos]); // eslint-disable-line react-hooks/exhaustive-deps
+  const opcoesDe = (o) => (baseDoCampo(o) ? opcBase[baseDoCampo(o)] || [] : o?.opcoes || []);
   // Campos com opções que podem condicionar outro: os desta coluna primeiro, depois os das outras colunas (o valor fica no card)
   const nomeColuna = (k) => colunas.find(c => keyCol(c) === k)?.nome || 'Formulário inicial';
   const refsCondicao = (alvo) => {
-    const ok = campos.filter(o => o.uid !== alvo.uid && COM_OPCOES.includes(o.tipo) && (o.opcoes || []).length);
+    const ok = campos.filter(o => o.uid !== alvo.uid && ((COM_OPCOES.includes(o.tipo) && (o.opcoes || []).length) || baseDoCampo(o)));
     return [...ok.filter(o => o.coluna === alvo.coluna), ...ok.filter(o => o.coluna !== alvo.coluna)];
   };
   const mudarCampo = (uid, fn) => { setCampos(l => l.map(c => (c.uid === uid ? fn({ ...c }) : c))); mudou(); };
@@ -488,12 +501,12 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       <div className="rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 space-y-1.5">
                         <p className="text-[11px] font-semibold text-[var(--c-texto)]">Mostrar este campo</p>
                         <select value={ref ? ref.uid : ''} className={inp}
-                          onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, visivel: e.target.value ? { campo: e.target.value, valor: (refs.find(o => o.uid === e.target.value)?.opcoes || []).slice(0, 1) } : null }))}>
+                          onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, visivel: e.target.value ? { campo: e.target.value, valor: opcoesDe(refs.find(o => o.uid === e.target.value)).slice(0, 1) } : null }))}>
                           <option value="">Sempre</option>
                           {refs.map(o => <option key={o.uid} value={o.uid}>Só quando "{o.rotulo}"{o.coluna !== campoAtual.coluna ? ` (${nomeColuna(o.coluna)})` : ''} for…</option>)}
                         </select>
                         {ref && (
-                          <OpcoesCondicao opcoes={ref.opcoes} valor={campoAtual.visivel?.valor}
+                          <OpcoesCondicao opcoes={opcoesDe(ref)} valor={campoAtual.visivel?.valor}
                             onChange={v => mudarCampo(campoAtual.uid, c => ({ ...c, visivel: { ...c.visivel, valor: v } }))} />
                         )}
                         {ref && <p className="text-[10px] text-[var(--c-suave)]">Escondido, o campo não é obrigatório.</p>}
@@ -508,12 +521,12 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       <div className="rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 space-y-1.5">
                         <p className="text-[11px] font-semibold text-[var(--c-texto)]">Quando é obrigatório</p>
                         <select value={ref ? ref.uid : ''} className={inp}
-                          onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: e.target.value ? { campo: e.target.value, valor: (refs.find(o => o.uid === e.target.value)?.opcoes || []).slice(0, 1) } : null }))}>
+                          onChange={e => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: e.target.value ? { campo: e.target.value, valor: opcoesDe(refs.find(o => o.uid === e.target.value)).slice(0, 1) } : null }))}>
                           <option value="">Sempre</option>
                           {refs.map(o => <option key={o.uid} value={o.uid}>Só quando "{o.rotulo}"{o.coluna !== campoAtual.coluna ? ` (${nomeColuna(o.coluna)})` : ''} for…</option>)}
                         </select>
                         {ref && (
-                          <OpcoesCondicao opcoes={ref.opcoes} valor={campoAtual.condicao?.valor}
+                          <OpcoesCondicao opcoes={opcoesDe(ref)} valor={campoAtual.condicao?.valor}
                             onChange={v => mudarCampo(campoAtual.uid, c => ({ ...c, condicao: { ...c.condicao, valor: v } }))} />
                         )}
                         {!refs.length && <p className="text-[10px] text-[var(--c-suave)]">Para condicionar, crie antes um campo com opções (lista, única opção ou checkbox).</p>}
@@ -660,7 +673,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                                 {refs.map(c => <option key={c.id} value={c.id}>{nomeDaColuna(c.coluna)} › {c.rotulo}</option>)}
                               </select>
                               {ref && <><p className="text-[11px] text-[var(--c-suave)]">for</p>
-                                <OpcoesCondicao opcoes={ref.opcoes} valor={r.valores} onChange={v => mudarRegra(i, x => ({ ...x, valores: v }))} /></>}
+                                <OpcoesCondicao opcoes={opcoesDe(ref)} valor={r.valores} onChange={v => mudarRegra(i, x => ({ ...x, valores: v }))} /></>}
                             </div>
                           );
                         })}
@@ -704,9 +717,11 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
 // Condição com uma ou mais opções (ex.: "Aprovado" ou "Aprovado parcialmente")
 function OpcoesCondicao({ opcoes, valor, onChange }) {
   const sel = valoresCondicao(valor);
+  if (!opcoes.length) return <p className="text-[11px] text-[var(--c-suave)]">Carregando as opções da lista…</p>;
+  opcoes = [...sel.filter(o => !opcoes.includes(o)), ...opcoes];
   const alternar = (o) => onChange(sel.includes(o) ? sel.filter(x => x !== o) : [...sel, o]);
   return (
-    <div className="rounded-lg border border-[var(--c-borda)] px-2.5 py-1.5 space-y-1">
+    <div className="rounded-lg border border-[var(--c-borda)] px-2.5 py-1.5 space-y-1 max-h-56 overflow-y-auto">
       {opcoes.map(o => (
         <label key={o} className="flex items-center gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
           <input type="checkbox" checked={sel.includes(o)} onChange={() => alternar(o)} />
