@@ -378,7 +378,11 @@ export async function listarPedidos(req, res, next) {
     await garantirColunas();
     await atualizarDocumentosOrcamento(); // Nº do pedido de venda e da NF
     await avisarFaturamentoOrcamento(); // e-mails ao faturamento que falharam (tenta de novo)
-    const result = await query(`${BASE_SELECT} WHERE p.status != 'cancelado' ORDER BY p.created_at DESC`);
+    // ?ids=1,2,3 — só esses cards (ex.: cópias mostradas na tela Notas de Serviços), inclusive cancelados
+    const ids = String(req.query.ids || '').split(',').map(Number).filter(n => Number.isInteger(n) && n > 0).slice(0, 500);
+    const result = ids.length
+      ? await query(`${BASE_SELECT} WHERE p.id = ANY($1::int[]) ORDER BY p.created_at DESC`, [ids])
+      : await query(`${BASE_SELECT} WHERE p.status != 'cancelado' ORDER BY p.created_at DESC`);
     res.json({ pedidos: result.rows });
   } catch (err) { next(err); }
 }
