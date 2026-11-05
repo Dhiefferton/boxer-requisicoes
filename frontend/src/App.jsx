@@ -36,7 +36,7 @@ import { podeRecontar } from './utils/acessoInventario';
 import { veTela } from './utils/telas';
 import { Spinner } from './components/ui';
 
-function RotaProtegida({ children }) {
+function RotaProtegida({ children, semMenu = false }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -46,7 +46,7 @@ function RotaProtegida({ children }) {
   if (!usuario) return <Navigate to="/login" replace />;
   // Redireciona para troca de senha obrigatória
   if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
-  return <AppLayout>{children}</AppLayout>;
+  return <AppLayout semMenu={semMenu}>{children}</AppLayout>;
 }
 
 // Tela liberada para o usuário (perfil + telas escolhidas no cadastro do colaborador)
@@ -145,7 +145,7 @@ export default function App() {
             <Route path="/inventario/:id/recontar" element={
               <RotaTela tela="inventario" recontagem><InventarioContagem key="recontagem" modo="recontagem" /></RotaTela>
             } />
-            <Route path="/inicio" element={<RotaProtegida><Inicio /></RotaProtegida>} />
+            <Route path="/inicio" element={<RotaProtegida semMenu><Inicio /></RotaProtegida>} />
             <Route path="/"  element={<Navigate to="/inicio" replace />} />
             <Route path="*"  element={<Navigate to="/inicio" replace />} />
           </Routes>
