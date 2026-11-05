@@ -66,7 +66,9 @@ export function regraBloqueiaMover(col, destino, campos, valorDe, idDe = (c) => 
     const c = (campos || []).find(x => Number(x.id) === Number(r.campo));
     if (!c) continue;
     const atuais = valorLista(valorDe(idDe(c)));
-    if (bate(atuais, r.valores)) return `"${c.rotulo}" está "${atuais.join(', ')}"`;
+    const ok = bate(atuais, r.valores);
+    // modo "mostrar" (padrão): só aparece quando bate; "esconder" (regras antigas): some quando bate
+    if (r.modo === 'esconder' ? ok : !ok) return r.modo === 'esconder' ? `"${c.rotulo}" está "${atuais.join(', ')}"` : `só quando "${c.rotulo}" for "${valoresCondicao(r.valores).join('" ou "')}"`;
   }
   return null;
 }

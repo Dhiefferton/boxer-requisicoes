@@ -616,13 +616,17 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                           return (
                             <div key={i} className="rounded-lg border border-[var(--c-borda)] p-2 space-y-1.5">
                               <div className="flex items-center gap-2">
-                                <p className="flex-1 text-[11px] text-[var(--c-suave)]">Esconder o botão para</p>
+                                <select value={r.modo === 'esconder' ? 'esconder' : 'mostrar'} className="flex-1 bg-transparent text-[11px] text-[var(--c-texto)] focus:outline-none"
+                                  onChange={e => mudarRegra(i, x => ({ ...x, modo: e.target.value }))}>
+                                  <option value="mostrar">Mostrar o botão para</option>
+                                  <option value="esconder">Esconder o botão para</option>
+                                </select>
                                 <button onClick={() => mudarColuna(colSel, c => ({ ...c, regras: (c.regras || []).filter((_, j) => j !== i) }))} aria-label="Remover regra" className="text-[var(--c-suave)] hover:text-red-400"><Trash2 size={12} /></button>
                               </div>
                               <select value={r.destino || ''} className={inp} onChange={e => mudarRegra(i, x => ({ ...x, destino: e.target.value }))}>
                                 {outras.map(o => <option key={keyCol(o)} value={keyCol(o)}>{o.nome}</option>)}
                               </select>
-                              <p className="text-[11px] text-[var(--c-suave)]">quando o campo</p>
+                              <p className="text-[11px] text-[var(--c-suave)]">{r.modo === 'esconder' ? 'quando o campo' : 'só quando o campo'}</p>
                               <select value={r.campo || ''} className={inp}
                                 onChange={e => mudarRegra(i, x => ({ ...x, campo: Number(e.target.value) || null, valores: (refs.find(c => String(c.id) === e.target.value)?.opcoes || []).slice(0, 1) }))}>
                                 <option value="">Escolha o campo…</option>
@@ -634,11 +638,11 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                           );
                         })}
                         <button disabled={!outras.length}
-                          onClick={() => mudarColuna(colSel, c => ({ ...c, regras: [...(c.regras || []), { destino: keyCol(outras[0]), campo: null, valores: [] }] }))}
+                          onClick={() => mudarColuna(colSel, c => ({ ...c, regras: [...(c.regras || []), { destino: keyCol(outras[0]), campo: null, valores: [], modo: 'mostrar' }] }))}
                           className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-[var(--c-borda)] text-[11px] text-[var(--c-texto)] hover:border-[var(--c-destaque)] disabled:opacity-40">
                           <Plus size={12} /> Nova regra
                         </button>
-                        <p className="text-[10px] text-[var(--c-suave)]">Com a regra valendo, o botão some do card e o sistema não deixa mover para essa coluna (nem arrastando). Campo criado agora: salve antes para usar numa regra.</p>
+                        <p className="text-[10px] text-[var(--c-suave)]">Mostrar: o botão só aparece quando o campo tem um dos valores marcados (vazio = não aparece). Esconder: o botão some quando tem. Fora da regra, o sistema não deixa mover para essa coluna (nem arrastando). Campo criado agora: salve antes para usar numa regra.</p>
                       </div>
                     );
                   })()}
