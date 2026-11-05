@@ -119,7 +119,7 @@ export default function App() {
               <RotaProtegida><QuadroPersonalizado /></RotaProtegida>
             } />
             <Route path="/telas" element={
-              <RotaTela tela="admin"><Telas /></RotaTela>
+              <RotaTela tela="telas"><Telas /></RotaTela>
             } />
             <Route path="/lojinha" element={
               <RotaTela tela="lojinha"><LojinhaBoxer /></RotaTela>
