@@ -16,6 +16,7 @@ import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { carregarEstrutura, valorLista, EtiquetasDoCard } from '../../components/operador/CamposCardOrcamento';
 import CardAbertoOrcamento from '../../components/operador/CardAbertoOrcamento';
 import ArquivosNota from '../../components/operador/ArquivosNota';
+import { InfoLiberacao } from './LojinhaBoxer';
 import EmailsFaturamento from '../../components/operador/EmailsFaturamento';
 import NovoCardOrcamento from '../../components/operador/NovoCardOrcamento';
 import { FaixaFotosCard } from '../../components/operador/FotosOrcamento';
@@ -440,6 +441,14 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
   const [aberto, setAberto] = useState(false);
   const parar = (e) => e.stopPropagation();
 
+  // Caixa do Zen igual à da Lojinha: pedido de venda, ordem de separação e nota fiscal (+ PDF/XML faturada)
+  const caixaZen = pedido.zen_ordem_separacao_id ? (
+    <div onClick={parar}>
+      <InfoLiberacao itens={[]} baseNF={`/pedidos-orcamento/${pedido.id}`}
+        p={{ id: pedido.id, qtd_cards: 1, zen_pedido_id: pedido.zen_pedido_id, zen_venda_numero: pedido.zen_venda_numero,
+          zen_ordem_separacao_id: pedido.zen_ordem_separacao_id, zen_nf_id: pedido.zen_nota_id, zen_nf_numero: pedido.zen_nf_numero }} />
+    </div>
+  ) : null;
   // Etiquetas do Zen / Pipefy (quadro e card aberto)
   const tagsZen = (
     <>
@@ -448,7 +457,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
           : pedido.status === 'separando' ? 'Etapa do Zen — segue o Pipefy quando a separação terminar' : undefined}
           className="inline-block mr-1 text-[10px] font-semibold text-amber-300 bg-amber-500/15 rounded px-1.5 py-0.5">No Pipefy: {faseDiferente}</span>
       )}
-      {pedido.zen_pedido_id && (
+      {pedido.zen_pedido_id && !caixaZen && (
         <a href={`${ZEN_APP_URL}/sale/sale?q=id==${pedido.zen_pedido_id}`} target="_blank" rel="noreferrer" title="Abrir pedido no Zen" onClick={parar}
           className="inline-flex items-center gap-1 mr-1 text-[10px] font-semibold text-green-400 bg-green-500/10 hover:bg-green-500/20 rounded px-1.5 py-0.5">
           Pedido Zen #{pedido.zen_pedido_id} <ExternalLink size={10} />
@@ -460,13 +469,13 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
           Pedido Zen #{pedido.zen_cancelado_id} cancelado
         </span>
       )}
-      {pedido.zen_ordem_separacao_id && (
+      {pedido.zen_ordem_separacao_id && !caixaZen && (
         <a href={`${ZEN_APP_URL}/material/pickingOrder?q=id==${pedido.zen_ordem_separacao_id}`} target="_blank" rel="noreferrer" title="Abrir ordem de separação no Zen" onClick={parar}
           className="inline-flex items-center gap-1 mr-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 rounded px-1.5 py-0.5">
           Ordem de separação #{pedido.zen_ordem_separacao_id} <ExternalLink size={10} />
         </a>
       )}
-      {pedido.zen_nota_id && (
+      {pedido.zen_nota_id && !caixaZen && (
         <a href={`${ZEN_APP_URL}/fiscal/outgoingInvoice.html?q=id==${pedido.zen_nota_id}`} target="_blank" rel="noreferrer" title="Abrir nota fiscal no Zen" onClick={parar}
           className="inline-flex items-center gap-1 mr-1 text-[10px] font-semibold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 rounded px-1.5 py-0.5">
           Nota fiscal #{pedido.zen_nota_id} <ExternalLink size={10} />
@@ -592,6 +601,7 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
         return (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).find(c => c?.id === id)?.valor;
       }} />
       {tagsZen}
+      {caixaZen}
       {alertas}
       <div onClick={parar}><FaixaFotosCard pedido={pedido} onVerTodas={() => setAberto(true)} /></div>
       {(pedido.pipefy_card_id || pedido.cliente_cnpj || pedido.ns_entrada || pedido.tecnico) && (
@@ -617,11 +627,12 @@ function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColun
         resumo={(tagsZen || alertas) && (
           <div className="space-y-2">
             <div>{tagsZen}</div>
+            {caixaZen}
             {/* Liberação de faturamento: e-mails mandados ao faturamento (como no Pipefy) */}
             {/libera\w*\s+(de\s+|para\s+)?fatura/.test(String(colunaAtual?.titulo || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())
               && <EmailsFaturamento pedidoId={pedido.id} />}
-            {/* Nota do Zen: PDF (DANFE) e XML depois de faturada */}
-            {pedido.zen_nota_id && (
+            {/* Nota do Zen sem ordem de separação (raro): PDF (DANFE) e XML */}
+            {pedido.zen_nota_id && !caixaZen && (
               <div className="rounded-lg border border-[var(--c-borda)] p-2">
                 <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)] mb-1">Nota fiscal #{pedido.zen_nota_id}</p>
                 <ArquivosNota base={`/pedidos-orcamento/${pedido.id}`} />
