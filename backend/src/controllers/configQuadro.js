@@ -19,7 +19,7 @@ const LISTAS = ['Modelos de máquina'];
 export const valoresCondicao = (v) => (Array.isArray(v) ? v : [v]).map(x => String(x ?? '').trim()).filter(Boolean);
 const bateCondicao = (lista, valor) => { const ok = valoresCondicao(valor); return lista.some(x => ok.includes(String(x).trim())); };
 /** Limpa o valor da condição ao salvar (texto ou lista de até 30 opções) */
-/** Regras para mover ({ destino, campo: id do campo, valores: [...] }): limpa ao salvar */
+/** Regras para mover ({ destino, campo: id do campo, valores: [...], modo: 'mostrar' | 'esconder' }): limpa ao salvar */
 export function limparRegras(regras, limpar) {
   if (!Array.isArray(regras)) return null;
   const out = [];
@@ -27,14 +27,16 @@ export function limparRegras(regras, limpar) {
     const destino = String(r?.destino || '').trim();
     const campo = Number(r?.campo) || null;
     const valores = (Array.isArray(r?.valores) ? r.valores : [r?.valores]).map(v => limpar(v, 120)).filter(Boolean).slice(0, 30);
-    if (destino && campo && valores.length) out.push({ destino, campo, valores });
+    const modo = r?.modo === 'esconder' ? 'esconder' : 'mostrar';
+    if (destino && campo && valores.length) out.push({ destino, campo, valores, modo });
   }
   return out.length ? out : null;
 }
 /**
  * Regra da coluna atual impede mover o card para "destino"? Devolve o motivo (texto) ou null.
- * Ex.: na coluna "Requisitar Peças", não deixa ir para "Envio de orçamento" quando
- * "Peças retiradas no Almoxarifado?" for "Não".
+ * modo "mostrar" (padrão): o botão só aparece quando o campo tem um dos valores
+ *   (ex.: "Envio de orçamento" só quando "Peças retiradas no Almoxarifado?" for "Sim");
+ * modo "esconder" (regras antigas): o botão some quando o campo tem um dos valores.
  */
 export function bloqueioRegra(col, destino, campos, valores, idCampo) {
   for (const r of (Array.isArray(col?.regras) ? col.regras : [])) {
@@ -45,7 +47,11 @@ export function bloqueioRegra(col, destino, campos, valores, idCampo) {
     let lista = [v];
     if (v.startsWith('[')) { try { const a = JSON.parse(v); if (Array.isArray(a)) lista = a.map(String); } catch { /* texto */ } }
     const atuais = lista.map(x => x.trim()).filter(Boolean);
-    if (atuais.some(x => valoresCondicao(r.valores).includes(x))) return `"${c.rotulo}" está "${atuais.join(', ')}"`;
+    const bate = atuais.some(x => valoresCondicao(r.valores).includes(x));
+    if (r.modo === 'esconder' ? bate : !bate) {
+      return r.modo === 'esconder' ? `"${c.rotulo}" está "${atuais.join(', ')}"`
+        : `só quando "${c.rotulo}" for "${valoresCondicao(r.valores).join('" ou "')}"${atuais.length ? ` (está "${atuais.join(', ')}")` : ' (está vazio)'}`;
+    }
   }
   return null;
 }
