@@ -1,4 +1,5 @@
 ﻿import { listarFornecedores, criarFornecedor, editarFornecedor, excluirFornecedor, fornecedoresPorMaterial, vincularFornecedor, desvincularFornecedor, fornecedorZen } from '../controllers/fornecedoresController.js';
+import { resumoInicio } from '../controllers/inicioController.js';
 import { Router } from 'express';
 import { verTratativa, anexoTratativa } from '../controllers/tratativaController.js';
 import { acessoQuadro, verTelas, criarQuadro, editarQuadro, salvarNomesTelas, verConfigQuadro, salvarConfigQuadroDin, adicionarOpcaoQuadro,
@@ -292,6 +293,7 @@ router.delete('/lojinha/pedidos/:id', ...loja, excluirPedidoLojinha);
 
 // ── Logística CIF (Enviar) — continuação da Lojinha (pedido Finalizado entra aqui)
 // Telas criadas pelo admin (quadros de cards) e nomes das telas
+router.get('/inicio/resumo',                  autenticar, resumoInicio);
 router.get('/telas',                          autenticar, verTelas);
 router.post('/telas/quadros',                 autenticar, exigirPerfil('admin'), criarQuadro);
 router.patch('/telas/quadros/:id',            autenticar, exigirPerfil('admin'), editarQuadro);
