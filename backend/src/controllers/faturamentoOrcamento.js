@@ -24,7 +24,8 @@ const garantir = () => (colunas ||= query(`
   ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS email_fat_remessa_em TIMESTAMPTZ;
   ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS email_fat_servico_em TIMESTAMPTZ;
   ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS email_fat_tentativas INTEGER NOT NULL DEFAULT 0;
-  ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS email_fat_erro TEXT;`)
+  ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS email_fat_erro TEXT;
+  ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS email_fat_enviados JSONB NOT NULL DEFAULT '[]'::jsonb;`)
   .catch(e => { colunas = null; throw e; }));
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -131,6 +132,20 @@ export async function previaEmailsOrcamento(pedidoId) {
   return { configurado: emailConfigurado(), para: PARA, remessa: await emailRemessa(p), servico: recusado(p) ? 'não envia (orçamento recusado)' : await emailServico(p) };
 }
 
+/** E-mails ao faturamento do card: os enviados (como foram) e a prévia dos que ainda não saíram. */
+export async function emailsFaturamentoCard(pedidoId) {
+  await garantir();
+  const p = (await query(`SELECT * FROM pedidos_orcamento WHERE id = $1`, [pedidoId])).rows[0];
+  if (!p) return null;
+  const enviados = Array.isArray(p.email_fat_enviados) ? p.email_fat_enviados : [];
+  const tipos = new Set(enviados.map(x => x.tipo));
+  const pendentes = [];
+  const remetente = String(process.env.EMAIL_FROM || '').replace(/\s*<.*$/, '').replace(/"/g, '').trim() || 'Boxer Requisições';
+  if (!tipos.has('remessa')) { const m = await emailRemessa(p).catch(() => null); if (m) pendentes.push({ tipo: 'remessa', assunto: m.assunto, de: remetente, para: PARA, texto: m.texto }); }
+  if (!tipos.has('servico') && !recusado(p)) { const m = await emailServico(p).catch(() => null); if (m) pendentes.push({ tipo: 'servico', assunto: m.assunto, de: remetente, para: PARA, texto: m.texto }); }
+  return { enviados, pendentes, liberado_em: p.fat_liberado_em, erro: p.email_fat_erro || null, configurado: emailConfigurado() };
+}
+
 /** Card chegou na Liberação de Faturamento: marca e manda os e-mails. Nunca lança erro. */
 export async function liberarFaturamentoOrcamento(pedidoId, usuario = null) {
   try {
@@ -173,6 +188,11 @@ export async function avisarFaturamentoOrcamento(usuario = null) {
           if (!m) continue; // sem remessa / recusado: nada a mandar
           await enviarEmail({ para: PARA, assunto: m.assunto, html: m.html, texto: m.texto, responderPara: process.env.EMAIL_RESPOSTA_FATURAMENTO || undefined });
           await registrar(p, `E-mail de ${e.nome} enviado ao faturamento (${PARA}): ${m.assunto}`, usuario);
+          // guarda o e-mail como foi enviado (aba "E-mails" do card)
+          const remetente = String(process.env.EMAIL_FROM || '').replace(/\s*<.*$/, '').replace(/"/g, '').trim() || 'Boxer Requisições';
+          await query(`UPDATE pedidos_orcamento SET email_fat_enviados = COALESCE(email_fat_enviados, '[]'::jsonb) || $2::jsonb WHERE id = $1`,
+            [p.id, JSON.stringify([{ tipo: e.col === 'email_fat_remessa_em' ? 'remessa' : 'servico', assunto: m.assunto, de: remetente, para: PARA,
+              texto: m.texto, enviado_em: new Date().toISOString(), por: usuario?.nome || null }])]).catch(() => {});
         } catch (err) {
           falhas.push(`${e.nome}: ${err.message}`);
           await query(`UPDATE pedidos_orcamento SET ${e.col} = NULL WHERE id = $1`, [p.id]);
@@ -182,4 +202,13 @@ export async function avisarFaturamentoOrcamento(usuario = null) {
       await query(`UPDATE pedidos_orcamento SET email_fat_erro = $2 WHERE id = $1`, [p.id, falhas.length ? falhas.join(' | ').slice(0, 500) : null]);
     }
   } catch (e) { console.error('[Orçamento] e-mail faturamento:', e.message); }
+}
+
+// GET /pedidos-orcamento/:id/emails-faturamento — e-mails ao faturamento do card (enviados e prévia)
+export async function verEmailsFaturamento(req, res, next) {
+  try {
+    const r = await emailsFaturamentoCard(parseInt(req.params.id));
+    if (!r) return res.status(404).json({ erro: 'Card não encontrado.' });
+    res.json(r);
+  } catch (err) { next(err); }
 }
