@@ -97,6 +97,15 @@ async function emailRemessa(p) {
   return { assunto: `Retorno de conserto - NF de remessa Nº: ${remessa}`, texto: linhas.join('\n'), html: html(linhas) };
 }
 
+// Conta para o cliente pagar o serviço (vai no fim do e-mail de prestação de serviço)
+const DADOS_BANCARIOS = [
+  'TEKWELD IMPORTAÇÃO E COMERCIO DE MAQUINAS INDUSTRIAIS LTDA',
+  '13.881.630/0001-64',
+  'ITAU (341)',
+  'Ag 0277',
+  'C/C 98045-4',
+];
+
 /** E-mail 2: Prestação de serviço (cliente, valores, pedido de venda no Zen, corpo da nota) */
 async function emailServico(p) {
   let pedidoZen = campo(p, /pedido pecas/);
@@ -104,14 +113,15 @@ async function emailServico(p) {
     const d = await documentosZen({ zen_pedido_id: p.zen_pedido_id }).catch(() => null);
     if (d?.vendaNumero) pedidoZen = Number.isFinite(Number(d.vendaNumero)) ? Number(d.vendaNumero).toLocaleString('en-US') : d.vendaNumero;
   }
-  const valorNF = totalPecas(p) ?? numero(campo(p, /total a receber/));
+  const nsBruto = campo(p, /^ns entrada/) || String(p.ns_entrada || '').trim();
+  const ns = /^\d+$/.test(nsBruto) ? Number(nsBruto).toLocaleString('en-US') : nsBruto;
+  const pagamento = campo(p, /^prazo de pagamento/) || campo(p, /^forma de pagamento/);
   const modelo = campo(p, /^modelo (da )?maquina/);
   const pecasServico = campo(p, /pecas utilizadas para emissao de prestacao de servico/);
   const linhas = [
     'Nova solicitação de emissão de nota de prestação de serviço para:',
     p.cliente_nome || '',
     `CPF/CNPJ: ${documento(p.cliente_cnpj)}`,
-    `Valor total NF: ${valorNF != null ? moeda(valorNF) : ''}`,
     `Pedido peças no PS: ${pedidoZen || ''}`,
     '',
     'Corpo da nota:',
@@ -119,6 +129,14 @@ async function emailServico(p) {
     `Assistência Técnica referente ao conserto da máquina de modelo ${modelo || ''} com 3 meses de garantia em cima do serviço prestado.`,
     '',
     ...(pecasServico ? pecasServico.split(/\r?\n/) : []),
+    '',
+    `NS: ${ns || ''}`,
+    '',
+    `Pagamento: ${pagamento || ''}`,
+    '',
+    'Dados bancarios:',
+    '',
+    ...DADOS_BANCARIOS,
   ];
   return { assunto: `Prestação de serviço - ${p.cliente_nome || `card #${p.id}`}`, texto: linhas.join('\n'), html: html(linhas) };
 }
