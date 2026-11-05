@@ -327,6 +327,49 @@ export async function documentosZen({ zen_pedido_id, zen_ordem_separacao_id, zen
   return r;
 }
 
+// ============================================================
+// XML e PDF (DANFE) da nota fiscal — só depois de autorizada (faturada)
+// ============================================================
+// A NF-e autorizada fica em /fiscal/br/dfeNfeProcOut (invoice.id = nota de saída):
+// file = XML, fileDanfe = PDF. O conteúdo vem da URL do arquivo ou, se ela não
+// abrir, de /system/file/fileOpReadContent/{id}. Só leitura.
+async function conteudoArquivoZen(arq) {
+  if (arq?.url) {
+    try { const r = await fetch(arq.url); if (r.ok) return Buffer.from(await r.arrayBuffer()); } catch { /* tenta pelo Zen */ }
+  }
+  if (!arq?.id) return null;
+  const token = await getToken();
+  const resp = await fetch(`${ZEN_BASE_URL}/system/file/fileOpReadContent/${arq.id}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, tenant: ZEN_TENANT },
+  });
+  if (!resp.ok) throw new Error(`ZenERP POST /system/file/fileOpReadContent → ${resp.status}`);
+  const tipo = resp.headers.get('content-type') || '';
+  const buf = Buffer.from(await resp.arrayBuffer());
+  if (/json/i.test(tipo)) {
+    // resposta em JSON: conteúdo em base64 (ou texto)
+    let j = null; try { j = JSON.parse(buf.toString('utf8')); } catch { return buf; }
+    const v = typeof j === 'string' ? j : (j?.content ?? j?.data ?? j?.base64 ?? j?.value ?? null);
+    if (typeof v !== 'string') return null;
+    return /^[A-Za-z0-9+/=\s]+$/.test(v) && v.length > 100 ? Buffer.from(v, 'base64') : Buffer.from(v, 'utf8');
+  }
+  return buf;
+}
+
+/** XML ou PDF (DANFE) da nota de saída nfId. Erro 409 enquanto a nota não foi autorizada. */
+export async function arquivoNotaZen(nfId, tipo) {
+  const xml = tipo === 'xml';
+  const lista = await zen('GET', `/fiscal/br/dfeNfeProcOut?max=5&q=${q(`invoice.id==${nfId}`)}`).catch(() => []);
+  const dfe = (Array.isArray(lista) ? lista : []).find(d => d?.status === 'PROCESSED' || d?.statusCode === 'PROCESSED');
+  if (!dfe) throw Object.assign(new Error('A nota ainda não foi faturada (autorizada) no Zen.'), { status: 409 });
+  const doc = (xml ? dfe.file : dfe.fileDanfe) ? dfe : await zen('GET', `/fiscal/br/dfeNfeProcOut/${dfe.id}`);
+  const arq = xml ? doc.file : doc.fileDanfe;
+  if (!arq?.id && !arq?.url) throw Object.assign(new Error(`O Zen ainda não gerou o ${xml ? 'XML' : 'PDF (DANFE)'} desta nota.`), { status: 409 });
+  const buffer = await conteudoArquivoZen(arq);
+  if (!buffer?.length) throw Object.assign(new Error(`Não consegui baixar o ${xml ? 'XML' : 'PDF'} da nota no Zen.`), { status: 502 });
+  return { buffer, contentType: arq.contentType || (xml ? 'application/xml' : 'application/pdf'),
+    nome: `NF-${doc.number || nfId}${doc.chNFe ? `-${doc.chNFe}` : ''}.${xml ? 'xml' : 'pdf'}` };
+}
+
 /** Romaneio de saída da ordem de separação (e-mail ao faturamento da Lojinha). Só leitura. */
 export async function romaneioDaOrdem(ordemId) {
   const ordem = await zen('GET', `/material/pickingOrder/${ordemId}`);
