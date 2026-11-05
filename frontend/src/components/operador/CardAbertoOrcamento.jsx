@@ -37,6 +37,9 @@ export default function CardAbertoOrcamento({
   // ações do card (mesmas regras do quadro)
   moverPara, avancar, proxima: proximaProp, mudando, movendoPara, podeAvancar, motivoSemAvancar,
   cancelar, cancelando, acoesZen, onHistorico, onConfigurarMover = null,
+  // Cópia em outra tela (ex.: Notas de Serviços): a fase atual é a da outra tela; as do Orçamento ficam no histórico.
+  // { coluna: {titulo, hex}, conteudo, mover, anteriores } (nós React)
+  faseExterna = null,
 }) {
   const [fases, setFases] = useState(null);
   const [erro, setErro] = useState('');
@@ -78,10 +81,10 @@ export default function CardAbertoOrcamento({
   const sujo = Object.keys(rascunho).length > 0;
 
   // Meio: grupos da coluna atual; esquerda: os outros, na ordem das colunas (Formulário inicial primeiro)
-  const atuais = grupos.filter(g => g.atual);
+  const atuais = faseExterna ? [] : grupos.filter(g => g.atual);
   const ordemCol = (k) => (k === 'inicio' ? -1 : k ? COLUNAS_ORCAMENTO.findIndex(c => c.status === k) : 999);
   // Fases anteriores: mostram os campos preenchidos; o admin clica em "Editar" na fase e edita todos os campos dela
-  const anteriores = grupos.filter(g => !g.atual)
+  const anteriores = grupos.filter(g => faseExterna || !g.atual)
     .map(g => {
       const editando = botoes.editar_fase && editandoFase.has(g.faseId);
       return { ...g, editando, todos: g.campos.filter(c => c.tipo !== 'id' && visivelAgora(c, valorDe)),
@@ -89,7 +92,7 @@ export default function CardAbertoOrcamento({
           : g.campos.filter(c => temValor(c.id) || (c.tipo === 'attachment' && fotosLocais(c.id))) };
     })
     .filter(g => g.faseId !== 'outros') // campos soltos (sem fase/coluna) não aparecem no card
-    .filter(g => !g.chave || fasesPassadas.passou(g.chave))
+    .filter(g => g.atual || !g.chave || fasesPassadas.passou(g.chave))
     .filter(g => g.campos.length || (botoes.editar_fase && String(g.faseId).startsWith('bx-') && g.todos.length))
     .sort((a, b) => ordemCol(a.chave) - ordemCol(b.chave));
   const camposAtuais = atuais.flatMap(g => g.campos).filter(c => visivelAgora(c, valorDe));
@@ -218,13 +221,14 @@ export default function CardAbertoOrcamento({
                 </CaixaFase>
               );
             })}
+            {faseExterna?.anteriores}
           </div>
 
           {/* ── Meio: fase atual ── */}
           <div className="flex-1 min-w-0 lg:overflow-y-auto p-5 space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-[var(--c-borda)]">
               <p className="text-sm font-bold text-[var(--c-texto)]">Fase atual</p>
-              <Pilula coluna={colunaAtual} grande />
+              <Pilula coluna={faseExterna ? faseExterna.coluna : colunaAtual} grande />
               {pedido.pipefy_url && (
                 <a href={pedido.pipefy_url} target="_blank" rel="noreferrer" className="ml-auto flex items-center gap-1 text-[11px] text-[var(--c-suave)] hover:text-[var(--c-destaque)]">
                   Abrir no Pipefy <ExternalLink size={11} />
@@ -240,7 +244,7 @@ export default function CardAbertoOrcamento({
                 {aviso.map((l, i) => <p key={i} className={`text-[11px] ${l.ok ? 'text-green-400' : 'text-amber-400'}`}>{l.txt}</p>)}
               </div>
             )}
-            {fases && (camposAtuais.length
+            {faseExterna ? faseExterna.conteudo : fases && (camposAtuais.length
               ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, botoes.campos))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.</p>)}
 
@@ -263,6 +267,7 @@ export default function CardAbertoOrcamento({
               <button onClick={fechar} aria-label="Fechar" className="p-1 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={18} /></button>
             </div>
 
+            {faseExterna ? faseExterna.mover : (<>
             {podeEditar && proxima && podeMoverAqui && (podeAvancar
               ? <button onClick={() => mover(avancar)} disabled={ocupado}
                   className="w-full flex items-center gap-2 rounded-xl border border-[var(--c-destaque)]/50 bg-[var(--c-destaque)]/15 px-3 py-2 text-xs font-semibold text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 disabled:opacity-40">
@@ -289,10 +294,12 @@ export default function CardAbertoOrcamento({
                 <Settings size={12} /> Configurar mover cards
               </button>
             )}
+            </>)}
 
-            {(acoesZen?.length > 0 || podeEditar || onHistorico) && (
+            {(acoesZen?.length > 0 || podeEditar || onHistorico || faseExterna?.historico) && (
               <div className="space-y-1.5 pt-3 border-t border-[var(--c-borda)]">
-                {acoesZen?.map(a => (
+                {faseExterna?.historico}
+                {!faseExterna && acoesZen?.map(a => (
                   <button key={a.id} onClick={a.onClick} disabled={a.ocupado}
                     className={`w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-40 ${
                       a.alerta ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25' : 'border border-[var(--c-borda)] text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40'}`}>
@@ -303,10 +310,10 @@ export default function CardAbertoOrcamento({
                 {onHistorico && (
                   <button onClick={onHistorico}
                     className="w-full flex items-center gap-2 rounded-xl border border-[var(--c-borda)] px-3 py-2 text-xs font-semibold text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40">
-                    <History size={13} /> <span className="flex-1 text-left">Histórico do card</span>
+                    <History size={13} /> <span className="flex-1 text-left">{faseExterna ? 'Histórico no Orçamento' : 'Histórico do card'}</span>
                   </button>
                 )}
-                {podeEditar && (
+                {podeEditar && !faseExterna && (
                   <button onClick={cancelar} disabled={cancelando}
                     className="w-full flex items-center gap-2 rounded-xl border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-500/10 disabled:opacity-40">
                     <Ban size={13} /> <span className="flex-1 text-left">{cancelando ? 'Cancelando…' : 'Cancelar pedido'}</span>
