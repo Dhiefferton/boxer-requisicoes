@@ -228,6 +228,46 @@ async function transacaoLojinha(numero, manual) {
   return ''; // pagamento sem ID de transação (ex.: depósito/boleto manual): segue sem tag
 }
 
+/**
+ * O Zen soma no total os impostos "por fora" (outsideTaxValue, ex.: IPI 6,5%): um pedido de
+ * R$ 77,88 (peças + frete) virava R$ 82,94 na nota. Aqui cada item ganha um desconto (%) que
+ * faz o total do item (com o imposto) voltar ao valor da Lojinha (peças + frete do item).
+ * O desconto vale só sobre as peças (o frete não muda). Confere e acerta os centavos até 3 vezes.
+ * Roda com o pedido em preparação, antes do saleOpPrepare. Devolve { desconto, total }.
+ */
+export async function descontarImpostosPorFora(zenPedidoId, alvos) {
+  // alvos: { código da peça: valor da Lojinha do item (peças com desconto + frete do item) }
+  // Em preparação o Zen só calcula os impostos quando pedido (saleOpTaxationCalc); a cada volta recalcula
+  for (let volta = 0; volta < 3; volta++) {
+    await zen('POST', `/sale/saleOpTaxationCalc/${zenPedidoId}`);
+    const itens = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${zenPedidoId}`)}&max=200`) || [];
+    let mexeu = false;
+    for (const resumo of itens) {
+      const it = await zen('GET', `/sale/saleItem/${resumo.id}`);
+      const valorLojinha = Number(alvos?.[String(it.productPacking?.code || '')]);
+      const total = Number(it.totalValue || 0);
+      if (!Number.isFinite(valorLojinha) || valorLojinha <= 0 || Math.abs(total - valorLojinha) < 0.005) continue;
+      if (Number(it.outsideTaxValue || 0) <= 0.004 && total <= valorLojinha) continue; // sem imposto por fora: não mexe
+      const bruto = Number(it.grossProductValue || 0);
+      const operacao = Number(it.operationValue || 0);
+      const frete = Number(it.otherValues?.freightValue || 0) + Number(it.otherValues?.insuranceValue || 0) + Number(it.otherValues?.otherExpensesValue || 0);
+      if (bruto <= 0 || operacao <= 0) continue;
+      const fator = total / operacao;               // ex.: 1,065 (IPI 6,5% por fora)
+      const pecasAlvo = valorLojinha / fator - frete; // peças antes do imposto
+      if (pecasAlvo <= 0) throw new Error(`Peça ${it.productPacking?.code}: o imposto passa do valor das peças, não dá para descontar.`);
+      const pct = Math.max(0, Math.min(99.9999, Math.round((1 - pecasAlvo / bruto) * 1e6) / 1e4));
+      const corpo = { ...it, discountType: pct > 0 ? 'PERCENTAGE' : 'NONE', discountAmount: pct };
+      for (const k of ['discountValue', 'productValue', 'operationValue', 'insideTaxValue', 'outsideTaxValue', 'totalValue', 'effectiveValue']) delete corpo[k];
+      await zen('PUT', '/sale/saleItem', corpo);
+      mexeu = true;
+    }
+    if (!mexeu) break;
+  }
+  await zen('POST', `/sale/saleOpTaxationCalc/${zenPedidoId}`);
+  const finais = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${zenPedidoId}`)}&max=200`) || [];
+  return { desconto: r2(finais.reduce((t, i) => t + Number(i.discountValue || 0), 0)), total: r2(finais.reduce((t, i) => t + Number(i.totalValue || 0), 0)) };
+}
+
 export async function criarPedidoLojinhaZen(pedido) {
   if (!pedido.vendedora_id_zen) throw new Error('Vendedora sem cadastro no Zen.');
   const itens = calcularItens(pedido);
@@ -296,6 +336,10 @@ export async function criarPedidoLojinhaZen(pedido) {
         if (emb.product?.fiscalProfileProduct?.id) corpo.fiscalProfileProduct = { id: emb.product.fiscalProfileProduct.id };
         await zen('POST', '/sale/saleItem', corpo);
       }
+      // Impostos "por fora" (ex.: IPI) que o Zen soma no total: desconto para o total ficar o valor da Lojinha
+      try { resultado.descontoImpostos = await descontarImpostosPorFora(zenPedidoId,
+        Object.fromEntries(itens.map(i => [String(i.codigo), r2(i.valor_liquido + i.frete)]))); }
+      catch (e) { console.error('[Lojinha] desconto dos impostos:', e.message); resultado.avisoDesconto = e.message; }
       const semTag = transacao && !String(venda.tags || '').split(',').includes(transacao.split(',')[0]);
       if (venda.properties?.paymentMethods == null || semTag) {
         venda.properties = { ...(venda.properties || {}), paymentMethods: venda.properties?.paymentMethods ?? '0' };
