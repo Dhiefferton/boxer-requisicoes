@@ -119,7 +119,8 @@ export default function LojinhaBoxer() {
   const [pedidos, setPedidos] = useState(null);
   const [novo, setNovo] = useState(false);
   const [aviso, setAviso] = useState('');
-  const [busca, setBusca] = useState('');
+  // ?busca= vem da busca do topo da tela Início
+  const [busca, setBusca] = useState(() => { try { return new URLSearchParams(window.location.search).get('busca') || ''; } catch { return ''; } });
   const [cfg, setCfg] = useState(null);                 // colunas e campos (Configurar)
   const [verConfig, setVerConfig] = useState(false);     // false | true | chave da coluna
   const [verMov, setVerMov] = useState(false);

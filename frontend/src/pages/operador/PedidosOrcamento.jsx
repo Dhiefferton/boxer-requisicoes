@@ -86,7 +86,8 @@ export default function PedidosOrcamento() {
     } catch (e) { setAvisoPipefy(e.response?.data?.erro || 'Não consegui ler o Pipefy agora.'); }
     finally { setTrazendo(false); setTimeout(() => setAvisoPipefy(''), 8000); }
   }
-  const [busca, setBusca] = useState('');
+  // ?busca= vem da busca do topo da tela Início
+  const [busca, setBusca] = useState(() => { try { return new URLSearchParams(window.location.search).get('busca') || ''; } catch { return ''; } });
   const [novoCard, setNovoCard] = useState(false);
   const [ocultarVazias, setOcultarVazias] = useState(false); // botão "Esconder vazias" retirado: todas as colunas aparecem
   function alternarVazias() {

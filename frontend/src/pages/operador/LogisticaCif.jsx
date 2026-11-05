@@ -55,7 +55,8 @@ export default function LogisticaCif() {
   const [pedidos, setPedidos] = useState(null);
   const [cfg, setCfg] = useState(null);
   const [cfgLoj, setCfgLoj] = useState(null);
-  const [busca, setBusca] = useState('');
+  // ?busca= vem da busca do topo da tela Início
+  const [busca, setBusca] = useState(() => { try { return new URLSearchParams(window.location.search).get('busca') || ''; } catch { return ''; } });
   const [verConfig, setVerConfig] = useState(false);
   const [verMov, setVerMov] = useState(false);
   const [historico, setHistorico] = useState(null);
