@@ -279,7 +279,10 @@ export async function moverCard(req, res, next) {
     // Regras da coluna (Configurar → "Regras para mover")
     const motivo = bloqueioRegra(col.get(atual), status, cfg.campos, valores, c.idCampoConfig);
     if (motivo) return res.status(400).json({ erro: `Não dá para mover para "${col.get(status)?.nome || status}": ${motivo} (regra da coluna "${col.get(atual)?.nome || atual}").` });
-    const faltando = cfg.campos.filter(f => f.coluna === atual && f.tipo !== 'anexo' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
+  // Admin voltando o card para uma coluna anterior: não exige os campos obrigatórios da coluna atual
+    const ordemCol = (k) => cfg.colunas.findIndex(x => x.chave === k);
+    const voltandoAdmin = req.usuario?.perfil === 'admin' && ordemCol(status) >= 0 && ordemCol(status) < ordemCol(atual);
+    const faltando = voltandoAdmin ? [] : cfg.campos.filter(f => f.coluna === atual && f.tipo !== 'anexo' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
       && !String(valores[c.idCampoConfig(f)] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha antes de sair de "${col.get(atual)?.nome || atual}": ${faltando.map(f => f.rotulo).join(', ')}.` });
     const r = await query(`UPDATE bx_quadro_cards SET status = $2, entrou_em = NOW(), atualizado_em = NOW() WHERE id = $1 RETURNING *`, [p.id, status]);

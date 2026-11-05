@@ -445,8 +445,11 @@ export async function moverPedido(req, res, next) {
     }
     const detalhesMov = {};
 
+    // Admin voltando o card para uma coluna anterior: não exige os campos obrigatórios da coluna atual
+    const ordemCol = (k) => (cfg?.colunas || []).findIndex(c => c.chave === k);
+    const voltandoAdmin = req.usuario?.perfil === 'admin' && ordemCol(status) >= 0 && ordemCol(status) < ordemCol(pedido.status);
     // Card criado no B-Requisições: campos obrigatórios da coluna atual (configuração) antes de sair dela
-    if ((!PIPEFY_ATIVO || !pedido.pipefy_card_id) && status !== pedido.status) {
+    if ((!PIPEFY_ATIVO || !pedido.pipefy_card_id) && status !== pedido.status && !voltandoAdmin) {
       const valores = Object.fromEntries((Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).filter(c => c?.id).map(c => [c.id, c.valor]));
       const faltando = (cfg?.campos || []).filter(c => c.coluna === pedido.status && exigidoAgora(c, cfg.campos, valores, idCampoConfig) && c.tipo !== 'anexo'
         && !String(valores[idCampoConfig(c)] ?? '').replace(/[\[\]"]/g, '').trim());

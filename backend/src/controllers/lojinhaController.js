@@ -511,7 +511,10 @@ export async function moverPedidoLojinha(req, res, next) {
     // Regras da coluna (Configurar → "Regras para mover")
     const motivoRegra = bloqueioRegra(col.get(atual), status, cfg.campos, valores, cfgLojinha.idCampoConfig);
     if (motivoRegra) return res.status(400).json({ erro: `Não dá para mover para "${col.get(status)?.nome || status}": ${motivoRegra} (regra da coluna "${col.get(atual)?.nome || atual}").` });
-    const faltando = cfg.campos.filter(c => c.coluna === atual && exigidoAgora(c, cfg.campos, valores, cfgLojinha.idCampoConfig) && c.tipo !== 'anexo'
+  // Admin voltando o card para uma coluna anterior: não exige os campos obrigatórios da coluna atual
+    const ordemCol = (k) => cfg.colunas.findIndex(c => c.chave === k);
+    const voltandoAdmin = req.usuario?.perfil === 'admin' && ordemCol(status) >= 0 && ordemCol(status) < ordemCol(atual);
+    const faltando = voltandoAdmin ? [] : cfg.campos.filter(c => c.coluna === atual && exigidoAgora(c, cfg.campos, valores, cfgLojinha.idCampoConfig) && c.tipo !== 'anexo'
       && !String(valores[cfgLojinha.idCampoConfig(c)] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha antes de sair de "${col.get(atual)?.nome || atual}": ${faltando.map(c => c.rotulo).join(', ')}.` });
     const r = await query(
