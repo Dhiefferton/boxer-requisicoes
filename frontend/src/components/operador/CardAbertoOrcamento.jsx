@@ -40,6 +40,7 @@ export default function CardAbertoOrcamento({
   // Cópia em outra tela (ex.: Notas de Serviços): a fase atual é a da outra tela; as do Orçamento ficam no histórico.
   // { coluna: {titulo, hex}, conteudo, mover, anteriores } (nós React)
   faseExterna = null,
+  movimentosFixos = null, // cópia fixa: histórico guardado no card (sem ler o Orçamento)
 }) {
   const [fases, setFases] = useState(null);
   const [erro, setErro] = useState('');
@@ -52,7 +53,8 @@ export default function CardAbertoOrcamento({
     setFechadas(s => { const n = new Set(s); aberta ? n.add(id) : n.delete(id); return n; });
   };
   // Só as fases por onde o card já passou (histórico do card; sem histórico, as colunas antes da atual)
-  const fasesPassadas = useFasesPassadas(botoes.historico || botoes.movimentacao ? () => pedidosOrcamentoService.movimentos({ pedido: pedido.id }) : null,
+  const fasesPassadas = useFasesPassadas(movimentosFixos ? () => Promise.resolve({ data: { movimentos: movimentosFixos } })
+    : botoes.historico || botoes.movimentacao ? () => pedidosOrcamentoService.movimentos({ pedido: pedido.id }) : null,
     `${pedido.id}-${pedido.status}`, pedido.status, COLUNAS_ORCAMENTO.map(c => c.status), pedido.created_at);
   const [rascunho, setRascunho] = useState({});
   const [salvando, setSalvando] = useState(false);

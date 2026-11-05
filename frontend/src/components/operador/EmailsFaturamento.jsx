@@ -14,7 +14,7 @@ import { Spinner } from '../ui';
 const fmt = (d) => { try { return new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
 const iniciais = (n) => String(n || 'BR').split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toUpperCase();
 
-export default function EmailsFaturamento({ pedidoId }) {
+export default function EmailsFaturamento({ pedidoId, dadosFixos = null }) {
   const [aberto, setAberto] = useState(false);
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
@@ -23,6 +23,7 @@ export default function EmailsFaturamento({ pedidoId }) {
     try { await navigator.clipboard.writeText(`${m.assunto}\n\n${m.texto}`); setCopiado(i); setTimeout(() => setCopiado(-1), 2000); } catch { /* sem área de transferência */ }
   }
   useEffect(() => {
+    if (dadosFixos) { setDados(dadosFixos); return undefined; } // cópia fixa: e-mails guardados no card
     let vivo = true;
     api.get(`/pedidos-orcamento/${pedidoId}/emails-faturamento`, { timeout: 60000 })
       .then(r => { if (vivo) setDados(r.data); })
