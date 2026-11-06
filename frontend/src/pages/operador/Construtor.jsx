@@ -51,6 +51,7 @@ function revisar(nome, d, nomesExistentes) {
     if (c.tipo === 'registro' && !c.lista) avisos.push(`"${c.rotulo}" não está ligado a uma base.`);
     if (c.visivel?.campo && !d.campos.some(o => o.uid === c.visivel.campo)) avisos.push(`"${c.rotulo}" depende de um campo que saiu.`);
   }
+  if (!d.campos.some(f => f.coluna === 'inicio')) avisos.push('O "Novo card" não tem campos: o card nasce só com o título.');
   d.colunas.forEach(c => { if (!d.campos.some(f => f.coluna === c.chave_temp)) avisos.push(`A coluna "${c.nome}" não tem campos.`); });
   if (d.colunas.length && !d.colunas.some(c => c.so_admin)) avisos.push('Nenhuma coluna é só do admin (todos movem tudo).');
   return { erros, avisos };
@@ -182,7 +183,7 @@ function Comecar({ onVoltar, onAssistente, onCriado }) {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {MODELOS.map(m => {
           const Icon = ICONES[m.icone] || LayoutTemplate;
-          const d = rascunhoDeEtapas(m.etapas);
+          const d = rascunhoDeEtapas(m.etapas, m.inicio);
           return (
             <button key={m.chave} disabled={!!criando} onClick={() => criar(m.chave, m.nome, d)} className={card}>
               <Icon size={18} className="text-[var(--c-texto)]" />
@@ -231,15 +232,17 @@ function Assistente({ onVoltar, onCriado }) {
   const [tipo, setTipo] = useState(null);
   const [nome, setNome] = useState('');
   const [etapas, setEtapas] = useState([]);
+  const [inicio, setInicio] = useState({ blocos: [], obrigatorios: [] }); // formulário do botão "Novo card"
   const [novaEtapa, setNovaEtapa] = useState('');
   const [criando, setCriando] = useState(false);
   const [erro, setErro] = useState('');
   function escolher(m) {
     setTipo(m.chave); setNome(m.nome);
+    setInicio({ blocos: [...(m.inicio?.blocos || [])], obrigatorios: [...(m.inicio?.obrigatorios || [])] });
     setEtapas(m.etapas.map(e => ({ nome: e.nome, blocos: [...(e.blocos || [])], obrigatorios: [...(e.obrigatorios || [])], so_admin: !!e.so_admin })));
     setPasso(1);
   }
-  function outro() { setTipo('outro'); setNome(''); setEtapas([{ nome: 'Entrada', blocos: [], obrigatorios: [] }, { nome: 'Em andamento', blocos: [], obrigatorios: [] }, { nome: 'Concluído', blocos: [], obrigatorios: [], so_admin: true }]); setPasso(1); }
+  function outro() { setTipo('outro'); setNome(''); setInicio({ blocos: ['cliente_nome'], obrigatorios: ['cliente_nome'] }); setEtapas([{ nome: 'Entrada', blocos: [], obrigatorios: [] }, { nome: 'Em andamento', blocos: [], obrigatorios: [] }, { nome: 'Concluído', blocos: [], obrigatorios: [], so_admin: true }]); setPasso(1); }
   const mudarEtapa = (i, fn) => setEtapas(l => l.map((e, n) => (n === i ? fn({ ...e }) : e)));
   const moverEtapa = (i, d) => setEtapas(l => { const j = i + d; if (j < 0 || j >= l.length) return l; const n = [...l]; [n[i], n[j]] = [n[j], n[i]]; return n; });
   function alternarBloco(i, b) {
@@ -249,7 +252,7 @@ function Assistente({ onVoltar, onCriado }) {
   async function gerar() {
     setCriando(true); setErro('');
     try {
-      const dados = rascunhoDeEtapas(etapas.filter(e => e.nome.trim()));
+      const dados = rascunhoDeEtapas(etapas.filter(e => e.nome.trim()), inicio);
       const { data } = await construtorService.criar({ nome: nome.trim() || 'Nova tela', modelo: tipo === 'outro' ? 'assistente' : tipo, dados });
       onCriado(data.rascunho.id);
     } catch (e) { setErro(erroDe(e, 'Não consegui gerar o rascunho.')); setCriando(false); }
@@ -312,6 +315,21 @@ function Assistente({ onVoltar, onCriado }) {
         {passo === 3 && (
           <div className="space-y-3">
             <p className="text-[11px] text-[var(--c-suave)]">Clique para incluir a informação na etapa. Clique no <b>*</b> para deixar obrigatória antes de sair dela.</p>
+            <div className="rounded-xl border-2 border-[var(--c-destaque)]/50 bg-[var(--c-destaque)]/5 p-3">
+              <p className="text-xs font-semibold text-[var(--c-texto)] mb-2">Novo card <span className="font-normal text-[var(--c-suave)]">· formulário do botão "Novo card" (a primeira parte de tudo) · {inicio.blocos.length} informações</span></p>
+              <div className="flex flex-wrap gap-1.5">
+                {BLOCOS.map(b => {
+                  const on = inicio.blocos.includes(b.chave);
+                  const ob = inicio.obrigatorios.includes(b.chave);
+                  return (
+                    <span key={b.chave} className={`inline-flex items-center rounded-full border text-[11px] ${on ? 'border-[var(--c-destaque)] bg-[var(--c-destaque)]/15 text-[var(--c-texto)]' : 'border-[var(--c-borda)] text-[var(--c-suave)]'}`}>
+                      <button onClick={() => setInicio(x => (on ? { blocos: x.blocos.filter(y => y !== b.chave), obrigatorios: x.obrigatorios.filter(y => y !== b.chave) } : { ...x, blocos: [...x.blocos, b.chave] }))} className="px-2 py-0.5">{b.nome}</button>
+                      {on && <button onClick={() => setInicio(x => ({ ...x, obrigatorios: ob ? x.obrigatorios.filter(y => y !== b.chave) : [...x.obrigatorios, b.chave] }))} title="Obrigatório" className={`pr-2 font-bold ${ob ? 'text-red-400' : 'text-[var(--c-suave)]'}`}>*</button>}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
             {etapas.filter(e => e.nome.trim()).map((e, i) => (
               <div key={i} className="rounded-xl border border-[var(--c-borda)] p-3">
                 <p className="text-xs font-semibold text-[var(--c-texto)] mb-2">{e.nome} <span className="font-normal text-[var(--c-suave)]">· {e.blocos.length} informações</span></p>
@@ -478,6 +496,34 @@ function Montar({ d, setD, sel, setSel }) {
       {/* Colunas */}
       <div className="rounded-2xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-3 overflow-x-auto">
         <div className="flex gap-3 min-h-[360px]">
+          {/* Botão "Novo card": formulário onde se registra a primeira parte de tudo (campos da coluna 'inicio') */}
+          {(() => {
+            const campos = d.campos.filter(c => c.coluna === 'inicio');
+            const ativa = colSel === 'inicio';
+            return (
+              <div onDragOver={e => e.preventDefault()} onDrop={() => soltar('inicio')}
+                className={`w-56 shrink-0 rounded-xl border-2 p-2 space-y-1.5 ${ativa ? 'border-[var(--c-destaque)]' : 'border-dashed border-[var(--c-destaque)]/50'} bg-[var(--c-destaque)]/5`}>
+                <div onClick={() => setSel({ tipo: 'coluna', id: 'inicio' })} className="cursor-pointer">
+                  <p className="flex items-center gap-1.5 text-xs font-bold text-[var(--c-texto)]"><Plus size={13} className="text-[var(--c-destaque-claro)]" /> Novo card</p>
+                  <p className="text-[10px] text-[var(--c-suave)]">Formulário do botão "Novo card" · {campos.length} campo{campos.length !== 1 ? 's' : ''}</p>
+                </div>
+                {campos.map(c => (
+                  <div key={c.uid} draggable onDragStart={() => setArrasto({ tipo: 'campo', uid: c.uid })} onDragEnd={() => setArrasto(null)}
+                    onDragOver={e => e.preventDefault()} onDrop={e => { e.stopPropagation(); soltar('inicio', c.uid); }}
+                    onClick={() => setSel({ tipo: 'campo', id: c.uid })}
+                    className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] cursor-pointer border ${sel?.id === c.uid ? 'border-[var(--c-destaque)] bg-[var(--c-destaque)]/10' : 'border-[var(--c-borda)] bg-[var(--c-superficie)]'} ${arrasto?.uid === c.uid ? 'opacity-40' : ''}`}>
+                    <GripVertical size={11} className="text-[var(--c-suave)] shrink-0" />
+                    <span className="w-6 text-[9px] font-bold text-[var(--c-suave)] shrink-0">{TIPO[c.tipo]?.sigla || '?'}</span>
+                    <span className="flex-1 min-w-0 truncate text-[var(--c-texto)]">{c.obrigatorio && <span className="text-red-400">* </span>}{c.rotulo || 'Sem nome'}</span>
+                    {c.visivel?.campo && <span className="text-[9px] text-sky-400" title="Aparece só se…">se</span>}
+                  </div>
+                ))}
+                <div className={`rounded-lg border border-dashed px-2 py-2 text-[10px] text-center ${arrasto ? 'border-[var(--c-destaque)] text-[var(--c-destaque-claro)]' : 'border-[var(--c-borda)] text-[var(--c-suave)]'}`}>
+                  {arrasto ? 'Solte aqui' : 'Arraste uma peça para cá'}
+                </div>
+              </div>
+            );
+          })()}
           {d.colunas.map((col, i) => {
             const campos = d.campos.filter(c => c.coluna === col.chave_temp);
             const ativa = colSel === col.chave_temp;
@@ -514,11 +560,17 @@ function Montar({ d, setD, sel, setSel }) {
             <Plus size={16} /> Nova coluna
           </button>
         </div>
-        <p className="text-[10px] text-[var(--c-suave)] mt-2">Fluxo: {d.colunas.map(c => c.nome || '?').join(' → ') || '—'}</p>
+        <p className="text-[10px] text-[var(--c-suave)] mt-2">Fluxo: Novo card → {d.colunas.map(c => c.nome || '?').join(' → ') || '—'}</p>
       </div>
       {/* Propriedades */}
       <div className="rounded-2xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-3 space-y-2.5 lg:sticky lg:top-2">
-        {campoSel ? <PropsCampo c={campoSel} todos={d.campos} colunas={d.colunas} mudar={(fn) => mudarCampo(campoSel.uid, fn)}
+        {sel?.tipo === 'coluna' && sel.id === 'inicio' ? (
+          <>
+            <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)]">Novo card</p>
+            <p className="text-xs text-[var(--c-texto)]">É o formulário que abre no botão <b>"Novo card"</b>: onde se registra a primeira parte de tudo. Depois de criado, o card vai para a primeira coluna (<b>{d.colunas[0]?.nome || '—'}</b>).</p>
+            <p className="text-[11px] text-[var(--c-suave)]">Arraste peças para cá ou clique numa peça com o Novo card selecionado.</p>
+          </>
+        ) : campoSel ? <PropsCampo c={campoSel} todos={d.campos} colunas={d.colunas} mudar={(fn) => mudarCampo(campoSel.uid, fn)}
           onDuplicar={() => duplicarCampo(campoSel.uid)} onExcluir={() => excluirCampo(campoSel.uid)} />
           : colunaSel ? <PropsColuna c={colunaSel} primeira={d.colunas[0]?.chave_temp === colunaSel.chave_temp} mudar={(fn) => mudarColuna(colunaSel.chave_temp, fn)}
             onExcluir={() => excluirColuna(colunaSel.chave_temp)} nCampos={d.campos.filter(f => f.coluna === colunaSel.chave_temp).length} podeExcluir={d.colunas.length > 1} />
@@ -580,6 +632,7 @@ function PropsCampo({ c, todos, colunas, mudar, onDuplicar, onExcluir }) {
       </div>
       <div><Rot>Coluna</Rot>
         <select value={c.coluna} onChange={e => mudar(x => ({ ...x, coluna: e.target.value }))} className={inp}>
+          <option value="inicio">Novo card (formulário)</option>
           {colunas.map(k => <option key={k.chave_temp} value={k.chave_temp}>{k.nome}</option>)}
         </select>
       </div>
@@ -669,10 +722,18 @@ function Previa({ id, nome, d, nomesExistentes, onCriada, onAbrirTela }) {
   const { erros, avisos } = useMemo(() => revisar(nome, d, nomesExistentes), [nome, d, nomesExistentes]);
   const camposDe = (k, valores) => d.campos.filter(c => c.coluna === k && visivelAgora(c, valores));
   const card = cards.find(c => c.id === aberto);
+  const [novo, setNovo] = useState(null); // formulário do "Novo card" (valores)
+  const camposNovo = (valores) => d.campos.filter(c => c.coluna === 'inicio' && visivelAgora(c, valores));
   function criarTeste() {
-    const n = { id: Date.now(), coluna: d.colunas[0]?.chave_temp, valores: {} };
-    setCards(l => [...l, n]); setAberto(n.id); setAviso('');
+    const faltam = camposNovo(novo).filter(c => c.obrigatorio && !listaValores(novo[c.uid]).filter(Boolean).length);
+    if (faltam.length) { setAviso(`Preencha: ${faltam.map(c => c.rotulo).join(', ')}.`); return; }
+    const n = { id: Date.now(), coluna: d.colunas[0]?.chave_temp, valores: { ...novo } };
+    setCards(l => [...l, n]); setNovo(null); setAberto(n.id); setAviso('');
   }
+  const tituloDe = (c) => {
+    const f = d.campos.find(x => x.coluna === 'inicio' && ['texto', 'documento'].includes(x.tipo) && listaValores(c.valores[x.uid]).filter(Boolean).length);
+    return f ? listaValores(c.valores[f.uid]).join(', ') : 'Card de teste';
+  };
   function mover(dir) {
     const i = d.colunas.findIndex(c => c.chave_temp === card.coluna);
     const j = i + dir;
@@ -708,7 +769,7 @@ function Previa({ id, nome, d, nomesExistentes, onCriada, onAbrirTela }) {
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm font-bold text-[var(--c-texto)]">{nome || 'Sem nome'}</p>
           <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-amber-500/15 text-amber-400">Modo teste · nada é gravado</span>
-          <button onClick={criarTeste} className={`${btn} ml-auto`}><Play size={12} /> Criar card de teste</button>
+          <button onClick={() => { setNovo({}); setAberto(null); setAviso(''); }} className={`${btnPrim} ml-auto`}><Plus size={13} /> Novo card</button>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-1">
           {d.colunas.map(col => {
@@ -721,7 +782,7 @@ function Previa({ id, nome, d, nomesExistentes, onCriada, onAbrirTela }) {
                 </div>
                 {dela.length ? dela.map(c => (
                   <button key={c.id} onClick={() => { setAberto(c.id); setAviso(''); }} className={`w-full text-left rounded-xl border p-2 text-[11px] ${aberto === c.id ? 'border-[var(--c-destaque)]' : 'border-[var(--c-borda)]'} bg-[var(--c-fundo)]`}>
-                    <p className="font-semibold text-[var(--c-texto)]">Card de teste</p>
+                    <p className="font-semibold text-[var(--c-texto)] truncate">{tituloDe(c)}</p>
                     <p className="text-[var(--c-suave)]">{Object.values(c.valores).filter(v => listaValores(v).filter(Boolean).length).length} campos preenchidos</p>
                   </button>
                 )) : <div className="rounded-xl border border-dashed border-[var(--c-borda)] py-5 text-center text-[10px] text-[var(--c-suave)]">Sem cards</div>}
@@ -729,10 +790,26 @@ function Previa({ id, nome, d, nomesExistentes, onCriada, onAbrirTela }) {
             );
           })}
         </div>
+        {novo && (
+          <div className="rounded-xl border-2 border-[var(--c-destaque)]/60 bg-[var(--c-fundo)] p-4 space-y-2.5 max-w-lg mx-auto w-full">
+            <div className="flex items-center gap-2">
+              <p className="flex-1 text-sm font-bold text-[var(--c-texto)]">Novo card · {nome || 'tela'}</p>
+              <button onClick={() => { setNovo(null); setAviso(''); }} className="p-1 text-[var(--c-suave)]" aria-label="Fechar"><X size={14} /></button>
+            </div>
+            {camposNovo(novo).length ? camposNovo(novo).map(c => (
+              <div key={c.uid}>
+                <p className="text-[11px] text-[var(--c-suave)] mb-1">{c.obrigatorio && <span className="text-red-400">* </span>}{c.rotulo}{c.descricao ? <span className="text-[10px]"> · {c.descricao}</span> : null}</p>
+                <CampoTeste c={c} valor={novo[c.uid]} onChange={v => setNovo(x => ({ ...x, [c.uid]: v }))} />
+              </div>
+            )) : <p className="text-[11px] text-[var(--c-suave)]">O Novo card não tem campos (monte no passo 2, na caixa "Novo card").</p>}
+            {aviso && <p className="text-[11px] text-amber-400">{aviso}</p>}
+            <button onClick={criarTeste} className={`${btnPrim} w-full justify-center`}><Plus size={13} /> Criar novo card</button>
+          </div>
+        )}
         {card && (
           <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-fundo)] p-3 space-y-2.5">
             <div className="flex items-center gap-2">
-              <p className="flex-1 text-xs font-bold text-[var(--c-texto)]">Card de teste · {d.colunas.find(c => c.chave_temp === card.coluna)?.nome}</p>
+              <p className="flex-1 text-xs font-bold text-[var(--c-texto)]">{tituloDe(card)} · {d.colunas.find(c => c.chave_temp === card.coluna)?.nome}</p>
               <button onClick={() => mover(-1)} className={btn}><ArrowLeft size={12} /></button>
               <button onClick={() => mover(1)} className={btnPrim}>Mover <ArrowRight size={12} /></button>
               <button onClick={() => setAberto(null)} className="p-1 text-[var(--c-suave)]" aria-label="Fechar"><X size={14} /></button>
