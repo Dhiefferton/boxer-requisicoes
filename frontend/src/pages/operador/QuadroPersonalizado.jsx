@@ -24,6 +24,7 @@ import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnter
 import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro, regraBloqueiaMover } from '../../components/operador/CamposCardOrcamento';
 import { Pilula, Coluna } from './LojinhaBoxer';
 
+import { destinosDoPerfil } from '../../utils/perfilAtual';
 const fmtData = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
 const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
@@ -31,7 +32,7 @@ function montarColunas(cfg) {
   const lista = cfg?.colunas?.length ? cfg.colunas : [{ chave: 'entrada', nome: 'Entrada', cor: '#3b82f6' }];
   return lista.map(c => ({
     status: c.chave, inclui: [c.chave], titulo: c.nome, hex: c.cor, admin: !!c.so_admin, arquivada: !!c.arquivada,
-    destinos: Array.isArray(c.destinos) ? c.destinos : null, regras: Array.isArray(c.regras) ? c.regras : null,
+    destinos: destinosDoPerfil(c), regras: Array.isArray(c.regras) ? c.regras : null,
   }));
 }
 function combina(card, busca) {

@@ -21,6 +21,7 @@ import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, 
 import { combinaBusca, montarColunas as colunasLojinha, Pilula, Coluna, InfoLiberacao, DadosPedido } from './LojinhaBoxer';
 import { NomeTela } from '../../utils/nomesTelas';
 
+import { destinosDoPerfil } from '../../utils/perfilAtual';
 const fmtData = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
 
 const SERVICO_FOTOS = {
@@ -38,7 +39,7 @@ function colunasCif(cfg) {
   const lista = cfg?.colunas?.length ? cfg.colunas : [{ chave: 'aguardando_envio', nome: 'Aguardando envio', cor: '#3b82f6' }];
   return lista.map(c => ({
     status: c.chave, inclui: [c.chave], titulo: c.nome, hex: c.cor, admin: !!c.so_admin, arquivada: !!c.arquivada,
-    destinos: Array.isArray(c.destinos) ? c.destinos : null, regras: Array.isArray(c.regras) ? c.regras : null,
+    destinos: destinosDoPerfil(c), regras: Array.isArray(c.regras) ? c.regras : null,
   }));
 }
 // Campos do CIF: ids com prefixo "cif_" (os valores ficam separados dos da Lojinha)

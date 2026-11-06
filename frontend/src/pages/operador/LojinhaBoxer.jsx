@@ -23,6 +23,7 @@ import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, 
 import { NomeTela } from '../../utils/nomesTelas';
 import ArquivosNota from '../../components/operador/ArquivosNota';
 
+import { destinosDoPerfil } from '../../utils/perfilAtual';
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 
@@ -107,7 +108,7 @@ export function montarColunas(cfg) {
     ...(padrao.get(c.chave) || {}),
     status: c.chave, inclui: c.chave === 'entrada' ? ['entrada', 'liberacao'] : [c.chave],
     titulo: c.nome, hex: c.cor, admin: !!c.so_admin, arquivada: !!c.arquivada, zen: c.zen || null,
-    destinos: Array.isArray(c.destinos) ? c.destinos : null, regras: Array.isArray(c.regras) ? c.regras : null,
+    destinos: destinosDoPerfil(c), regras: Array.isArray(c.regras) ? c.regras : null,
   }));
 }
 
