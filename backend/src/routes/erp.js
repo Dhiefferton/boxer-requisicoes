@@ -109,6 +109,21 @@ router.get('/debug-garantia', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// DIAGNÓSTICO (só leitura) — chamadas que o B-Operações fez ao Pipefy (registro pipefy_chamadas)
+// Ex: GET /api/erp/debug-pipefy-chamadas?secret=...&dias=7
+router.get('/debug-pipefy-chamadas', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const dias = Math.min(60, Math.max(1, parseInt(req.query.dias) || 7));
+    const porTipo = (await query(`SELECT dia, tipo, COUNT(*)::int AS n, COUNT(*) FILTER (WHERE ok)::int AS ok
+        FROM pipefy_chamadas WHERE criado_em >= NOW() - ($1 || ' days')::interval GROUP BY dia, tipo ORDER BY dia DESC, tipo`, [dias])).rows;
+    const mutacoes = (await query(`SELECT criado_em, origem, operacao, alvo, rota, usuario, ok, erro, nome
+        FROM pipefy_chamadas WHERE tipo <> 'consulta' AND criado_em >= NOW() - ($1 || ' days')::interval ORDER BY id DESC LIMIT 50`, [dias])).rows;
+    const ultima = (await query(`SELECT MAX(criado_em) AS em FROM pipefy_chamadas WHERE tipo <> 'consulta'`)).rows[0];
+    res.json({ dias, por_tipo: porTipo, mutacoes, ultima_mutacao_registrada: ultima?.em || null });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // DIAGNÓSTICO — status dos pedidos (Lojinha e Orçamentos) x fase atual dos
 // cards no Pipefy. Só leitura. Ex: GET /api/erp/debug-fases?secret=...
 router.get('/debug-fases', async (req, res) => {
