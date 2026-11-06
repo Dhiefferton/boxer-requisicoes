@@ -138,3 +138,89 @@ export async function editarCamposCif(req, res, next) {
     res.json({ pedido: r.rows[0] });
   } catch (err) { next(err); }
 }
+
+// ── Trazer do Pipefy (igual ao Orçamento) ──────────────────────
+// Lê só a fase "Entrada" do pipe "Garantia - Boxer Soldas" (consulta; o pipe não é alterado) e cria aqui,
+// na primeira coluna da Garantia (Entrada), os cards que ainda não existem. Os que já existem não são alterados.
+// O card do Pipefy vira uma linha de lojinha_boxer_pedidos com status 'garantia' (não aparece na Lojinha),
+// com os campos do Pipefy guardados em pipefy_garantia_campos (mostrados no card, só consulta).
+const GARANTIA_FASE_ENTRADA = process.env.PIPEFY_GARANTIA_PHASE_ENTRADA_ID || '309018705';
+let estruturaPipefyGarantia = null;
+function garantirPipefyGarantia() {
+  if (!estruturaPipefyGarantia) {
+    estruturaPipefyGarantia = (async () => {
+      await garantirEstrutura();
+      await query(`ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS pipefy_garantia_id VARCHAR(30)`);
+      await query(`ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS pipefy_garantia_campos JSONB`);
+      await query(`ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS pipefy_garantia_url TEXT`);
+      await query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_loj_pipefy_garantia ON lojinha_boxer_pedidos (pipefy_garantia_id) WHERE pipefy_garantia_id IS NOT NULL`);
+    })().catch(e => { estruturaPipefyGarantia = null; throw e; });
+  }
+  return estruturaPipefyGarantia;
+}
+// Valor do Pipefy em texto (conexões/listas vêm como '["A","B"]')
+function textoPipefy(v) {
+  if (v == null) return '';
+  const s = String(v).trim();
+  if (s.startsWith('[')) { try { const a = JSON.parse(s); if (Array.isArray(a)) return a.map(String).join(', '); } catch { /* texto */ } }
+  return s;
+}
+let importandoGarantia = null;
+export async function importarEntradaGarantia(req, res, next) {
+  if (importandoGarantia) return res.status(409).json({ erro: 'Já tem uma importação em andamento. Aguarde alguns segundos.' });
+  importandoGarantia = (async () => {
+    await garantirPipefyGarantia();
+    const { pipefyQueryPlanilhas } = await import('../integrations/pipefyService.js');
+    const ja = new Set((await query(`SELECT pipefy_garantia_id FROM lojinha_boxer_pedidos WHERE pipefy_garantia_id IS NOT NULL`)).rows.map(r => String(r.pipefy_garantia_id)));
+    const gql = `query CardsEntrada($phaseId: ID!, $after: String) {
+      phase(id: $phaseId) { name cards(first: 50, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        edges { node { id title url createdAt fields { name value field { id } } } } } } }`;
+    let after = null, faseNome = 'Entrada', chamadas = 0;
+    const cards = [];
+    for (let pagina = 0; pagina < 20; pagina++) {
+      const data = await pipefyQueryPlanilhas(gql, { phaseId: String(GARANTIA_FASE_ENTRADA), after });
+      chamadas++;
+      const conn = data?.phase?.cards;
+      if (data?.phase?.name) faseNome = data.phase.name;
+      if (!conn) break;
+      for (const { node } of conn.edges || []) {
+        if (ja.has(String(node.id))) continue;
+        cards.push({ id: String(node.id), titulo: node.title, url: node.url, criadoEm: node.createdAt,
+          campos: (node.fields || []).map(f => ({ id: f.field?.id || null, nome: f.name, valor: f.value })) });
+      }
+      if (!conn.pageInfo?.hasNextPage) break;
+      after = conn.pageInfo.endCursor;
+    }
+    const cfg = await cfgCif.ler();
+    const primeira = cfg.colunas.find(c => !c.arquivada)?.chave || PRIMEIRA;
+    let novos = 0;
+    for (const card of cards) {
+      const v = (...ids) => { for (const id of ids) { const t = textoPipefy(card.campos.find(f => f.id === id)?.valor); if (t) return t; } return ''; };
+      const cliente = (v('cliente', 'cliente2') || card.titulo || `Card ${card.id}`).slice(0, 255);
+      const r = await query(
+        `INSERT INTO lojinha_boxer_pedidos
+           (documento, cliente_nome, data, numero_pedido, vendedora, tipo_envio, itens, status, origem, criado_por, criado_por_nome,
+            cif_status, cif_entrou_em, pipefy_garantia_id, pipefy_garantia_campos, pipefy_garantia_url)
+         VALUES ('', $1, COALESCE($2::timestamptz, NOW())::date, $3, $4, $5, '[]'::jsonb, 'garantia', 'pipefy_garantia', $6, $7,
+                 $8, NOW(), $9, $10::jsonb, $11)
+         ON CONFLICT (pipefy_garantia_id) WHERE pipefy_garantia_id IS NOT NULL DO NOTHING
+         RETURNING *`,
+        [cliente, card.criadoEm || null, `GAR-${card.id}`.slice(0, 60), (v('respons_vel_pelo_caso') || '—').slice(0, 150),
+         (v('frete_por_conta') || '—').slice(0, 30), req.usuario?.id || null, req.usuario?.nome || null,
+         primeira, card.id, JSON.stringify({ titulo: card.titulo, fase: faseNome, campos: card.campos }), card.url || null]);
+      if (r.rows[0]) {
+        novos++;
+        await registrarMovLoj(r.rows[0], 'importado', {
+          para: primeira, usuario: req.usuario, origem: 'usuario',
+          descricao: `Card trazido do Pipefy (Garantia, fase "${faseNome}") pelo botão "Trazer do Pipefy"`,
+          detalhes: { pipefy_card_id: card.id },
+        });
+      }
+    }
+    return { sucesso: true, novos, novos_no_pipefy: cards.length, fase: faseNome, chamadas_pipefy: chamadas };
+  })();
+  try { res.json(await importandoGarantia); }
+  catch (err) { next(err); }
+  finally { importandoGarantia = null; }
+}

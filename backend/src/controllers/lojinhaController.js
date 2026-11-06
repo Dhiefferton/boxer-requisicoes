@@ -545,7 +545,7 @@ export async function listarPedidosLojinha(req, res, next) {
     const r = await query(
       `SELECT t.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome, 'blob_url', f.blob_url, 'tamanho', f.tamanho) ORDER BY f.id), '[]'::json)
                       FROM loj_fotos f WHERE f.pedido_id = t.id) AS fotos_locais
-         FROM ((SELECT * FROM lojinha_boxer_pedidos WHERE status <> 'finalizado')
+         FROM ((SELECT * FROM lojinha_boxer_pedidos WHERE status <> 'finalizado' AND status <> 'garantia') -- 'garantia' = card trazido do Pipefy direto para a Garantia
                UNION ALL
                (SELECT * FROM lojinha_boxer_pedidos WHERE status = 'finalizado' ORDER BY finalizado_em DESC NULLS LAST, id DESC LIMIT 60)) t
         ORDER BY t.data DESC, t.id DESC`);

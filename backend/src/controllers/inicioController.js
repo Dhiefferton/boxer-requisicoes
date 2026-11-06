@@ -31,7 +31,7 @@ export async function resumoInicio(req, res, next) {
     const quadros = (await seguro(query(`SELECT id FROM bx_quadros WHERE ativo`)))?.rows || [];
     await Promise.all([
       contar('orcamentos', `SELECT COUNT(*) AS n FROM pedidos_orcamento WHERE status <> 'cancelado' AND NOT (status = ANY($1::text[]))`, [arq(cOrc)]),
-      contar('lojinha', `SELECT COUNT(*) AS n FROM lojinha_boxer_pedidos WHERE NOT (status = ANY($1::text[]))`, [arq(cLoj)]),
+      contar('lojinha', `SELECT COUNT(*) AS n FROM lojinha_boxer_pedidos WHERE status <> 'garantia' AND NOT (status = ANY($1::text[]))`, [arq(cLoj)]),
       contar('logistica_cif', `SELECT COUNT(*) AS n FROM lojinha_boxer_pedidos WHERE cif_status IS NOT NULL AND NOT (cif_status = ANY($1::text[]))`, [arq(cCif)]),
       ...quadros.map(q => contar(`quadro_${q.id}`,
         `SELECT COUNT(*) AS n FROM bx_quadro_cards c WHERE c.quadro_id = $1
