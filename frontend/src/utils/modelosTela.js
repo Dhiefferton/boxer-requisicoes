@@ -34,17 +34,18 @@ export const BLOCOS = [
 export const BLOCO = Object.fromEntries(BLOCOS.map(b => [b.chave, b]));
 
 // Monta um rascunho a partir de etapas: [{ nome, cor, so_admin, blocos: [chave], obrigatorios: [chave] }]
-export function rascunhoDeEtapas(etapas) {
+// inicio = formulário do botão "Novo card" ({ blocos, obrigatorios }): é a primeira parte de tudo
+const campoDoBloco = (coluna, c, obrig) => ({ uid: novoUid(), coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: '', obrigatorio: obrig,
+  opcoes: c.opcoes || (c.tipo === 'checkbox' ? ['Sim'] : []), lista: c.lista || null, cores: null, visivel: null, condicao: null });
+export function rascunhoDeEtapas(etapas, inicio = null) {
   const colunas = [];
   const campos = [];
+  for (const b of inicio?.blocos || []) for (const c of BLOCO[b]?.campos || []) campos.push(campoDoBloco('inicio', c, (inicio.obrigatorios || []).includes(b)));
   etapas.forEach((e, i) => {
     const chave = novaChave();
     colunas.push({ chave_temp: chave, nome: e.nome, cor: e.cor || CORES_COLUNA[i % CORES_COLUNA.length], so_admin: !!e.so_admin });
     for (const b of e.blocos || []) {
-      for (const c of BLOCO[b]?.campos || []) {
-        campos.push({ uid: novoUid(), coluna: chave, tipo: c.tipo, rotulo: c.rotulo, descricao: '', obrigatorio: (e.obrigatorios || []).includes(b),
-          opcoes: c.opcoes || (c.tipo === 'checkbox' ? ['Sim'] : []), lista: c.lista || null, cores: null, visivel: null, condicao: null });
-      }
+      for (const c of BLOCO[b]?.campos || []) campos.push(campoDoBloco(chave, c, (e.obrigatorios || []).includes(b)));
     }
   });
   return { colunas, campos };
@@ -53,9 +54,10 @@ export function rascunhoDeEtapas(etapas) {
 // Tipos de processo (o Assistente e os modelos prontos usam os mesmos)
 export const MODELOS = [
   {
-    chave: 'assistencia', nome: 'Assistência técnica', icone: 'Wrench', resumo: 'Entrada → Diagnóstico → Orçamento → Reparo → Concluído',
+    chave: 'assistencia', nome: 'Assistência técnica', icone: 'Wrench', resumo: 'Novo card → Entrada → Diagnóstico → Orçamento → Reparo → Concluído',
+    inicio: { blocos: ['cliente_doc', 'cliente_nome', 'telefone', 'defeito'], obrigatorios: ['cliente_nome', 'telefone'] },
     etapas: [
-      { nome: 'Entrada', blocos: ['cliente_doc', 'cliente_nome', 'telefone', 'ns', 'modelo', 'serie', 'fotos', 'defeito'], obrigatorios: ['cliente_nome', 'ns', 'modelo'] },
+      { nome: 'Entrada', blocos: ['ns', 'modelo', 'serie', 'fotos'], obrigatorios: ['ns', 'modelo'] },
       { nome: 'Diagnóstico', blocos: ['tecnico', 'diagnostico'], obrigatorios: ['tecnico', 'diagnostico'] },
       { nome: 'Orçamento', blocos: ['pecas', 'valor', 'aprovacao'], obrigatorios: ['valor', 'aprovacao'] },
       { nome: 'Em reparo', blocos: ['fotos', 'obs'] },
@@ -63,18 +65,20 @@ export const MODELOS = [
     ],
   },
   {
-    chave: 'garantia', nome: 'Garantia / troca', icone: 'ShieldCheck', resumo: 'Entrada → Análise → Decisão → Devolvido',
+    chave: 'garantia', nome: 'Garantia / troca', icone: 'ShieldCheck', resumo: 'Novo card → Entrada → Análise → Decisão → Devolvido',
+    inicio: { blocos: ['cliente_doc', 'cliente_nome', 'telefone', 'defeito'], obrigatorios: ['cliente_nome'] },
     etapas: [
-      { nome: 'Entrada', blocos: ['cliente_doc', 'cliente_nome', 'ns', 'modelo', 'fotos', 'defeito'], obrigatorios: ['cliente_nome', 'ns'] },
+      { nome: 'Entrada', blocos: ['ns', 'modelo', 'fotos'], obrigatorios: ['ns'] },
       { nome: 'Análise', blocos: ['tecnico', 'diagnostico'], obrigatorios: ['diagnostico'] },
       { nome: 'Decisão', blocos: ['aprovacao', 'obs'], obrigatorios: ['aprovacao'] },
       { nome: 'Devolvido ao cliente', blocos: ['nf', 'envio', 'rastreio'], so_admin: true },
     ],
   },
   {
-    chave: 'pedido', nome: 'Pedido de venda', icone: 'ShoppingCart', resumo: 'Entrada → Separação → Faturado → Enviado',
+    chave: 'pedido', nome: 'Pedido de venda', icone: 'ShoppingCart', resumo: 'Novo card → Entrada → Separação → Faturado → Enviado',
+    inicio: { blocos: ['cliente_doc', 'cliente_nome', 'telefone'], obrigatorios: ['cliente_nome'] },
     etapas: [
-      { nome: 'Entrada', blocos: ['cliente_doc', 'cliente_nome', 'telefone', 'valor', 'obs'], obrigatorios: ['cliente_nome'] },
+      { nome: 'Entrada', blocos: ['valor', 'obs'] },
       { nome: 'Separação', blocos: ['tecnico', 'fotos'] },
       { nome: 'Faturado', blocos: ['nf'], obrigatorios: ['nf'] },
       { nome: 'Enviado', blocos: ['envio', 'rastreio'], so_admin: true },
@@ -89,17 +93,19 @@ export const MODELOS = [
     ],
   },
   {
-    chave: 'notas', nome: 'Notas e faturamento', icone: 'ReceiptText', resumo: 'Solicitado → Emitida → Enviada',
+    chave: 'notas', nome: 'Notas e faturamento', icone: 'ReceiptText', resumo: 'Novo card → Solicitado → Emitida → Enviada',
+    inicio: { blocos: ['cliente_doc', 'cliente_nome', 'valor'], obrigatorios: ['cliente_nome', 'valor'] },
     etapas: [
-      { nome: 'Solicitado', blocos: ['cliente_doc', 'cliente_nome', 'valor', 'obs'], obrigatorios: ['cliente_nome', 'valor'] },
+      { nome: 'Solicitado', blocos: ['obs'] },
       { nome: 'Emitida', blocos: ['nf'], obrigatorios: ['nf'] },
       { nome: 'Enviada ao cliente', blocos: ['obs'], so_admin: true },
     ],
   },
   {
-    chave: 'compras', nome: 'Compras', icone: 'Package', resumo: 'Solicitação → Cotação → Aprovação → Recebido',
+    chave: 'compras', nome: 'Compras', icone: 'Package', resumo: 'Novo card → Solicitação → Cotação → Aprovação → Recebido',
+    inicio: { blocos: ['pecas', 'obs'], obrigatorios: ['pecas'] },
     etapas: [
-      { nome: 'Solicitação', blocos: ['pecas', 'obs'], obrigatorios: ['pecas'] },
+      { nome: 'Solicitação', blocos: [] },
       { nome: 'Cotação', blocos: ['valor', 'prazo'], obrigatorios: ['valor'] },
       { nome: 'Aprovação', blocos: ['aprovacao'], obrigatorios: ['aprovacao'], so_admin: true },
       { nome: 'Recebido', blocos: ['nf', 'fotos'] },
