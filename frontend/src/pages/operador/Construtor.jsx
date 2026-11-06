@@ -611,6 +611,8 @@ function PropsCampo({ c, todos, colunas, mudar, onDuplicar, onExcluir }) {
   const ordemCol = (k) => colunas.findIndex(x => x.chave_temp === k);
   const refs = todos.filter(o => o.uid !== c.uid && COM_OPCOES.includes(o.tipo) && o.opcoes.length && ordemCol(o.coluna) <= ordemCol(c.coluna));
   const ref = refs.find(o => o.uid === c.visivel?.campo);
+  // "Já vem preenchido com": qualquer campo do Novo card ou de colunas até esta (menos ele mesmo)
+  const origens = todos.filter(o => o.uid !== c.uid && o.tipo !== 'anexo' && ordemCol(o.coluna) <= ordemCol(c.coluna));
   function addOpcao() {
     const t = nova.trim(); if (!t || c.opcoes.includes(t)) return;
     mudar(x => ({ ...x, opcoes: [...x.opcoes, t], cores: x.tipo === 'etiquetas' ? { ...(x.cores || {}), [t]: CORES_ETIQUETA[x.opcoes.length % CORES_ETIQUETA.length] } : x.cores }));
@@ -667,6 +669,24 @@ function PropsCampo({ c, todos, colunas, mudar, onDuplicar, onExcluir }) {
           </select>
         </div>
       )}
+      <div className="pt-1 border-t border-[var(--c-borda)]"><Rot>Já vem preenchido com…</Rot>
+        <select value={c.copiar_de?.campo || ''} onChange={e => {
+          const o = origens.find(x => x.uid === e.target.value);
+          mudar(x => {
+            const n = { ...x, copiar_de: o ? { campo: o.uid } : null };
+            // Lista/seleção ainda com as opções padrão: usa as mesmas opções do campo de origem
+            if (o && COM_OPCOES.includes(x.tipo) && o.opcoes.length && (!x.opcoes.length || x.opcoes.join('|') === 'Opção 1|Opção 2' || x.opcoes.join('|') === 'Sim')) {
+              n.opcoes = [...o.opcoes];
+              if (x.tipo === 'etiquetas') n.cores = Object.fromEntries(o.opcoes.map((op, i) => [op, o.cores?.[op] || CORES_ETIQUETA[i % CORES_ETIQUETA.length]]));
+            }
+            return n;
+          });
+        }} className={inp}>
+          <option value="">Vazio (a pessoa preenche)</option>
+          {origens.map(o => <option key={o.uid} value={o.uid}>{o.rotulo || 'Sem nome'}</option>)}
+        </select>
+        {c.copiar_de?.campo && <p className="text-[10px] text-[var(--c-suave)] mt-1">Quando o card chega nesta coluna, o campo já vem com o valor de "{origens.find(o => o.uid === c.copiar_de.campo)?.rotulo || '?'}". A pessoa pode trocar.</p>}
+      </div>
       <div className="pt-1 border-t border-[var(--c-borda)]"><Rot>Aparece só se…</Rot>
         <select value={c.visivel?.campo || ''} onChange={e => { const r = refs.find(o => o.uid === e.target.value); mudar(x => ({ ...x, visivel: r ? { campo: r.uid, valor: [r.opcoes[0]] } : null })); }} className={inp}>
           <option value="">Sempre aparece</option>
@@ -724,10 +744,20 @@ function Previa({ id, nome, d, nomesExistentes, onCriada, onAbrirTela }) {
   const card = cards.find(c => c.id === aberto);
   const [novo, setNovo] = useState(null); // formulário do "Novo card" (valores)
   const camposNovo = (valores) => d.campos.filter(c => c.coluna === 'inicio' && visivelAgora(c, valores));
+  // "Já vem preenchido com": ao chegar na coluna, os campos vazios recebem o valor do campo de origem
+  const comCopias = (colunas, valores) => {
+    const v = { ...valores };
+    for (const f of d.campos) {
+      if (!colunas.includes(f.coluna) || !f.copiar_de?.campo || listaValores(v[f.uid]).filter(Boolean).length) continue;
+      const o = v[f.copiar_de.campo];
+      if (listaValores(o).filter(Boolean).length) v[f.uid] = Array.isArray(o) && f.tipo === 'unica' ? o[0] : o;
+    }
+    return v;
+  };
   function criarTeste() {
     const faltam = camposNovo(novo).filter(c => c.obrigatorio && !listaValores(novo[c.uid]).filter(Boolean).length);
     if (faltam.length) { setAviso(`Preencha: ${faltam.map(c => c.rotulo).join(', ')}.`); return; }
-    const n = { id: Date.now(), coluna: d.colunas[0]?.chave_temp, valores: { ...novo } };
+    const n = { id: Date.now(), coluna: d.colunas[0]?.chave_temp, valores: comCopias(['inicio', d.colunas[0]?.chave_temp], novo) };
     setCards(l => [...l, n]); setNovo(null); setAberto(n.id); setAviso('');
   }
   const tituloDe = (c) => {
@@ -743,7 +773,7 @@ function Previa({ id, nome, d, nomesExistentes, onCriada, onAbrirTela }) {
       if (faltam.length) { setAviso(`Preencha antes de sair de "${d.colunas[i].nome}": ${faltam.map(c => c.rotulo).join(', ')}.`); return; }
     }
     setAviso('');
-    setCards(l => l.map(c => (c.id === card.id ? { ...c, coluna: d.colunas[j].chave_temp } : c)));
+    setCards(l => l.map(c => (c.id === card.id ? { ...c, coluna: d.colunas[j].chave_temp, valores: comCopias([d.colunas[j].chave_temp], c.valores) } : c)));
   }
   async function aprovar() {
     setAprovando(true); setErro('');
