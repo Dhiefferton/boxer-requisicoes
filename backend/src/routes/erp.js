@@ -128,7 +128,7 @@ router.get('/debug-pipefy-chamadas', async (req, res) => {
 router.get('/debug-construtor', async (req, res) => {
   if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
   try {
-    const admins = (await query(`SELECT id, nome, email, ativo FROM usuarios WHERE perfil = 'admin' ORDER BY id`)).rows;
+    const admins = (await query(`SELECT id, nome, email, perfil, ativo FROM usuarios WHERE perfil = 'admin' OR nome ILIKE '%dhieff%' OR email ILIKE '%compras%' ORDER BY id`)).rows;
     const tab = (await query(`SELECT to_regclass('bx_rascunhos_tela') AS t`)).rows[0]?.t || null;
     const ligado = (await query(`SELECT valor FROM bx_config WHERE chave = 'construtor_ligado'`).catch(() => ({ rows: [] }))).rows[0]?.valor ?? null;
     res.json({ dono: (process.env.CONSTRUTOR_DONO || 'compras@boxersoldas.com.br').toLowerCase(), admins, tabela_rascunhos: tab, ligado });
