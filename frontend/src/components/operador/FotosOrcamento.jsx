@@ -6,7 +6,7 @@
 // B-Requisições (não são enviadas para o Pipefy).
 // ============================================================
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { Camera, X, Paperclip, ImageOff, Trash2, Images, FileText, Film } from 'lucide-react';
+import { Camera, X, Paperclip, ImageOff, Trash2, Images, FileText, Film, Download } from 'lucide-react';
 import { upload } from '@vercel/blob/client';
 import { pedidosOrcamentoService, blobService, baseURL } from '../../services/api';
 import { Spinner } from '../ui';
@@ -91,6 +91,29 @@ async function abrirArquivo(svc, foto) {
     if (aba) aba.location.href = url; else window.open(url, '_blank');
   } catch { if (aba) aba.close(); alert('Não consegui abrir o arquivo.'); }
 }
+// Baixa o arquivo/foto/vídeo com o nome original
+function nomeParaBaixar(foto, tipo) {
+  if (foto.nome) return foto.nome;
+  const ext = (String(tipo || '').split('/')[1] || 'bin').split(';')[0].replace('jpeg', 'jpg');
+  return `arquivo-${foto.id || 'card'}.${ext}`;
+}
+async function baixarArquivo(svc, foto) {
+  try {
+    let dados;
+    if (foto.blob_url) { blobService.visto(foto.id, quadroDe(svc)); dados = await fetch(foto.blob_url).then(r => { if (!r.ok) throw new Error(); return r.blob(); }); }
+    else if (foto.tipo === 'local') dados = (await svc.imagem(urlLocal(foto.id, null, svc.base))).data;
+    else dados = await fetch(foto.url).then(r => { if (!r.ok) throw new Error(); return r.blob(); });
+    const url = URL.createObjectURL(dados);
+    const a = document.createElement('a');
+    a.href = url; a.download = nomeParaBaixar(foto, dados.type);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch {
+    // Sem como baixar direto (ex.: link de fora bloqueia): abre para salvar pelo navegador
+    if (foto.blob_url || foto.url) window.open(foto.blob_url || foto.url, '_blank', 'noopener');
+    else alert('Não consegui baixar o arquivo.');
+  }
+}
 function Miniatura({ foto, className, onClick }) {
   const svc = useContext(FotosCtx);
   const [falhou, setFalhou] = useState(false);
@@ -135,6 +158,7 @@ export function FotoAmpliada({ fotos, inicio = 0, onFechar, podeExcluir, onExclu
       <div className="flex items-center gap-2 mb-2 text-xs text-white/80" onClick={e => e.stopPropagation()}>
         <span>{i + 1} de {fotos.length} · {foto.tipo === 'local' ? 'adicionada no B-Requisições' : 'anexo do Pipefy'}</span>
         {foto.tipo === 'pipefy' && <a href={foto.url} target="_blank" rel="noreferrer" className="underline">abrir original</a>}
+        <button onClick={() => baixarArquivo(svc, foto)} className="flex items-center gap-1 text-white/90 hover:text-white"><Download size={12} /> baixar</button>
         {foto.tipo === 'local' && podeExcluir && (
           <button onClick={() => onExcluir?.(foto)} className="flex items-center gap-1 text-red-300 hover:text-red-200"><Trash2 size={12} /> excluir</button>
         )}
@@ -145,9 +169,13 @@ export function FotoAmpliada({ fotos, inicio = 0, onFechar, podeExcluir, onExclu
         {ehVideo(foto)
           ? <VideoBlob foto={foto} svc={svc} />
           : ehArquivo(foto)
-          ? <button onClick={() => abrirArquivo(svc, foto)} className="flex flex-col items-center gap-2 px-10 py-8 rounded-lg bg-white/10 text-white hover:bg-white/15">
-              <FileText size={40} /><span className="text-sm">{foto.nome || 'Arquivo'}</span><span className="text-xs underline">Abrir arquivo</span>
-            </button>
+          ? <div className="flex flex-col items-center gap-2 px-10 py-8 rounded-lg bg-white/10 text-white">
+              <FileText size={40} /><span className="text-sm">{foto.nome || 'Arquivo'}</span>
+              <div className="flex items-center gap-4 text-xs">
+                <button onClick={() => abrirArquivo(svc, foto)} className="underline hover:text-white/80">Abrir arquivo</button>
+                <button onClick={() => baixarArquivo(svc, foto)} className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[var(--c-destaque)] hover:bg-[var(--c-destaque-h)] font-semibold"><Download size={12} /> Baixar</button>
+              </div>
+            </div>
           : foto.tipo === 'local'
           ? <ImagemAuth url={urlLocal(foto.id, null, svc.base)} className="max-h-[80dvh] max-w-[85vw] !object-contain rounded-lg" />
           : <img src={foto.url} alt="" className="max-h-[80dvh] max-w-[85vw] object-contain rounded-lg" />}
