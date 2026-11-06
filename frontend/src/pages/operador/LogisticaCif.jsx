@@ -8,7 +8,7 @@
 // (Lojinha + CIF). Os campos da Lojinha aparecem só para consulta.
 // ============================================================
 import { useEffect, useState } from 'react';
-import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, ExternalLink } from 'lucide-react';
+import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, ExternalLink, DownloadCloud, RefreshCw } from 'lucide-react';
 import { cifService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -24,6 +24,43 @@ import { NomeTela } from '../../utils/nomesTelas';
 import { destinosDoPerfil } from '../../utils/perfilAtual';
 import { useAutoSalvar, StatusAutoSalvar } from '../../utils/autoSalvar';
 const fmtData = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
+
+// Card trazido do Pipefy (pipe Garantia): campos guardados como vieram de lá (só consulta)
+const ehPipefy = (p) => !!p?.pipefy_garantia_id;
+function textoPipefy(v) {
+  if (v == null) return '';
+  const t = String(v).trim();
+  if (t.startsWith('[')) { try { const a = JSON.parse(t); if (Array.isArray(a)) return a.map(String); } catch { /* texto */ } }
+  return t;
+}
+const camposPipefy = (p) => (Array.isArray(p?.pipefy_garantia_campos?.campos) ? p.pipefy_garantia_campos.campos : [])
+  .map(f => ({ ...f, texto: textoPipefy(f.valor) }))
+  .filter(f => (Array.isArray(f.texto) ? f.texto.length : f.texto));
+const valorPipefy = (p, ...ids) => {
+  for (const id of ids) {
+    const f = camposPipefy(p).find(x => x.id === id);
+    if (f) return Array.isArray(f.texto) ? f.texto.join(', ') : f.texto;
+  }
+  return '';
+};
+function CamposPipefy({ p }) {
+  const lista = camposPipefy(p);
+  if (!lista.length) return <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido no Pipefy.</p>;
+  return (
+    <dl className="flex flex-col gap-2.5">
+      {lista.map((f, i) => (
+        <div key={`${f.id}-${i}`}>
+          <dt className="text-[11px] text-[var(--c-suave)]">{f.nome}</dt>
+          <dd className="text-[13px] text-[var(--c-texto)] break-words">
+            {(Array.isArray(f.texto) ? f.texto : [f.texto]).map((t, n) => (/^https?:\/\//.test(t)
+              ? <a key={n} href={t} target="_blank" rel="noreferrer" className="block text-[var(--c-destaque-claro)] hover:underline">{decodeURIComponent(t.split('?')[0].split('/').pop() || `Anexo ${n + 1}`)}</a>
+              : <span key={n} className="block whitespace-pre-line">{t}</span>))}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
 
 const SERVICO_FOTOS = {
   base: '/logistica-cif/fotos',
@@ -67,6 +104,18 @@ export default function LogisticaCif() {
   const [soltando, setSoltando] = useState(null);
   const [movendoId, setMovendoId] = useState(null);
 
+  // "Trazer do Pipefy" (igual ao Orçamento): lê só a fase Entrada do pipe Garantia e cria aqui os cards que faltam
+  const [trazendo, setTrazendo] = useState(false);
+  const [avisoPipefy, setAvisoPipefy] = useState('');
+  async function trazerDoPipefy() {
+    setTrazendo(true); setAvisoPipefy('');
+    try {
+      const { data } = await cifService.importarEntrada();
+      setAvisoPipefy(data.novos ? `${data.novos} card${data.novos > 1 ? 's' : ''} novo${data.novos > 1 ? 's' : ''} na Entrada` : `Nenhum card novo na fase ${data.fase || 'Entrada'} do Pipefy`);
+      if (data.novos) await carregar();
+    } catch (e) { setAvisoPipefy(e.response?.data?.erro || 'Não consegui ler o Pipefy agora.'); }
+    finally { setTrazendo(false); setTimeout(() => setAvisoPipefy(''), 8000); }
+  }
   async function carregar() {
     try { const { data } = await cifService.pedidos(); setPedidos(data.pedidos); }
     catch { setPedidos(p => p || []); }
@@ -113,6 +162,7 @@ export default function LogisticaCif() {
           <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="logistica_cif" padrao="Garantia - Boxer Soldas" /></h1>
           <p className="text-sm text-[var(--c-suave)] mt-0.5">
             {ativos} pedido{ativos !== 1 ? 's' : ''}
+            {avisoPipefy && <span className="ml-2 text-[var(--c-destaque-claro)]">· {avisoPipefy}</span>}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -122,6 +172,12 @@ export default function LogisticaCif() {
               className="w-56 sm:w-64 pl-8 pr-7 py-2 rounded-xl text-xs bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
             {busca && <button onClick={() => setBusca('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
           </div>
+          {usuario?.perfil === 'admin' && (
+            <button onClick={trazerDoPipefy} disabled={trazendo} title="Lê só a fase Entrada do pipe Garantia no Pipefy (não altera nada lá) e cria aqui os cards que faltam"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors disabled:opacity-50">
+              {trazendo ? <RefreshCw size={13} className="animate-spin" /> : <DownloadCloud size={13} />} {trazendo ? 'Trazendo…' : 'Trazer do Pipefy'}
+            </button>
+          )}
           {botoes.movimentacao && (
             <button onClick={() => setVerMov(true)} title="Relatório de movimentação"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors">
@@ -189,13 +245,24 @@ function CardCif({ p, campos, movendo, onAbrir, onArrastar, onFimArraste }) {
       onDragEnd={() => onFimArraste?.()}
       className={`${movendo ? 'opacity-50 pointer-events-none ' : ''}p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-1.5 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
+        {ehPipefy(p)
+          ? <span className="font-semibold text-sm text-[var(--c-texto)]">Garantia{valorPipefy(p, 'ns_entrada_1', 'ns_entrada') ? ` · NS ${valorPipefy(p, 'ns_entrada_1', 'ns_entrada')}` : ''}</span>
+          : <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>}
         <span className="text-[11px] text-[var(--c-suave)]" title="Entrou na Garantia">{fmtData(p.cif_entrou_em)}</span>
       </div>
       {p.zen_ordem_separacao_id && <div onClick={parar}><InfoLiberacao p={p} itens={Array.isArray(p.itens) ? p.itens : []} baseNF={`/logistica-cif/pedidos/${p.id}`} /></div>}
       <EtiquetasDoCard campos={campos} valorDe={(id) => valores[pref(id)]} />
       <div onClick={parar}><FaixaFotosCard pedido={p} onVerTodas={onAbrir} /></div>
-      <DadosPedido p={p} />
+      {ehPipefy(p) ? (
+        <>
+          <p className="text-[13px] font-semibold text-[var(--c-texto)] leading-snug">{p.cliente_nome}</p>
+          {valorPipefy(p, 'modelo_m_quina') && <p className="text-[11px] text-[var(--c-suave)]">{valorPipefy(p, 'modelo_m_quina')}</p>}
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-sky-500/15 text-sky-400">Pipefy</span>
+            {valorPipefy(p, 'situa_o_p') && <span className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--c-borda)] text-[var(--c-texto)]">{valorPipefy(p, 'situa_o_p')}</span>}
+          </div>
+        </>
+      ) : <DadosPedido p={p} />}
     </div>
   );
 }
@@ -230,7 +297,7 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
   const fasesLoj = colLoj
     .map(c => ({ col: c, campos: camposLojDe(c.status).filter(f => visivelAgora(f, valorLoj))
       .filter(f => valorLista(valorLoj(f.id)).length || (f.tipo === 'attachment' && temFoto(f.id))) }))
-    .filter(g => fasesPassadas.passou(g.col.status) || g.col.status === 'finalizado' || g.campos.length);
+    .filter(g => !ehPipefy(p) && (fasesPassadas.passou(g.col.status) || g.col.status === 'finalizado' || g.campos.length));
   // CIF: fases anteriores (editáveis com o botão "Editar fases anteriores")
   const anteriores = colunas.filter(c => c.status !== atual)
     .map(c => {
@@ -303,17 +370,31 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
           {/* Esquerda: dados do pedido, fases da Lojinha e fases anteriores do CIF */}
           <div className="lg:w-[38%] lg:min-w-[340px] lg:overflow-y-auto border-b lg:border-b-0 lg:border-r border-[var(--c-borda)] p-5 space-y-4">
             <div className="pb-3 border-b border-[var(--c-borda)]">
-              <p className="text-lg font-bold font-mono text-[var(--c-texto)]">Pedido {p.numero_pedido}</p>
-              <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-borda)] text-[var(--c-suave)]">Lojinha Boxer → Garantia</span>
+              {ehPipefy(p) ? <>
+                <p className="text-lg font-bold text-[var(--c-texto)]">{p.cliente_nome}</p>
+                <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-sky-500/15 text-sky-400">Pipefy (Garantia) → Garantia</span>
+                {p.pipefy_garantia_url && (
+                  <a href={p.pipefy_garantia_url} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 text-[11px] text-[var(--c-destaque-claro)] hover:underline">Abrir no Pipefy <ExternalLink size={10} /></a>
+                )}
+              </> : <>
+                <p className="text-lg font-bold font-mono text-[var(--c-texto)]">Pedido {p.numero_pedido}</p>
+                <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-borda)] text-[var(--c-suave)]">Lojinha Boxer → Garantia</span>
+              </>}
             </div>
-            <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4 space-y-1.5">
+            {ehPipefy(p) && (
+              <CaixaFase titulo={`Formulário do Pipefy${p.pipefy_garantia_campos?.fase ? ` · ${p.pipefy_garantia_campos.fase}` : ''}`}
+                aberta={!abertas.has('pipefy-fechado')} onAlternar={() => alternar('pipefy-fechado', abertas.has('pipefy-fechado'))}>
+                <CamposPipefy p={p} />
+              </CaixaFase>
+            )}
+            {!ehPipefy(p) && <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4 space-y-1.5">
               <p className="text-sm font-bold text-[var(--c-texto)] mb-1">Dados do pedido</p>
               <DadosPedido p={p} sempreProdutos />
               {p.zen_pedido_id && (
                 <a href={`https://boxer.zenerp.app.br/sale/sale?q=id==${p.zen_pedido_id}`} target="_blank" rel="noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] text-green-400 hover:underline">Pedido Zen #{p.zen_pedido_id} <ExternalLink size={10} /></a>
               )}
-            </div>
+            </div>}
             {fasesLoj.length > 0 && <p className="text-[10px] uppercase tracking-wide text-[var(--c-suave)] pt-1">Lojinha Boxer</p>}
             {fasesLoj.map(g => {
               const k = `loj-${g.col.status}`;
