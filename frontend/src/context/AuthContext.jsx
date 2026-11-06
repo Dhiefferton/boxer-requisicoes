@@ -2,6 +2,7 @@
 // context/AuthContext.jsx — Estado Global de Autenticação
 // ============================================================
 import { createContext, useContext, useState, useEffect } from 'react';
+import { definirPerfilAtual } from '../utils/perfilAtual';
 import { authService } from '../services/api';
 
 const AuthContext = createContext(null);
@@ -9,6 +10,8 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [usuario,    setUsuario]    = useState(null);
   const [carregando, setCarregando] = useState(true);
+  // Perfil para regras fora dos componentes (ex.: para onde o admin pode mover os cards)
+  useEffect(() => { definirPerfilAtual(usuario?.perfil); }, [usuario?.perfil]);
 
   useEffect(() => {
     const token = localStorage.getItem('boxer_token');
