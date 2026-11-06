@@ -23,6 +23,7 @@ import LojinhaBoxer from './pages/operador/LojinhaBoxer';
 import LogisticaCif from './pages/operador/LogisticaCif';
 import QuadroPersonalizado from './pages/operador/QuadroPersonalizado';
 import Telas from './pages/operador/Telas';
+import Construtor from './pages/operador/Construtor';
 import Inicio from './pages/Inicio';
 import Databases from './pages/operador/Databases';
 import Armazenamento from './pages/operador/Armazenamento';
@@ -117,6 +118,9 @@ export default function App() {
             } />
             <Route path="/quadro/:id" element={
               <RotaProtegida><QuadroPersonalizado /></RotaProtegida>
+            } />
+            <Route path="/construtor" element={
+              <RotaProtegida><Construtor /></RotaProtegida>
             } />
             <Route path="/telas" element={
               <RotaTela tela="telas"><Telas /></RotaTela>
