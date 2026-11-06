@@ -16,6 +16,8 @@ import { useAuth } from '../context/AuthContext';
 import { useTelas } from '../utils/nomesTelas';
 import { veTela } from '../utils/telas';
 import api from '../services/api';
+import { LayoutTemplate } from 'lucide-react';
+import { construtorService } from '../services/api';
 
 // Telas do sistema (ordem da tela inicial). As telas criadas entram depois da Garantia.
 const SISTEMA = [
@@ -73,6 +75,9 @@ export default function Inicio() {
   const { nomes, quadros } = useTelas();
   const admin = veTela(usuario, 'telas'); // "Criar tela": quem tem a tela Telas liberada
   const [dados, setDados] = useState(null);
+  // Construtor de telas (beta): o servidor diz se este usuário vê (antes de ligar, só o dono)
+  const [construtor, setConstrutor] = useState(false);
+  useEffect(() => { construtorService.status().then(r => setConstrutor(!!r.data?.pode)).catch(() => {}); }, []);
   const [aba, setAba] = useState('telas');
   const chaveFav = `boxer_favoritas_${usuario?.id || ''}`;
   const [favoritas, setFavoritas] = useState(() => { try { return JSON.parse(localStorage.getItem(chaveFav) || '[]'); } catch { return []; } });
@@ -148,6 +153,14 @@ export default function Inicio() {
               className="h-36 rounded-2xl border-2 border-dashed border-[var(--c-borda-forte,var(--c-borda))] p-4 flex flex-col text-left hover:border-[var(--c-destaque)] transition-colors">
               <span className="w-10 h-10 rounded-xl border border-[var(--c-borda)] flex items-center justify-center"><Plus size={20} className="text-[var(--c-texto)]" /></span>
               <span className="mt-auto text-sm font-semibold text-[var(--c-texto)]">Criar tela</span>
+            </button>
+          )}
+          {construtor && aba === 'telas' && (
+            <button onClick={() => navigate('/construtor')}
+              className="h-36 rounded-2xl border-2 border-dashed border-[var(--c-destaque)] p-4 flex flex-col text-left hover:bg-[var(--c-destaque)]/10 transition-colors">
+              <span className="w-10 h-10 rounded-xl border border-[var(--c-borda)] flex items-center justify-center"><LayoutTemplate size={20} className="text-[var(--c-texto)]" /></span>
+              <span className="mt-auto text-sm font-semibold text-[var(--c-texto)]">Construtor de telas</span>
+              <span className="text-[10px] text-[var(--c-destaque-claro)]">beta</span>
             </button>
           )}
           {lista.map(b => {
