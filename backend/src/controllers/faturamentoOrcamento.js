@@ -106,24 +106,15 @@ const DADOS_BANCARIOS = [
   'C/C 98045-4',
 ];
 
-/** E-mail 2: Prestação de serviço (cliente, valores, pedido de venda no Zen, corpo da nota) */
+/** E-mail 2: Prestação de serviço (corpo da nota, NS, pagamento e dados bancários) */
 async function emailServico(p) {
-  let pedidoZen = campo(p, /pedido pecas/);
-  if (p.zen_pedido_id) {
-    const d = await documentosZen({ zen_pedido_id: p.zen_pedido_id }).catch(() => null);
-    if (d?.vendaNumero) pedidoZen = Number.isFinite(Number(d.vendaNumero)) ? Number(d.vendaNumero).toLocaleString('en-US') : d.vendaNumero;
-  }
   const nsBruto = campo(p, /^ns entrada/) || String(p.ns_entrada || '').trim();
   const ns = nsBruto.replace(/[.,\s]/g, ''); // só os dígitos, sem pontos e vírgulas
   const pagamento = campo(p, /^prazo de pagamento/) || campo(p, /^forma de pagamento/);
   const modelo = campo(p, /^modelo (da )?maquina/);
   const pecasServico = campo(p, /pecas utilizadas para emissao de prestacao de servico/);
   const linhas = [
-    'Nova solicitação de emissão de nota de prestação de serviço para:',
-    p.cliente_nome || '',
-    `CPF/CNPJ: ${documento(p.cliente_cnpj)}`,
-    `Pedido peças no PS: ${pedidoZen || ''}`,
-    '',
+    // Sem o cabeçalho com os dados do cliente (nome, CPF/CNPJ, pedido no PS): começa no corpo da nota
     'Corpo da nota:',
     '',
     `Assistência Técnica referente ao conserto da máquina de modelo ${modelo || ''} com 3 meses de garantia em cima do serviço prestado.`,
