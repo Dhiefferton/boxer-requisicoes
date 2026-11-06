@@ -8,9 +8,10 @@
 // Os campos ficam gravados só no B-Requisições (integração com o Pipefy desligada).
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { X, Settings, ArrowRight, ArrowLeft, Save, ExternalLink, History, Ban, PackageCheck, Scissors, RotateCcw, Pencil, Check } from 'lucide-react';
+import { X, Settings, ArrowRight, ArrowLeft, ExternalLink, History, Ban, PackageCheck, Scissors, RotateCcw, Pencil, Check } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
+import { useAutoSalvar, StatusAutoSalvar } from '../../utils/autoSalvar';
 import { FotosCampo } from './FotosOrcamento';
 import { carregarEstrutura, montarGrupos, valorLista, Valor, Editor, SO_LEITURA, obrigatorioAgora, visivelAgora, lerRegistro, regraBloqueiaMover } from './CamposCardOrcamento';
 import { COLUNAS_ORCAMENTO, STATUS_SO_ADMIN, CONFIG_ORCAMENTO } from '../../utils/fasesOrcamento';
@@ -57,7 +58,6 @@ export default function CardAbertoOrcamento({
     : botoes.historico || botoes.movimentacao ? () => pedidosOrcamentoService.movimentos({ pedido: pedido.id }) : null,
     `${pedido.id}-${pedido.status}`, pedido.status, COLUNAS_ORCAMENTO.map(c => c.status), pedido.created_at);
   const [rascunho, setRascunho] = useState({});
-  const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState(null);
 
   useEffect(() => {
@@ -99,25 +99,19 @@ export default function CardAbertoOrcamento({
     .sort((a, b) => ordemCol(a.chave) - ordemCol(b.chave));
   const camposAtuais = atuais.flatMap(g => g.campos).filter(c => visivelAgora(c, valorDe));
 
-  async function salvar() {
-    if (!sujo) return true;
-    setSalvando(true); setErro('');
-    try {
-      const { data } = await pedidosOrcamentoService.editarCampos(pedido.id, rascunho);
-      const pf = data?.pipefy;
-      const linhas = [];
-      if (pf?.gravados?.length) linhas.push({ ok: true, txt: `Gravado no Pipefy: ${pf.gravados.join(', ')}.` });
-      if (pf?.so_local?.length) linhas.push({ ok: false, txt: `Só no B-Requisições: ${pf.so_local.join(', ')}.` });
-      for (const e of pf?.erros || []) linhas.push({ ok: false, txt: `Pipefy recusou "${e.campo}": ${e.erro}. Ficou só no B-Requisições.` });
-      setAviso(linhas.length ? linhas : [{ ok: true, txt: 'Campos salvos.' }]);
-      setRascunho({}); setEditandoFase(new Set());
-      onAtualizar?.();
-      return true;
-    } catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar os campos.'); return false; }
-    finally { setSalvando(false); }
-  }
-  function fechar() {
-    if (sujo && !confirm('Há campos alterados sem salvar. Fechar mesmo assim?')) return;
+  // Grava sozinho (sem Salvar/Descartar)
+  const auto = useAutoSalvar(rascunho, setRascunho, async (r) => {
+    const { data } = await pedidosOrcamentoService.editarCampos(pedido.id, r);
+    const pf = data?.pipefy;
+    const linhas = [];
+    if (pf?.so_local?.length) linhas.push({ ok: false, txt: `Só no B-Requisições: ${pf.so_local.join(', ')}.` });
+    for (const e of pf?.erros || []) linhas.push({ ok: false, txt: `Pipefy recusou "${e.campo}": ${e.erro}. Ficou só no B-Requisições.` });
+    setAviso(linhas.length ? linhas : null);
+    await onAtualizar?.();
+  });
+  const salvar = () => auto.salvarAgora();
+  async function fechar() {
+    if (sujo && !(await salvar())) return;
     onFechar?.();
   }
   // Antes de mover, grava o que foi preenchido
@@ -141,7 +135,7 @@ export default function CardAbertoOrcamento({
     ? null
     : destinos.find(c => COLUNAS_ORCAMENTO.indexOf(c) > idxAtual) || null;
   const outros = destinos.filter(c => c !== destaque && c.status !== proxima?.status);
-  const ocupado = mudando || movendoPara || salvando;
+  const ocupado = mudando || movendoPara;
   const podeMoverAqui = !(STATUS_SO_ADMIN.includes(pedido.status) && !botoes.mover);
 
   const blocoCampo = (c, editavel) => (
@@ -241,7 +235,7 @@ export default function CardAbertoOrcamento({
             {resumo}
 
             {erro && <p className="text-xs text-red-400">{erro}</p>}
-            {aviso && !sujo && (
+            {aviso && (
               <div className="rounded-lg border border-[var(--c-borda)] p-2 space-y-0.5">
                 {aviso.map((l, i) => <p key={i} className={`text-[11px] ${l.ok ? 'text-green-400' : 'text-amber-400'}`}>{l.txt}</p>)}
               </div>
@@ -250,16 +244,7 @@ export default function CardAbertoOrcamento({
               ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, botoes.campos))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.</p>)}
 
-            {sujo && (
-              <div className="sticky bottom-0 flex items-center justify-end gap-2 py-2 bg-[var(--c-fundo)] border-t border-[var(--c-borda)]">
-                <p className="flex-1 text-[11px] text-amber-400">Alterações não salvas.</p>
-                <button onClick={() => setRascunho({})} className="px-3 py-1.5 rounded-lg text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">Descartar</button>
-                <button onClick={salvar} disabled={salvando}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
-                  {salvando ? <Spinner size={12} /> : <Save size={12} />} Salvar
-                </button>
-              </div>
-            )}
+            <StatusAutoSalvar salvando={auto.salvando} pendente={sujo} salvoEm={auto.salvoEm} erro={auto.erroSalvar} />
           </div>
 
           {/* ── Direita: mover e ações ── */}
