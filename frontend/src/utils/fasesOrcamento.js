@@ -8,6 +8,7 @@
 // Manter igual a NOME_STATUS / STATUS_ADMIN em
 // backend/src/controllers/pedidosOrcamentoController.js
 // ============================================================
+import { destinosDoPerfil } from './perfilAtual';
 
 export const COLUNAS_ORCAMENTO = [
   { faseId: '309113139', status: 'entrada',              titulo: 'Entrada',                  admin: true, cor: 'border-slate-500/40',   badge: 'bg-slate-500/15 text-slate-300' },
@@ -49,7 +50,7 @@ export function aplicarConfigColunas(colunasCfg) {
   const novas = colunasCfg.map(c => ({
     ...(padrao.get(c.chave) || {}),
     status: c.chave, titulo: c.nome, admin: !!c.so_admin, arquivada: !!c.arquivada,
-    faseId: c.fase_pipefy || padrao.get(c.chave)?.faseId, hex: c.cor, sistema: !!c.sistema, zen: c.zen || null, importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null, regras: Array.isArray(c.regras) ? c.regras : null,
+    faseId: c.fase_pipefy || padrao.get(c.chave)?.faseId, hex: c.cor, sistema: !!c.sistema, zen: c.zen || null, importados: !!c.campos_importados, destinos: destinosDoPerfil(c), regras: Array.isArray(c.regras) ? c.regras : null,
   }));
   COLUNAS_ORCAMENTO.splice(0, COLUNAS_ORCAMENTO.length, ...novas);
   for (const c of novas) NOME_STATUS_ORCAMENTO[c.status] = c.titulo;
