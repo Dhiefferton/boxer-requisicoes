@@ -114,9 +114,7 @@ async function emailServico(p) {
   const modelo = campo(p, /^modelo (da )?maquina/);
   const pecasServico = campo(p, /pecas utilizadas para emissao de prestacao de servico/);
   const linhas = [
-    // Sem o cabeçalho com os dados do cliente (nome, CPF/CNPJ, pedido no PS): começa no corpo da nota
-    'Corpo da nota:',
-    '',
+    // Sem cabeçalho (dados do cliente e "Corpo da nota:"): começa direto no texto da nota
     `Assistência Técnica referente ao conserto da máquina de modelo ${modelo || ''} com 3 meses de garantia em cima do serviço prestado.`,
     '',
     ...(pecasServico ? pecasServico.split(/\r?\n/) : []),
