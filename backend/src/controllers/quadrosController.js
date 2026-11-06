@@ -415,6 +415,8 @@ export async function criarCard(req, res, next) {
       titulo = primeiro || '';
     }
     const coluna = cfg.colunas.find(x => !x.arquivada) || cfg.colunas[0];
+    const copiados = preencherCopias(cfg, c, ['inicio', coluna?.chave || 'entrada'], valores);
+    if (copiados) Object.assign(valores, copiados);
     const r = await query(
       `INSERT INTO bx_quadro_cards (quadro_id, titulo, status, valores, criado_por, criado_por_nome)
        VALUES ($1, $2, $3, $4::jsonb, $5, $6) RETURNING *`,
@@ -424,6 +426,22 @@ export async function criarCard(req, res, next) {
     await movimento(qid, card, 'criado', { para: card.status, usuario: req.usuario, descricao: `Card criado em ${coluna?.nome || card.status}` });
     res.status(201).json({ card: { ...card, fotos_locais: [] } });
   } catch (err) { next(err); }
+}
+
+// "Já vem preenchido com": campos destas colunas ainda vazios recebem o valor do campo de origem (a pessoa pode trocar depois)
+const temValorCfg = (v) => !!String(v ?? '').replace(/[\[\]"]/g, '').trim();
+function preencherCopias(cfg, c, colunas, valores) {
+  const novo = { ...valores };
+  let mudou = false;
+  for (const f of cfg.campos) {
+    if (!colunas.includes(f.coluna) || !f.copiar_de?.campo) continue;
+    const k = c.idCampoConfig(f);
+    if (temValorCfg(novo[k])) continue;
+    const o = cfg.campos.find(x => String(x.id) === String(f.copiar_de.campo));
+    const v = o ? novo[c.idCampoConfig(o)] : undefined;
+    if (temValorCfg(v)) { novo[k] = v; mudou = true; }
+  }
+  return mudou ? novo : null;
 }
 
 async function cardDoQuadro(qid, id) {
@@ -460,7 +478,9 @@ export async function moverCard(req, res, next) {
     const faltando = voltandoAdmin ? [] : cfg.campos.filter(f => f.coluna === atual && f.tipo !== 'anexo' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
       && !String(valores[c.idCampoConfig(f)] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha antes de sair de "${col.get(atual)?.nome || atual}": ${faltando.map(f => f.rotulo).join(', ')}.` });
-    const r = await query(`UPDATE bx_quadro_cards SET status = $2, entrou_em = NOW(), atualizado_em = NOW() WHERE id = $1 RETURNING *`, [p.id, status]);
+    const copiados = preencherCopias(cfg, c, [status], valores);
+    const r = await query(`UPDATE bx_quadro_cards SET status = $2, valores = COALESCE($3::jsonb, valores), entrou_em = NOW(), atualizado_em = NOW() WHERE id = $1 RETURNING *`,
+      [p.id, status, copiados ? JSON.stringify(copiados) : null]);
     await movimento(qid, r.rows[0], 'movido', { de: atual, para: status, usuario: req.usuario,
       descricao: `Movido de ${col.get(atual)?.nome || atual} para ${col.get(status)?.nome || status}` });
     if (ehLiberacao(col.get(status)?.nome)) await copiarParaTelas(`quadro_${qid}`, p.id, req.usuario);

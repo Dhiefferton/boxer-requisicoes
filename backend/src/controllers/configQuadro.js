@@ -138,7 +138,8 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'sta
           ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS cria_opcoes BOOLEAN NOT NULL DEFAULT FALSE;
           ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS cores JSONB;
           ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS visivel JSONB;
-          ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS marcas JSONB;`);
+          ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS marcas JSONB;
+          ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS copiar_de JSONB;`);
         // Colunas do sistema que ainda não estão na tabela (primeira vez ou coluna nova no código)
         const tem = new Set((await query(`SELECT chave FROM ${TC}`)).rows.map(r => r.chave));
         for (const [i, c] of padrao.entries()) {
@@ -158,7 +159,7 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'sta
     await garantirConfig();
     const [col, cam] = await Promise.all([
       query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados, destinos, destinos_admin, regras FROM ${TC} WHERE ativo ORDER BY ordem, chave`),
-      query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao, cria_opcoes, cores, visivel, marcas
+      query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao, cria_opcoes, cores, visivel, marcas, copiar_de
                FROM ${TF} WHERE ativo ORDER BY coluna, ordem, id`),
     ]);
     const dados = {
@@ -271,7 +272,9 @@ for (const c of lista) if (Array.isArray(c.destinos_admin)) c.destinos_admin = [
                 .map(o => [o, { texto: limpar(c.marcas[o].texto, 60), cor: COR_OK.test(String(c.marcas[o].cor || '')) ? c.marcas[o].cor : '#f59e0b' }]))) : null,
           uid: String(c?.uid || ''), condicao: c?.condicao?.campo && valoresCondicao(c?.condicao?.valor).length ? { campo: String(c.condicao.campo), valor: limparCondicao(c.condicao.valor, limpar) } : null,
           // Campo aparece só quando outro campo tem um valor (ex.: "+ Campos - Peça")
-          visivel: c?.visivel?.campo && valoresCondicao(c?.visivel?.valor).length ? { campo: String(c.visivel.campo), valor: limparCondicao(c.visivel.valor, limpar) } : null });
+          visivel: c?.visivel?.campo && valoresCondicao(c?.visivel?.valor).length ? { campo: String(c.visivel.campo), valor: limparCondicao(c.visivel.valor, limpar) } : null,
+          // "Já vem preenchido com" outro campo (só mexe quando vem no envio; o Configurar antigo não manda e não apaga)
+          copiar_de: c && Object.prototype.hasOwnProperty.call(c, 'copiar_de') ? (c.copiar_de?.campo ? { campo: String(c.copiar_de.campo) } : null) : undefined });
       }
   
       await transaction(async (cli) => {
@@ -312,6 +315,10 @@ for (const c of lista) if (Array.isArray(c.destinos_admin)) c.destinos_admin = [
           await cli.query(`UPDATE ${TF} SET condicao = $1::jsonb, cria_opcoes = $3, cores = $4::jsonb, visivel = $5::jsonb, marcas = $6::jsonb WHERE id = $2`,
             [ref && ref !== id ? JSON.stringify({ campo: ref, valor: c.condicao.valor }) : null, id, c.cria_opcoes, c.cores && Object.keys(c.cores).length ? JSON.stringify(c.cores) : null,
              vis && vis !== id ? JSON.stringify({ campo: vis, valor: c.visivel.valor }) : null, c.marcas ? JSON.stringify(c.marcas) : null]);
+          if (c.copiar_de !== undefined) {
+            const cop = c.copiar_de ? (idPorUid[c.copiar_de.campo] || Number(String(c.copiar_de.campo).replace(/^id_/, '')) || null) : null;
+            await cli.query(`UPDATE ${TF} SET copiar_de = $1::jsonb WHERE id = $2`, [cop && cop !== id ? JSON.stringify({ campo: cop }) : null, id]);
+          }
         }
       });
       cache = null;

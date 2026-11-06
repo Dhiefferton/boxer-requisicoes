@@ -94,6 +94,7 @@ function limparDados(d) {
     lista: c?.lista == null ? null : limpar(c.lista, 60), cores: c?.cores && typeof c.cores === 'object' ? c.cores : null,
     visivel: c?.visivel?.campo ? { campo: limpar(c.visivel.campo, 60), valor: c.visivel.valor } : null,
     condicao: c?.condicao?.campo ? { campo: limpar(c.condicao.campo, 60), valor: c.condicao.valor } : null,
+    copiar_de: c?.copiar_de?.campo ? { campo: limpar(c.copiar_de.campo, 60) } : null,
   }));
   return { descricao: limpar(d?.descricao, 300), colunas, campos, origem: limpar(d?.origem, 60) || null };
 }
@@ -171,6 +172,7 @@ export async function copiarTela(req, res, next) {
       obrigatorio: !!c.obrigatorio, opcoes: c.opcoes || [], lista: c.lista || null, cores: c.cores || null,
       visivel: c.visivel?.campo ? { campo: /^\d+$/.test(String(c.visivel.campo)) ? uidDe(c.visivel.campo) : c.visivel.campo, valor: c.visivel.valor } : null,
       condicao: c.condicao?.campo ? { campo: /^\d+$/.test(String(c.condicao.campo)) ? uidDe(c.condicao.campo) : c.condicao.campo, valor: c.condicao.valor } : null,
+      copiar_de: c.copiar_de?.campo ? { campo: uidDe(c.copiar_de.campo) } : null,
     })).filter(c => c.coluna === 'inicio' || colunas.some(k => k.chave_temp === c.coluna));
     res.json({ nome: q.nome, dados: { colunas, campos, origem: `copia:${qid}` } });
   } catch (err) { next(err); }
