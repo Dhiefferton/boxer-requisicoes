@@ -314,6 +314,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
     try {
       const { data } = await svc.salvarConfig({
         colunas: colunas.map(c => ({ chave: c.chave || null, chave_temp: c.chave_temp || null, nome: c.nome, cor: c.cor, so_admin: c.so_admin, arquivada: c.arquivada, campos_importados: !!c.campos_importados, destinos: Array.isArray(c.destinos) ? c.destinos : null,
+          destinos_admin: c.destinos_admin === 'todas' || Array.isArray(c.destinos_admin) ? c.destinos_admin : null,
           regras: Array.isArray(c.regras) ? c.regras.filter(r => r?.destino && r?.campo && valoresCondicao(r.valores).length) : null })),
         campos: campos.map(c => ({ id: c.id || null, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, descricao: c.descricao, obrigatorio: c.obrigatorio, opcoes: c.opcoes, lista: c.lista, pipefy_campo: c.pipefy_campo || null, cria_opcoes: !!c.cria_opcoes, cores: c.tipo === 'etiquetas' ? c.cores || null : null, marcas: c.tipo !== 'etiquetas' && c.marcas && Object.keys(c.marcas).length ? c.marcas : null,
           uid: c.uid, condicao: c.obrigatorio && c.condicao?.campo && valoresCondicao(c.condicao?.valor).length ? c.condicao : null,
@@ -618,29 +619,45 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                     <input type="checkbox" checked={!!colAtual.arquivada} onChange={() => mudarColuna(colSel, c => ({ ...c, arquivada: !c.arquivada }))} />
                     Coluna arquivada (lista fechada na tela)
                   </label>
-                  {/* Para onde os cards desta coluna podem ir (igual "Configurar mover cards" do Pipefy) */}
-                  <div className="rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2.5 space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <p className="flex-1 text-[11px] font-semibold text-[var(--c-texto)]">Pode mover cards desta coluna para</p>
-                      <button onClick={() => mudarColuna(colSel, c => ({ ...c, destinos: null }))} className="text-[10px] text-[var(--c-destaque-claro)] hover:underline">todas</button>
-                      <button onClick={() => mudarColuna(colSel, c => ({ ...c, destinos: [] }))} className="text-[10px] text-[var(--c-suave)] hover:underline">nenhuma</button>
-                    </div>
-                    {colunas.filter(o => keyCol(o) !== colSel).map(o => {
-                      const k = keyCol(o);
-                      const marcado = !Array.isArray(colAtual.destinos) || colAtual.destinos.includes(k);
-                      return (
-                        <label key={k} className="flex items-center gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
-                          <input type="checkbox" checked={marcado} onChange={() => mudarColuna(colSel, c => {
-                            const todas = colunas.filter(x => keyCol(x) !== colSel).map(keyCol);
-                            const atual = Array.isArray(c.destinos) ? c.destinos : todas;
-                            return { ...c, destinos: atual.includes(k) ? atual.filter(x => x !== k) : [...atual, k] };
-                          })} />
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: o.cor }} />{o.nome}
-                        </label>
-                      );
-                    })}
-                    <p className="text-[10px] text-[var(--c-suave)]">Os botões de mover do card mostram só as colunas marcadas. Movimentos automáticos (Zen) não mudam.</p>
-                  </div>
+                  {/* Para onde os cards desta coluna podem ir (igual "Configurar mover cards" do Pipefy) — colaboradores e admin separados */}
+                  {[
+                    { campo: 'destinos', titulo: 'Colaboradores podem mover cards desta coluna para' },
+                    { campo: 'destinos_admin', titulo: 'Admin pode mover cards desta coluna para', admin: true },
+                  ].map(({ campo, titulo, admin }) => {
+                    const todas = colunas.filter(x => keyCol(x) !== colSel).map(keyCol);
+                    const doColab = Array.isArray(colAtual.destinos) ? colAtual.destinos : todas;
+                    // Admin: null = igual aos colaboradores, 'todas' = todas, lista = só as marcadas
+                    const v = colAtual[campo];
+                    const igual = admin && v == null;
+                    const lista = admin ? (v === 'todas' ? todas : Array.isArray(v) ? v : doColab) : doColab;
+                    const vazioTodas = admin ? 'todas' : null;
+                    return (
+                      <div key={campo} className={`rounded-lg border p-2.5 space-y-1.5 ${admin ? 'border-amber-500/30 bg-amber-500/5' : 'border-[var(--c-borda)] bg-[var(--c-fundo)]'}`}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="flex-1 text-[11px] font-semibold text-[var(--c-texto)]">{titulo}</p>
+                          <button onClick={() => mudarColuna(colSel, c => ({ ...c, [campo]: vazioTodas }))} className="text-[10px] text-[var(--c-destaque-claro)] hover:underline">todas</button>
+                          <button onClick={() => mudarColuna(colSel, c => ({ ...c, [campo]: [] }))} className="text-[10px] text-[var(--c-suave)] hover:underline">nenhuma</button>
+                          {admin && <button onClick={() => mudarColuna(colSel, c => ({ ...c, destinos_admin: null }))} className={`text-[10px] hover:underline ${igual ? 'text-amber-400 font-semibold' : 'text-[var(--c-suave)]'}`}>igual aos colaboradores</button>}
+                        </div>
+                        {colunas.filter(o => keyCol(o) !== colSel).map(o => {
+                          const k = keyCol(o);
+                          return (
+                            <label key={k} className="flex items-center gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
+                              <input type="checkbox" checked={lista.includes(k)} onChange={() => mudarColuna(colSel, c => {
+                                const n = lista.includes(k) ? lista.filter(x => x !== k) : [...lista, k];
+                                return { ...c, [campo]: !admin && n.length === todas.length ? null : n };
+                              })} />
+                              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: o.cor }} />{o.nome}
+                            </label>
+                          );
+                        })}
+                        <p className="text-[10px] text-[var(--c-suave)]">
+                          {admin ? (igual ? 'Hoje o admin segue a lista dos colaboradores. Marque/desmarque para ter uma lista só do admin.' : 'Vale só para o admin.')
+                            : 'Vale para todos que não são admin. Os botões de mover do card mostram só as colunas marcadas. Movimentos automáticos (Zen) não mudam.'}
+                        </p>
+                      </div>
+                    );
+                  })}
                   {/* Regras para mover: esconde o botão de uma coluna conforme o valor de um campo */}
                   {(() => {
                     const refs = campos.filter(c => c.id && COM_OPCOES.includes(c.tipo) && (c.opcoes || []).length);
