@@ -56,6 +56,7 @@ import {
   marcarItem as marcarItemRecImp, substituirFoto as substituirFotoRecImp,
 } from '../controllers/recebimentoImportacaoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
+import { acessoConstrutor, statusConstrutor, ligarConstrutor, listarRascunhos, verRascunho, criarRascunho, salvarRascunho, excluirRascunho, aprovarRascunho, telasParaCopiar, copiarTela } from '../controllers/construtorController.js';
 import { relatorioUsoPipefy, chamadasPipefy } from '../integrations/usoPipefy.js';
 import { verConfig as verConfigOrcamento, salvarConfig as salvarConfigOrcamento, adicionarOpcao as adicionarOpcaoOrcamento } from '../controllers/configOrcamentoController.js';
 import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
@@ -295,6 +296,18 @@ router.delete('/lojinha/pedidos/:id', ...loja, excluirPedidoLojinha);
 // Telas criadas pelo admin (quadros de cards) e nomes das telas
 router.get('/inicio/resumo',                  autenticar, resumoInicio);
 router.get('/inicio/busca',                   autenticar, buscaInicio);
+// Construtor de telas (beta): só o dono até ser ligado para todos
+const ctr = [autenticar, acessoConstrutor];
+router.get('/construtor/status',                 autenticar, statusConstrutor);
+router.post('/construtor/ligar',                 autenticar, ligarConstrutor);
+router.get('/construtor/rascunhos',              ...ctr, listarRascunhos);
+router.post('/construtor/rascunhos',             ...ctr, criarRascunho);
+router.get('/construtor/rascunhos/:id',          ...ctr, verRascunho);
+router.put('/construtor/rascunhos/:id',          ...ctr, salvarRascunho);
+router.delete('/construtor/rascunhos/:id',       ...ctr, excluirRascunho);
+router.post('/construtor/rascunhos/:id/aprovar', ...ctr, aprovarRascunho);
+router.get('/construtor/telas',                  ...ctr, telasParaCopiar);
+router.get('/construtor/telas/:qid',             ...ctr, copiarTela);
 router.get('/telas',                          autenticar, verTelas);
 router.post('/telas/quadros',                 autenticar, exigirPerfil('admin'), criarQuadro);
 router.patch('/telas/quadros/:id',            autenticar, exigirPerfil('admin'), editarQuadro);
