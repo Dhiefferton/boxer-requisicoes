@@ -247,6 +247,19 @@ export const tratativaService = {
 };
 
 // Telas criadas pelo admin (quadros de cards) e nomes das telas renomeadas
+// Construtor de telas (beta)
+export const construtorService = {
+  status:       ()            => api.get('/construtor/status'),
+  ligar:        (ligado)      => api.post('/construtor/ligar', { ligado }),
+  rascunhos:    ()            => api.get('/construtor/rascunhos'),
+  ver:          (id)          => api.get(`/construtor/rascunhos/${id}`),
+  criar:        (dados)       => api.post('/construtor/rascunhos', dados),
+  salvar:       (id, dados)   => api.put(`/construtor/rascunhos/${id}`, dados),
+  excluir:      (id)          => api.delete(`/construtor/rascunhos/${id}`),
+  aprovar:      (id)          => api.post(`/construtor/rascunhos/${id}/aprovar`, {}, { timeout: 60000 }),
+  telas:        ()            => api.get('/construtor/telas'),
+  copiarTela:   (qid)         => api.get(`/construtor/telas/${qid}`),
+};
 export const telasService = {
   ver:          ()           => api.get('/telas'),
   criarQuadro:  (nome)       => api.post('/telas/quadros', { nome }),
