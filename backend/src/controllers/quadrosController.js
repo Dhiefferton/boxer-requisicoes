@@ -106,6 +106,20 @@ function cfgDe(id) {
 
 const limpar = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
+/** Grava colunas e campos num quadro (mesmo caminho do "Configurar"). Usado pelo Construtor de telas ao aprovar. */
+export function aplicarConfigNoQuadro(qid, dados, usuario = null) {
+  return new Promise((resolve, reject) => {
+    const res = {
+      statusCode: 200,
+      status(c) { this.statusCode = c; return this; },
+      json(d) { if (this.statusCode >= 400) reject(Object.assign(new Error(d?.erro || 'Erro ao gravar a configuração.'), { status: this.statusCode })); else resolve(d); },
+    };
+    cfgDe(qid).salvarConfig({ body: dados, usuario, params: { qid: String(qid) } }, res, reject);
+  });
+}
+/** Lê colunas e campos de um quadro (para copiar uma tela no Construtor). */
+export const lerConfigDoQuadro = (qid) => cfgDe(qid).ler();
+
 async function movimento(qid, card, tipo, { de = null, para = null, descricao = null, detalhes = null, usuario = null } = {}) {
   try {
     await query(`INSERT INTO bx_quadro_movimentos (quadro_id, pedido_id, referencia, tipo, de_status, para_status, descricao, detalhes, usuario_id, usuario_nome, origem)
