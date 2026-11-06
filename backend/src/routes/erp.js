@@ -93,6 +93,22 @@ router.get('/debug-pipefy', async (req, res) => {
   try { res.json(await pipefyQuery(gql, {})); } catch (e) { res.status(502).json({ erro: e.message }); }
 });
 
+// DIAGNÓSTICO (só leitura) — Garantia: colunas da tela e pipes/fases do Pipefy (consulta liberada, nunca altera o pipe)
+// Ex: GET /api/erp/debug-garantia?secret=...[&gql=query{...}]
+router.get('/debug-garantia', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    if (req.query.gql) {
+      const gql = String(req.query.gql);
+      if (/\bmutation\b/i.test(gql)) return res.status(400).json({ erro: 'Só consultas (query).' });
+      return res.json(await pipefyQueryPlanilhas(gql, {}));
+    }
+    const cfg = await lerConfigCif();
+    const pipes = await pipefyQueryPlanilhas(`query { organization(id: 327351) { pipes { id name phases { id name cards_count } } } }`, {});
+    res.json({ colunas: cfg.colunas, pipes: (pipes?.organization?.pipes || []).filter(p => /garant/i.test(p.name)), todos: (pipes?.organization?.pipes || []).map(p => `${p.id} ${p.name}`) });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // DIAGNÓSTICO — status dos pedidos (Lojinha e Orçamentos) x fase atual dos
 // cards no Pipefy. Só leitura. Ex: GET /api/erp/debug-fases?secret=...
 router.get('/debug-fases', async (req, res) => {
