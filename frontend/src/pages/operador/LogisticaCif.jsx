@@ -294,6 +294,23 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
   const camposAtuais = camposCifDe(atual).filter(c => visivelAgora(c, valorCif));
 
   // Lojinha: fases por onde passou (só consulta) — inclui Finalizado
+  // NS de entrada no topo do formulário do card (Pipefy, campos da Garantia ou da Lojinha)
+  const ehNS = (r) => /^ns\b/i.test(String(r || '').trim());
+  const nsGarantia = (() => {
+    const pf = camposPipefy(p).find(f => ehNS(f.nome));
+    if (pf) return Array.isArray(pf.texto) ? pf.texto.join(', ') : pf.texto;
+    const cc = camposCif.map(campoCif).find(f => ehNS(f.rotulo) && valorLista(valorCif(f.id)).length);
+    if (cc) return valorLista(valorCif(cc.id)).join(', ');
+    const cl = camposLoj.map(campoDaConfig).find(f => ehNS(f.rotulo) && valorLista(valorLoj(f.id)).length);
+    if (cl) return valorLista(valorLoj(cl.id)).join(', ');
+    return '';
+  })();
+  const linhaNS = nsGarantia ? (
+    <div className="pb-2 mb-1 border-b border-[var(--c-borda)]">
+      <p className="text-[11px] text-[var(--c-suave)]">NS de entrada</p>
+      <p className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{nsGarantia}</p>
+    </div>
+  ) : null;
   const fasesLoj = colLoj
     .map(c => ({ col: c, campos: camposLojDe(c.status).filter(f => visivelAgora(f, valorLoj))
       .filter(f => valorLista(valorLoj(f.id)).length || (f.tipo === 'attachment' && temFoto(f.id))) }))
@@ -384,11 +401,13 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
             {ehPipefy(p) && (
               <CaixaFase titulo={`Formulário do Pipefy${p.pipefy_garantia_campos?.fase ? ` · ${p.pipefy_garantia_campos.fase}` : ''}`}
                 aberta={!abertas.has('pipefy-fechado')} onAlternar={() => alternar('pipefy-fechado', abertas.has('pipefy-fechado'))}>
+                {linhaNS}
                 <CamposPipefy p={p} />
               </CaixaFase>
             )}
             {!ehPipefy(p) && <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4 space-y-1.5">
               <p className="text-sm font-bold text-[var(--c-texto)] mb-1">Dados do pedido</p>
+              {linhaNS}
               <DadosPedido p={p} sempreProdutos />
               {p.zen_pedido_id && (
                 <a href={`https://boxer.zenerp.app.br/sale/sale?q=id==${p.zen_pedido_id}`} target="_blank" rel="noreferrer"
