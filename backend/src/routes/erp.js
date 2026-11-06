@@ -124,6 +124,17 @@ router.get('/debug-pipefy-chamadas', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// DIAGNÓSTICO (só leitura) — Construtor de telas: dono configurado, admins e rascunhos
+router.get('/debug-construtor', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const admins = (await query(`SELECT id, nome, email, ativo FROM usuarios WHERE perfil = 'admin' ORDER BY id`)).rows;
+    const tab = (await query(`SELECT to_regclass('bx_rascunhos_tela') AS t`)).rows[0]?.t || null;
+    const ligado = (await query(`SELECT valor FROM bx_config WHERE chave = 'construtor_ligado'`).catch(() => ({ rows: [] }))).rows[0]?.valor ?? null;
+    res.json({ dono: (process.env.CONSTRUTOR_DONO || 'compras@boxersoldas.com.br').toLowerCase(), admins, tabela_rascunhos: tab, ligado });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // DIAGNÓSTICO — status dos pedidos (Lojinha e Orçamentos) x fase atual dos
 // cards no Pipefy. Só leitura. Ex: GET /api/erp/debug-fases?secret=...
 router.get('/debug-fases', async (req, res) => {
