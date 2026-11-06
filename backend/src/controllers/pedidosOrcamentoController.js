@@ -19,7 +19,7 @@ import {
 } from '../integrations/zenPedidoVenda.js';
 import { lerConfigOrcamento, idCampoConfig } from './configOrcamentoController.js';
 import { liberarFaturamentoOrcamento, avisarFaturamentoOrcamento, ehLiberacaoFaturamentoOrc } from './faturamentoOrcamento.js';
-import { exigidoAgora, bloqueioRegra } from './configQuadro.js';
+import { exigidoAgora, bloqueioRegra, destinosPara } from './configQuadro.js';
 import { temBotao } from '../middlewares/telas.js';
 import { registrarArquivoBlob, excluirArquivoBlob, lerEnvioBlob } from './blobController.js';
 import { guardarTratativa } from './tratativaController.js';
@@ -443,7 +443,7 @@ export async function moverPedido(req, res, next) {
       return res.status(403).json({ erro: 'Mover cards nessa coluna não está liberado para você (Admin > Usuários).' });
     }
     // Para onde a coluna atual pode mover (Configurar → "Pode mover cards desta coluna para")
-    const destinosCol = colCfg.get(pedido.status)?.destinos;
+    const destinosCol = destinosPara(colCfg.get(pedido.status), req.usuario);
     if (Array.isArray(destinosCol) && status !== pedido.status && !destinosCol.includes(status)) {
       return res.status(400).json({ erro: `De "${nomeCol(pedido.status)}" não dá para mover para "${nomeCol(status)}". Ajuste em Configurar.` });
     }

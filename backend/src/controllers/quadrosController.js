@@ -10,7 +10,7 @@
 // Também guarda os nomes das telas renomeadas (bx_config 'telas_nomes').
 // ============================================================
 import { query } from '../config/db.js';
-import { criarConfigQuadro, exigidoAgora, bloqueioRegra } from './configQuadro.js';
+import { criarConfigQuadro, exigidoAgora, bloqueioRegra, destinosPara } from './configQuadro.js';
 import { telasDoUsuario } from '../middlewares/telas.js';
 import { registrarArquivoBlob, excluirArquivoBlob as excluirBlobDireto, lerEnvioBlob } from './blobController.js';
 import { pedidoOrcamentoCompleto } from './pedidosOrcamentoController.js';
@@ -432,7 +432,7 @@ export async function moverCard(req, res, next) {
     if (req.usuario?.perfil !== 'admin' && (col.get(status)?.so_admin || col.get(atual)?.so_admin)) {
       return res.status(403).json({ erro: 'Mover cards nessa coluna é só do administrador.' });
     }
-    const destinos = col.get(atual)?.destinos;
+    const destinos = destinosPara(col.get(atual), req.usuario);
     if (Array.isArray(destinos) && !destinos.includes(status)) {
       return res.status(400).json({ erro: `De "${col.get(atual)?.nome || atual}" não dá para mover para "${col.get(status)?.nome || status}". Ajuste em Configurar.` });
     }

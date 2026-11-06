@@ -58,6 +58,17 @@ export function bloqueioRegra(col, destino, campos, valores, idCampo) {
 
 export const limparCondicao = (v, limpar) => (Array.isArray(v) ? [...new Set(v.map(x => limpar(x, 120)).filter(Boolean))].slice(0, 30) : limpar(v, 120));
 
+/**
+ * Para onde o usuário pode mover os cards da coluna (null = todas). O admin tem a lista dele
+ * (destinos_admin: null = igual aos colaboradores, 'todas', ou as marcadas); os outros, destinos.
+ */
+export function destinosPara(col, usuario) {
+  const colab = Array.isArray(col?.destinos) ? col.destinos : null;
+  if (usuario?.perfil !== 'admin') return colab;
+  if (col?.destinos_admin === 'todas') return null;
+  return Array.isArray(col?.destinos_admin) ? col.destinos_admin : colab;
+}
+
 /** Campo visível agora? Com "visivel" ({ campo, valor }) só aparece quando o outro campo (também visível) tem esse valor. */
 export function visivelAgora(c, todos, valores, idCampo, n = 0) {
   if (!c?.visivel?.campo || n > 10) return true;
@@ -121,6 +132,7 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'sta
           ALTER TABLE ${TF}  ADD COLUMN IF NOT EXISTS pipefy_campo VARCHAR(80);
           ALTER TABLE ${TC} ADD COLUMN IF NOT EXISTS campos_importados BOOLEAN NOT NULL DEFAULT FALSE;
           ALTER TABLE ${TC} ADD COLUMN IF NOT EXISTS destinos JSONB;
+          ALTER TABLE ${TC} ADD COLUMN IF NOT EXISTS destinos_admin JSONB;
           ALTER TABLE ${TC} ADD COLUMN IF NOT EXISTS regras JSONB;
           ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS condicao JSONB;
           ALTER TABLE ${TF} ADD COLUMN IF NOT EXISTS cria_opcoes BOOLEAN NOT NULL DEFAULT FALSE;
@@ -145,7 +157,7 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'sta
     if (cache && Date.now() - cache.em < 30000) return cache.dados;
     await garantirConfig();
     const [col, cam] = await Promise.all([
-      query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados, destinos, regras FROM ${TC} WHERE ativo ORDER BY ordem, chave`),
+      query(`SELECT chave, nome, cor, ordem, so_admin, arquivada, sistema, campos_importados, destinos, destinos_admin, regras FROM ${TC} WHERE ativo ORDER BY ordem, chave`),
       query(`SELECT id, coluna, tipo, rotulo, descricao, obrigatorio, COALESCE(opcoes, '[]'::jsonb) AS opcoes, lista, ordem, pipefy_campo, condicao, cria_opcoes, cores, visivel, marcas
                FROM ${TF} WHERE ativo ORDER BY coluna, ordem, id`),
     ]);
@@ -200,7 +212,9 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'sta
         }
         return { chave, nome, cor: COR_OK.test(c?.cor || '') ? c.cor : '#64748b', ordem: (i + 1) * 10,
           so_admin: c?.so_admin !== false, arquivada: !!c?.arquivada, campos_importados: !!c?.campos_importados,
-          destinos: Array.isArray(c?.destinos) ? c.destinos.map(String) : null, regras: limparRegras(c?.regras, limpar) };
+          destinos: Array.isArray(c?.destinos) ? c.destinos.map(String) : null,
+          // Lista só do admin: null = igual aos colaboradores, 'todas', ou as marcadas
+          destinos_admin: c?.destinos_admin === 'todas' ? 'todas' : Array.isArray(c?.destinos_admin) ? c.destinos_admin.map(String) : null, regras: limparRegras(c?.regras, limpar) };
       });
       const nomes = lista.map(c => c.nome.toLowerCase());
       const repetido = nomes.find((n, i) => nomes.indexOf(n) !== i);
@@ -209,6 +223,7 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'sta
       // Para onde cada coluna pode mover (null = todas): chaves novas trocadas, só colunas que ficam
       const chavesFinais = new Set(lista.map(c => c.chave));
       for (const c of lista) if (c.destinos) c.destinos = [...new Set(c.destinos.map(k => novasChaves[k] || k))].filter(k => k !== c.chave && chavesFinais.has(k));
+for (const c of lista) if (Array.isArray(c.destinos_admin)) c.destinos_admin = [...new Set(c.destinos_admin.map(k => novasChaves[k] || k))].filter(k => k !== c.chave && chavesFinais.has(k));
       // Regras para mover: chaves novas trocadas, só destinos que ficam
       for (const c of lista) if (c.regras) { c.regras = c.regras.map(r => ({ ...r, destino: novasChaves[r.destino] || r.destino })).filter(r => r.destino !== c.chave && chavesFinais.has(r.destino)); if (!c.regras.length) c.regras = null; }
 
@@ -262,12 +277,13 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'sta
       await transaction(async (cli) => {
         for (const c of lista) {
           await cli.query(
-            `INSERT INTO ${TC} (chave, nome, cor, ordem, so_admin, arquivada, campos_importados, destinos, regras, sistema, ativo, atualizado_em)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,FALSE,TRUE,NOW())
+            `INSERT INTO ${TC} (chave, nome, cor, ordem, so_admin, arquivada, campos_importados, destinos, regras, sistema, ativo, atualizado_em, destinos_admin)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,FALSE,TRUE,NOW(),$10::jsonb)
              ON CONFLICT (chave) DO UPDATE SET nome = EXCLUDED.nome, cor = EXCLUDED.cor, ordem = EXCLUDED.ordem,
-               so_admin = EXCLUDED.so_admin, arquivada = EXCLUDED.arquivada, destinos = EXCLUDED.destinos, regras = EXCLUDED.regras,
+               so_admin = EXCLUDED.so_admin, arquivada = EXCLUDED.arquivada, destinos = EXCLUDED.destinos, destinos_admin = EXCLUDED.destinos_admin, regras = EXCLUDED.regras,
                campos_importados = ${TC}.campos_importados OR EXCLUDED.campos_importados, ativo = TRUE, atualizado_em = NOW()`,
-            [c.chave, c.nome, c.cor, c.ordem, c.so_admin, c.arquivada, c.campos_importados, c.destinos ? JSON.stringify(c.destinos) : null, c.regras ? JSON.stringify(c.regras) : null]);
+            [c.chave, c.nome, c.cor, c.ordem, c.so_admin, c.arquivada, c.campos_importados, c.destinos ? JSON.stringify(c.destinos) : null, c.regras ? JSON.stringify(c.regras) : null,
+             c.destinos_admin != null ? JSON.stringify(c.destinos_admin) : null]);
         }
         if (saem.length) await cli.query(`UPDATE ${TC} SET ativo = FALSE, atualizado_em = NOW() WHERE chave = ANY($1::text[])`, [saem.map(c => c.chave)]);
         // Campos que saíram ficam desativados (os valores já preenchidos nos cards continuam guardados)

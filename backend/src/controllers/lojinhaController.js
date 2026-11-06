@@ -16,7 +16,7 @@ import { query } from '../config/db.js';
 import { copiarParaTelas } from './quadrosController.js';
 import { buscarClienteZen, excluirPedidoVendaZen, consultarOrdemSeparacao, documentosZen } from '../integrations/zenPedidoVenda.js';
 import { PIPEFY_ATIVO } from '../integrations/pipefyService.js';
-import { criarConfigQuadro, exigidoAgora, bloqueioRegra } from './configQuadro.js';
+import { criarConfigQuadro, exigidoAgora, bloqueioRegra, destinosPara } from './configQuadro.js';
 
 // ── Colunas e campos da Lojinha (Configurar, só admin) ─────
 // Colunas do sistema (status gravados no pedido). Entrada também mostra 'liberacao'.
@@ -505,7 +505,7 @@ export async function moverPedidoLojinha(req, res, next) {
       return res.status(403).json({ erro: 'Mover pedidos nessa coluna não está liberado para você (Admin > Usuários).' });
     }
     // Para onde a coluna atual pode mover (Configurar → "Pode mover cards desta coluna para")
-    const destinosCol = col.get(atual)?.destinos;
+    const destinosCol = destinosPara(col.get(atual), req.usuario);
     if (Array.isArray(destinosCol) && !destinosCol.includes(status)) {
       return res.status(400).json({ erro: `De "${col.get(atual)?.nome || atual}" não dá para mover para "${col.get(status)?.nome || status}". Ajuste em Configurar.` });
     }

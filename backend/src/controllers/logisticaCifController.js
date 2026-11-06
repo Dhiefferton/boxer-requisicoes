@@ -9,7 +9,7 @@
 // ============================================================
 import { query } from '../config/db.js';
 import { copiarParaTelas } from './quadrosController.js';
-import { criarConfigQuadro, exigidoAgora, bloqueioRegra } from './configQuadro.js';
+import { criarConfigQuadro, exigidoAgora, bloqueioRegra, destinosPara } from './configQuadro.js';
 import { garantirEstrutura, registrarMovLoj, atualizarDocumentosZen } from './lojinhaController.js';
 import { temBotao } from '../middlewares/telas.js';
 import { liberarFaturamento, ehLiberacaoFaturamento } from './faturamentoLojinha.js';
@@ -91,7 +91,7 @@ export async function moverPedidoCif(req, res, next) {
     if (!temBotao(req.usuario, 'cif_mover_admin') && (col.get(status)?.so_admin || col.get(atual)?.so_admin)) {
       return res.status(403).json({ erro: 'Mover pedidos nessa coluna não está liberado para você (Admin > Usuários).' });
     }
-    const destinosCol = col.get(atual)?.destinos;
+    const destinosCol = destinosPara(col.get(atual), req.usuario);
     if (Array.isArray(destinosCol) && !destinosCol.includes(status)) {
       return res.status(400).json({ erro: `De "${col.get(atual)?.nome || atual}" não dá para mover para "${col.get(status)?.nome || status}". Ajuste em Configurar.` });
     }
