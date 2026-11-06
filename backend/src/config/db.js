@@ -14,9 +14,12 @@ const pool = new Pool(
         ssl: process.env.NODE_ENV === 'production'
           ? { rejectUnauthorized: false }
           : false,
-        max: 10,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        // Vercel (serverless): várias instâncias abertas ao mesmo tempo, cada uma com o seu pool.
+        // Poucas conexões por instância e devolvidas rápido, para não estourar o limite do banco (200).
+        max: 3,
+        idleTimeoutMillis: 3000,
+        connectionTimeoutMillis: 8000,
+        allowExitOnIdle: true,
       }
     : {
         host:     process.env.DB_HOST     || 'localhost',
