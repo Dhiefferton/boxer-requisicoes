@@ -24,6 +24,7 @@ import { NomeTela } from '../../utils/nomesTelas';
 import ArquivosNota from '../../components/operador/ArquivosNota';
 
 import { destinosDoPerfil } from '../../utils/perfilAtual';
+import { useAutoSalvar, StatusAutoSalvar } from '../../utils/autoSalvar';
 const hojeISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const soDigitos = (v) => String(v || '').replace(/\D/g, '');
 
@@ -505,7 +506,6 @@ function CardAbertoLojinha({ p, cfg, colunas, botoes = {}, carregar, onFechar, o
   const fasesPassadas = useFasesPassadas(() => lojinhaService.movimentos({ pedido: p.id }), `${p.id}-${p.status}`,
     colunaDo(p), colunas.map(c => c.status), p.criado_em || p.created_at, (s) => (s === 'liberacao' ? 'entrada' : s));
   const [rascunho, setRascunho] = useState({});
-  const [salvando, setSalvando] = useState(false);
   const [movendo, setMovendo] = useState(false);
   const [erro, setErro] = useState('');
   const atual = colunaDo(p);
@@ -535,15 +535,11 @@ function CardAbertoLojinha({ p, cfg, colunas, botoes = {}, carregar, onFechar, o
     return () => window.removeEventListener('keydown', k);
   });
 
-  async function salvar() {
-    if (!sujo) return true;
-    setSalvando(true); setErro('');
-    try { await lojinhaService.editarCampos(p.id, rascunho); setRascunho({}); setEditandoFase(new Set()); await carregar(); return true; }
-    catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar os campos.'); return false; }
-    finally { setSalvando(false); }
-  }
-  function fechar() {
-    if (sujo && !confirm('Há campos alterados sem salvar. Fechar mesmo assim?')) return;
+  // Grava sozinho (sem Salvar/Descartar)
+  const auto = useAutoSalvar(rascunho, setRascunho, async (r) => { await lojinhaService.editarCampos(p.id, r); await carregar(); });
+  const salvar = () => auto.salvarAgora();
+  async function fechar() {
+    if (sujo && !(await salvar())) return;
     onFechar();
   }
   async function mover(status) {
@@ -581,7 +577,7 @@ function CardAbertoLojinha({ p, cfg, colunas, botoes = {}, carregar, onFechar, o
   const botao = (c, principal = false) => {
     const antes = colunas.indexOf(c) < idx;
     return (
-      <button key={c.status} onClick={() => mover(c.status)} disabled={movendo || salvando || !podeMover}
+      <button key={c.status} onClick={() => mover(c.status)} disabled={movendo || !podeMover}
         className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold text-left transition-colors disabled:opacity-40 ${
           principal ? 'border-[var(--c-destaque)]/50 bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25'
           : 'border-[var(--c-borda)] text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40'}`}>
@@ -634,16 +630,7 @@ function CardAbertoLojinha({ p, cfg, colunas, botoes = {}, carregar, onFechar, o
             {camposAtuais.length
               ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, true))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.{botoes.configurar ? ' Crie em Configurar (engrenagem da coluna).' : ''}</p>}
-            {sujo && (
-              <div className="sticky bottom-0 flex items-center justify-end gap-2 py-2 bg-[var(--c-fundo)] border-t border-[var(--c-borda)]">
-                <p className="flex-1 text-[11px] text-amber-400">Alterações não salvas.</p>
-                <button onClick={() => setRascunho({})} className="px-3 py-1.5 rounded-lg text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">Descartar</button>
-                <button onClick={salvar} disabled={salvando}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
-                  {salvando ? <Spinner size={12} /> : <Check size={12} />} Salvar
-                </button>
-              </div>
-            )}
+            <StatusAutoSalvar salvando={auto.salvando} pendente={sujo} salvoEm={auto.salvoEm} erro={auto.erroSalvar} />
           </div>
 
           {/* Direita: mover e ações */}

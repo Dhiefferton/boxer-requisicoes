@@ -355,7 +355,8 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
         if (faltando.length) avisoCampos = `\n\nCampos obrigatórios desta fase ainda vazios: ${faltando.slice(0, 12).map(c => c.rotulo).join(', ')}${faltando.length > 12 ? '…' : ''}`;
       } catch { /* sem estrutura: segue */ }
     }
-    if (!confirm(`Mover este card para "${destino?.titulo || status}"?${avisoZen}${avisoCampos}`)) return;
+    // Move direto, sem perguntar. Só confirma quando o movimento cria pedido/nota no Zen.
+    if (avisoZen && !confirm(`Mover este card para "${destino?.titulo || status}"?${avisoZen}${avisoCampos}`)) return;
     setMovendoPara(true);
     try { await pedidosOrcamentoService.mover(pedido.id, status); onAtualizar(); }
     catch (err) { alert(err.response?.data?.erro || 'Erro ao mover.'); onAtualizar(); }

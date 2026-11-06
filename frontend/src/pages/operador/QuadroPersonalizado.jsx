@@ -25,6 +25,7 @@ import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, 
 import { Pilula, Coluna } from './LojinhaBoxer';
 
 import { destinosDoPerfil } from '../../utils/perfilAtual';
+import { useAutoSalvar, StatusAutoSalvar } from '../../utils/autoSalvar';
 const fmtData = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
 const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
@@ -264,7 +265,6 @@ function CardEspelhoOrcamento({ p, qid, nomeQuadro, movendo, podeArrastar, onAbr
 function FaseQuadro({ children, ...props }) { return children(useFaseQuadro(props)); }
 function useFaseQuadro({ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, nomeQuadro, carregar, onHistorico }) {
   const [rascunho, setRascunho] = useState({});
-  const [salvando, setSalvando] = useState(false);
   const [movendo, setMovendo] = useState(false);
   const [erro, setErro] = useState('');
   const [abertas, setAbertas] = useState(() => new Set());
@@ -281,13 +281,9 @@ function useFaseQuadro({ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, 
   const camposAtuais = camposDe(atual).filter(c => visivelAgora(c, valorDe));
   const preenchido = (f) => valorLista(valorDe(f.id)).length || (f.tipo === 'attachment' && temFoto(f.id));
 
-  async function salvar() {
-    if (!sujo) return true;
-    setSalvando(true); setErro('');
-    try { await svc.editarCampos(p.id, rascunho); setRascunho({}); await carregar?.(); return true; }
-    catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar.'); return false; }
-    finally { setSalvando(false); }
-  }
+  // Grava sozinho (sem Salvar/Descartar)
+  const auto = useAutoSalvar(rascunho, setRascunho, async (r) => { await svc.editarCampos(p.id, r); await carregar?.(); });
+  const salvar = () => auto.salvarAgora();
   async function mover(status) {
     if (sujo && !(await salvar())) return;
     setMovendo(true); setErro('');
@@ -317,7 +313,7 @@ function useFaseQuadro({ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, 
   const botao = (c, principal = false) => {
     const antes = colunas.indexOf(c) < idx;
     return (
-      <button key={c.status} onClick={() => mover(c.status)} disabled={movendo || salvando}
+      <button key={c.status} onClick={() => mover(c.status)} disabled={movendo}
         className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold text-left transition-colors disabled:opacity-40 ${
           principal ? 'border-[var(--c-destaque)]/50 bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25'
           : 'border-[var(--c-borda)] text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40'}`}>
@@ -340,16 +336,7 @@ function useFaseQuadro({ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, 
           {camposAtuais.length
             ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, podeEditar))}</dl>
             : <p className="text-xs text-[var(--c-suave)] py-2">Esta coluna de {nomeQuadro} não tem campos para preencher.</p>}
-          {sujo && (
-            <div className="sticky bottom-0 flex items-center justify-end gap-2 py-2 bg-[var(--c-fundo)] border-t border-[var(--c-borda)]">
-              <p className="flex-1 text-[11px] text-amber-400">Alterações não salvas.</p>
-              <button onClick={() => setRascunho({})} className="px-3 py-1.5 rounded-lg text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">Descartar</button>
-              <button onClick={salvar} disabled={salvando}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
-                {salvando ? <Spinner size={12} /> : <Check size={12} />} Salvar
-              </button>
-            </div>
-          )}
+          <StatusAutoSalvar salvando={auto.salvando} pendente={sujo} salvoEm={auto.salvoEm} erro={auto.erroSalvar} />
         </div>
       </FotosProvider>
     ),
@@ -469,7 +456,6 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
   const [abertas, setAbertas] = useState(() => new Set(['inicio']));
   const [rascunho, setRascunho] = useState({});
   const [titulo, setTitulo] = useState(null);
-  const [salvando, setSalvando] = useState(false);
   const [movendo, setMovendo] = useState(false);
   const [erro, setErro] = useState('');
   const fasesPassadas = useFasesPassadas(() => svc.movimentos({ pedido: p.id }), `${p.id}-${p.status}`,
@@ -501,17 +487,20 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
     return () => window.removeEventListener('keydown', k);
   });
 
-  async function salvar() {
-    if (!sujo) return true;
-    setSalvando(true); setErro('');
-    try {
-      await svc.editarCampos(p.id, rascunho, titulo !== null ? titulo : undefined);
-      setRascunho({}); setTitulo(null); setEditandoFase(new Set()); await carregar(); return true;
-    } catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar.'); return false; }
-    finally { setSalvando(false); }
+  // Campos gravam sozinhos (sem Salvar/Descartar); o título grava ao sair do campo ou com Enter
+  const auto = useAutoSalvar(rascunho, setRascunho, async (r) => { await svc.editarCampos(p.id, r); await carregar(); });
+  async function salvarTitulo() {
+    if (titulo === null) return true;
+    if (!titulo.trim() || titulo.trim() === p.titulo) { setTitulo(null); return true; }
+    try { await svc.editarCampos(p.id, {}, titulo); await carregar(); setTitulo(null); return true; }
+    catch (e) { setErro(e.response?.data?.erro || 'Erro ao salvar o título.'); return false; }
   }
-  function fechar() {
-    if (sujo && !confirm('Há alterações sem salvar. Fechar mesmo assim?')) return;
+  async function salvar() {
+    if (!(await salvarTitulo())) return false;
+    return auto.salvarAgora();
+  }
+  async function fechar() {
+    if (sujo && !(await salvar())) return;
     onFechar();
   }
   async function mover(status) {
@@ -549,7 +538,7 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
   const botao = (c, principal = false) => {
     const antes = colunas.indexOf(c) < idx;
     return (
-      <button key={c.status} onClick={() => mover(c.status)} disabled={movendo || salvando}
+      <button key={c.status} onClick={() => mover(c.status)} disabled={movendo}
         className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold text-left transition-colors disabled:opacity-40 ${
           principal ? 'border-[var(--c-destaque)]/50 bg-[var(--c-destaque)]/15 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25'
           : 'border-[var(--c-borda)] text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40'}`}>
@@ -569,7 +558,8 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
           <div className="lg:w-[38%] lg:min-w-[340px] lg:overflow-y-auto border-b lg:border-b-0 lg:border-r border-[var(--c-borda)] p-5 space-y-4">
             <div className="pb-3 border-b border-[var(--c-borda)] space-y-1">
               {titulo !== null
-                ? <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)}
+                ? <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)} onBlur={salvarTitulo}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); salvarTitulo(); } }}
                     className="w-full bg-[var(--c-fundo)] border border-[var(--c-destaque)] text-[var(--c-texto)] rounded-lg px-2 py-1 text-lg font-bold focus:outline-none" />
                 : <p className="text-lg font-bold text-[var(--c-texto)] break-words flex items-start gap-2">
                     <span className="flex-1">{p.titulo}</span>
@@ -605,16 +595,7 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
             {camposAtuais.length
               ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, podeEditar))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.{admin ? ' Crie em Configurar (engrenagem da coluna).' : ''}</p>}
-            {sujo && (
-              <div className="sticky bottom-0 flex items-center justify-end gap-2 py-2 bg-[var(--c-fundo)] border-t border-[var(--c-borda)]">
-                <p className="flex-1 text-[11px] text-amber-400">Alterações não salvas.</p>
-                <button onClick={() => { setRascunho({}); setTitulo(null); }} className="px-3 py-1.5 rounded-lg text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">Descartar</button>
-                <button onClick={salvar} disabled={salvando}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
-                  {salvando ? <Spinner size={12} /> : <Check size={12} />} Salvar
-                </button>
-              </div>
-            )}
+            <StatusAutoSalvar salvando={auto.salvando} pendente={Object.keys(rascunho).length > 0} salvoEm={auto.salvoEm} erro={auto.erroSalvar} />
           </div>
 
           {/* Direita: mover, histórico, excluir */}
