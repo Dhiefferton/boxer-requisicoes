@@ -98,6 +98,17 @@ export default function CardAbertoOrcamento({
     .filter(g => g.campos.length || (botoes.editar_fase && String(g.faseId).startsWith('bx-') && g.todos.length))
     .sort((a, b) => ordemCol(a.chave) - ordemCol(b.chave));
   const camposAtuais = atuais.flatMap(g => g.campos).filter(c => visivelAgora(c, valorDe));
+  // NS de entrada também no Formulário inicial (vem do campo "NS…" de qualquer fase ou do dado do card)
+  const ehCampoNS = (c) => /^ns\b/i.test(String(c?.rotulo || '').trim());
+  const campoNS = grupos.flatMap(g => g.campos).find(c => ehCampoNS(c) && temValor(c.id));
+  const nsValor = campoNS ? valorLista(valorDe(campoNS.id)).join(', ') : String(pedido.ns_entrada || '').trim();
+  const inicioJaTemNS = anteriores.some(g => g.chave === 'inicio' && g.campos.some(ehCampoNS));
+  const linhaNS = nsValor && !inicioJaTemNS ? (
+    <div>
+      <dt className="text-[11px] text-[var(--c-suave)]">NS de entrada</dt>
+      <dd className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{nsValor}</dd>
+    </div>
+  ) : null;
 
   // Grava sozinho (sem Salvar/Descartar)
   const auto = useAutoSalvar(rascunho, setRascunho, async (r) => {
@@ -196,8 +207,15 @@ export default function CardAbertoOrcamento({
             {!fases && !erro && <div className="flex justify-center py-10"><Spinner className="text-[var(--c-destaque)]" /></div>}
             {fases && !anteriores.length && !pedido.pipefy_card_id && <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido nas fases anteriores.</p>}
             {/* Card vindo do Pipefy sem campos no Formulário inicial: a tratativa do SAC fica numa caixa própria */}
+            {/* Card criado aqui sem campos no Formulário inicial: mostra a NS numa caixa própria */}
+            {fases && !pedido.pipefy_card_id && linhaNS && !anteriores.some(g => g.chave === 'inicio') && (
+              <CaixaFase titulo="Formulário inicial" aberta={!fechadas.has('inicio-ns')} onAlternar={() => alternarFase('inicio-ns', !fechadas.has('inicio-ns'))}>
+                <dl>{linhaNS}</dl>
+              </CaixaFase>
+            )}
             {fases && pedido.pipefy_card_id && !anteriores.some(g => g.chave === 'inicio') && (
               <CaixaFase titulo="Formulário inicial" aberta={!fechadas.has('inicio-sac')} onAlternar={() => alternarFase('inicio-sac', !fechadas.has('inicio-sac'))}>
+                {linhaNS && <dl className="mb-3">{linhaNS}</dl>}
                 <TratativaSAC pedido={pedido} />
               </CaixaFase>
             )}
@@ -210,6 +228,7 @@ export default function CardAbertoOrcamento({
                   aberta={aberta} onAlternar={() => alternarFase(g.faseId, aberta)}
                   podeEditar={botoes.editar_fase} editando={g.editando}
                   onEditar={() => setEditandoFase(s => { const n = new Set(s); n.has(g.faseId) ? n.delete(g.faseId) : n.add(g.faseId); return n; })}>
+                  {g.chave === 'inicio' && linhaNS && <dl className="mb-3">{linhaNS}</dl>}
                   {g.chave === 'inicio' && <TratativaSAC pedido={pedido} />}
                   {g.campos.length
                     ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
