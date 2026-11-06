@@ -6,7 +6,7 @@
 // campos do botão Novo card. Tudo é editado aqui e gravado em "Salvar".
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { X, Plus, Settings, ChevronUp, ChevronDown, Trash2, Pencil, Check, GripVertical, Tag } from 'lucide-react';
+import { X, Plus, Settings, ChevronUp, ChevronDown, Trash2, Pencil, Check, GripVertical, Tag, Copy } from 'lucide-react';
 import { pedidosOrcamentoService, basesService } from '../../services/api';
 import { Spinner } from '../ui';
 
@@ -280,6 +280,15 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
     });
     mudou();
   }
+  // Duplicar: cópia com tudo que já foi configurado (tipo, opções, cores, etiquetas, condições…), logo abaixo do original
+  function duplicarCampo(uid) {
+    const orig = campos.find(c => c.uid === uid);
+    if (!orig) return;
+    const copia = { ...JSON.parse(JSON.stringify(orig)), uid: tempId(), id: undefined, pipefy_campo: null, rotulo: `${orig.rotulo} (cópia)` };
+    if (copia.tipo === 'conexao' && !copia.lista) copia.lista = LISTAS[0];
+    setCampos(l => { const i = l.findIndex(c => c.uid === uid); const n = [...l]; n.splice(i + 1, 0, copia); return n; });
+    setCampoSel(copia.uid); setNovaOpcao(''); mudou();
+  }
   function removerCampo(uid) {
     setCampos(l => l.filter(c => c.uid !== uid)); if (campoSel === uid) setCampoSel(null); mudou();
   }
@@ -470,6 +479,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                       </div>
                       <button onClick={e => { e.stopPropagation(); moverCampo(c.uid, -1); }} aria-label="Subir" className="p-1 rounded text-[var(--c-suave)] hover:text-[var(--c-texto)]"><ChevronUp size={14} /></button>
                       <button onClick={e => { e.stopPropagation(); moverCampo(c.uid, 1); }} aria-label="Descer" className="p-1 rounded text-[var(--c-suave)] hover:text-[var(--c-texto)]"><ChevronDown size={14} /></button>
+                      <button onClick={e => { e.stopPropagation(); duplicarCampo(c.uid); }} aria-label="Duplicar" title="Duplicar campo" className="p-1 rounded text-[var(--c-suave)] hover:text-[var(--c-texto)]"><Copy size={14} /></button>
                       <button onClick={e => { e.stopPropagation(); removerCampo(c.uid); }} aria-label="Remover" className="p-1 rounded text-[var(--c-suave)] hover:text-red-400"><Trash2 size={14} /></button>
                     </div>
                     <div className="mt-2 ml-9"><Previa campo={c} /></div>
