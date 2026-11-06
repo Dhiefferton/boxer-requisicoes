@@ -164,6 +164,7 @@ export const lojinhaService = {
 // Logística CIF (Enviar) — continuação da Lojinha
 export const cifService = {
   pedidos:     ()             => api.get('/logistica-cif/pedidos'),
+  importarEntrada: ()         => api.post('/logistica-cif/importar-entrada', {}, { timeout: 120000 }), // "Trazer do Pipefy" (Garantia)
   mover:       (id, status)   => api.post(`/logistica-cif/pedidos/${id}/mover`, { status }),
   editarCampos: (id, campos)  => api.post(`/logistica-cif/pedidos/${id}/campos`, { campos }),
   quadroConfig:       ()      => api.get('/logistica-cif/quadro-config', { timeout: 30000 }),
