@@ -11,7 +11,7 @@ import { query } from '../config/db.js';
 import { garantirQuadros, aplicarConfigNoQuadro, lerConfigDoQuadro } from './quadrosController.js';
 import { telasDoUsuario } from '../middlewares/telas.js';
 
-const DONO = (process.env.CONSTRUTOR_DONO || 'compras@boxersoldas.com.br').toLowerCase();
+const DONO = (process.env.CONSTRUTOR_DONO || 'admin@boxer.com.br').toLowerCase();
 const limpar = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 let estrutura = null;
