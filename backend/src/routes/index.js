@@ -20,7 +20,8 @@ import {
 import {
   listarUsuarios, criarUsuario, atualizarUsuario, excluirUsuario,
   listarDepartamentos, criarDepartamento, atualizarDepartamento,
-  buscarUsuarios
+  buscarUsuarios,
+  listarPedidosSenha, resolverPedidoSenha,
 } from '../controllers/usuariosController.js';
 import {
   listarEntradas, registrarEntrada, excluirEntrada
@@ -116,6 +117,8 @@ router.get('/admin/pipefy-uso/chamadas', autenticar, exigirPerfil('admin'), asyn
   } catch (err) { next(err); }
 });
 router.get('/admin/usuarios',        autenticar, exigirPerfil('admin'), listarUsuarios);
+router.get('/admin/senha-pedidos',    autenticar, exigirPerfil('admin'), listarPedidosSenha);
+router.post('/admin/senha-pedidos/:id/resolver', autenticar, exigirPerfil('admin'), resolverPedidoSenha);
 router.post('/admin/usuarios',       autenticar, exigirPerfil('admin'), criarUsuario);
 router.patch('/admin/usuarios/:id',  autenticar, exigirPerfil('admin'), atualizarUsuario);
 router.delete('/admin/usuarios/:id', autenticar, exigirPerfil('admin'), excluirUsuario);
