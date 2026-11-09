@@ -92,6 +92,7 @@ export const BOTOES = [
   { chave: 'loj_editar_fase',   tela: 'lojinha',    nome: 'Editar fases anteriores' },
   { chave: 'loj_mover_admin',   tela: 'lojinha',    nome: 'Mover para colunas só do admin' },
   { chave: 'loj_configurar',    tela: 'lojinha',    nome: 'Configurar colunas e campos (engrenagem)' },
+  { chave: 'cif_trazer_pipefy', tela: 'logistica_cif', nome: 'Trazer do Pipefy' },
   { chave: 'cif_movimentacao',  tela: 'logistica_cif', nome: 'Movimentação (relatório)' },
   { chave: 'cif_editar_fase',   tela: 'logistica_cif', nome: 'Editar fases anteriores' },
   { chave: 'cif_mover_admin',   tela: 'logistica_cif', nome: 'Mover para colunas só do admin' },
