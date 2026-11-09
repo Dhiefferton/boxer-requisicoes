@@ -102,6 +102,7 @@ export const BOTOES = [
   { chave: 'loj_configurar',    tela: 'lojinha', rotas: [['POST', /^\/lojinha\/quadro-config$/],
     ['POST', /^\/bases(\/importar-pipefy)?$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
   // Logística CIF (Enviar)
+  { chave: 'cif_trazer_pipefy', tela: 'logistica_cif', rotas: [['POST', /^\/logistica-cif\/importar-entrada$/]] },
   { chave: 'cif_movimentacao',  tela: 'logistica_cif', rotas: [] },
   { chave: 'cif_editar_fase',   tela: 'logistica_cif', rotas: [] },
   { chave: 'cif_mover_admin',   tela: 'logistica_cif', rotas: [] }, // checado no moverPedidoCif
