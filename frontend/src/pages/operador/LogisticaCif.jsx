@@ -172,7 +172,7 @@ export default function LogisticaCif() {
               className="w-56 sm:w-64 pl-8 pr-7 py-2 rounded-xl text-xs bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
             {busca && <button onClick={() => setBusca('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
           </div>
-          {usuario?.perfil === 'admin' && (
+          {botoes.trazer_pipefy && (
             <button onClick={trazerDoPipefy} disabled={trazendo} title="Lê só a fase Entrada do pipe Garantia no Pipefy (não altera nada lá) e cria aqui os cards que faltam"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] hover:border-[var(--c-destaque)] transition-colors disabled:opacity-50">
               {trazendo ? <RefreshCw size={13} className="animate-spin" /> : <DownloadCloud size={13} />} {trazendo ? 'Trazendo…' : 'Trazer do Pipefy'}
