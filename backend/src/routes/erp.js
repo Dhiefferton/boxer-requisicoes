@@ -135,6 +135,19 @@ router.get('/debug-construtor', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// DIAGNÓSTICO (só leitura) — Esqueci minha senha: tabela, e-mail configurado, domínios dos e-mails dos usuários
+router.get('/debug-esqueci-senha', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const { emailConfigurado } = await import('../integrations/email.js');
+    const tabela = (await query(`SELECT to_regclass('senha_reset_tokens') AS t`)).rows[0]?.t || null;
+    const dominios = (await query(`SELECT split_part(LOWER(email), '@', 2) AS dominio, COUNT(*)::int AS n FROM usuarios WHERE ativo GROUP BY 1 ORDER BY 2 DESC`)).rows;
+    const pedidos = tabela ? (await query(`SELECT COUNT(*)::int AS n, MAX(created_at) AS ultimo FROM senha_reset_tokens`)).rows[0] : null;
+    const logs = (await query(`SELECT acao, COUNT(*)::int AS n, MAX(created_at) AS ultimo FROM logs WHERE acao LIKE 'SENHA_%' GROUP BY acao`).catch(e => ({ rows: [{ erro: e.message }] }))).rows;
+    res.json({ email_configurado: emailConfigurado(), remetente_definido: !!process.env.EMAIL_FROM, app_url: process.env.APP_URL || null, tabela, pedidos, dominios, logs });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // DIAGNÓSTICO — status dos pedidos (Lojinha e Orçamentos) x fase atual dos
 // cards no Pipefy. Só leitura. Ex: GET /api/erp/debug-fases?secret=...
 router.get('/debug-fases', async (req, res) => {
