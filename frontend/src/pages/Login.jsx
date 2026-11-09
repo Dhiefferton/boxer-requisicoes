@@ -77,8 +77,8 @@ export default function Login() {
     if (!email) { setErro('Digite seu nome e selecione seu usuário para receber o link de recuperação.'); return; }
     setEnviandoReset(true);
     try {
-      await authService.esqueciSenha(email);
-      setAviso(`Enviamos um link para ${mascararEmail(email)}. Abra seu e-mail e clique em "Criar nova senha" (vale por 30 minutos).`);
+      const { data } = await authService.esqueciSenha(email);
+      setAviso(data?.mensagem || `Enviamos um link para ${mascararEmail(email)}. Abra seu e-mail e clique em "Criar nova senha" (vale por 30 minutos).`);
     } catch (err) {
       setErro(err.response?.data?.erro || 'Não foi possível enviar o e-mail. Tente novamente.');
     } finally {
