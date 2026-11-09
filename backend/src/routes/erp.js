@@ -139,13 +139,13 @@ router.get('/debug-construtor', async (req, res) => {
 router.get('/debug-esqueci-senha', async (req, res) => {
   if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
   try {
-    const { emailConfigurado } = await import('../integrations/email.js');
+    const { emailConfigurado, brevoConfigurado } = await import('../integrations/email.js');
     const tabela = (await query(`SELECT to_regclass('senha_reset_tokens') AS t`)).rows[0]?.t || null;
     const dominios = (await query(`SELECT split_part(LOWER(email), '@', 2) AS dominio, COUNT(*)::int AS n FROM usuarios WHERE ativo GROUP BY 1 ORDER BY 2 DESC`)).rows;
     const pedidos = tabela ? (await query(`SELECT COUNT(*)::int AS n, MAX(created_at) AS ultimo FROM senha_reset_tokens`)).rows[0] : null;
     const logs = (await query(`SELECT acao, COUNT(*)::int AS n, MAX(created_at) AS ultimo FROM logs WHERE acao LIKE 'SENHA_%' GROUP BY acao`).catch(e => ({ rows: [{ erro: e.message }] }))).rows;
     const ultimos = (await query(`SELECT id, created_at, split_part(COALESCE(enviado_para, ''), '@', 2) AS dominio_destino, erro_envio FROM senha_reset_tokens ORDER BY id DESC LIMIT 5`).catch(e => ({ rows: [{ erro: e.message }] }))).rows;
-    res.json({ email_configurado: emailConfigurado(), remetente_definido: !!process.env.EMAIL_FROM, remetente_dominio: String(process.env.EMAIL_FROM || '').split('@')[1]?.replace(/>.*/, '') || null, app_url: process.env.APP_URL || null, tabela, pedidos, ultimos, dominios, logs });
+    res.json({ email_configurado: emailConfigurado(), brevo_configurado: brevoConfigurado(), brevo_remetente_dominio: String(process.env.BREVO_FROM || '').split('@')[1]?.replace(/>.*/, '') || null, remetente_definido: !!process.env.EMAIL_FROM, remetente_dominio: String(process.env.EMAIL_FROM || '').split('@')[1]?.replace(/>.*/, '') || null, app_url: process.env.APP_URL || null, tabela, pedidos, ultimos, dominios, logs });
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
