@@ -12,6 +12,45 @@ export function emailConfigurado() {
   return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 }
 
+// Brevo (só para a recuperação de senha, por enquanto)
+//   BREVO_API_KEY  chave da API (Brevo › SMTP & API › API Keys)
+//   BREVO_FROM     remetente já verificado no Brevo, ex.: "Boxer Operações <compras@boxersoldas.com.br>"
+export function brevoConfigurado() {
+  return Boolean(process.env.BREVO_API_KEY && process.env.BREVO_FROM);
+}
+/** Recuperação de senha: Brevo se estiver configurado; senão o Resend. */
+export function recuperacaoConfigurada() {
+  return brevoConfigurado() || emailConfigurado();
+}
+function remetente(txt) {
+  const m = String(txt || '').match(/^\s*(.*?)\s*<\s*([^>]+)\s*>\s*$/);
+  return m ? { name: m[1].replace(/^"|"$/g, '') || undefined, email: m[2].trim() } : { email: String(txt || '').trim() };
+}
+async function enviarBrevo({ para, assunto, html, texto, responderPara }) {
+  const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'api-key': process.env.BREVO_API_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({
+      sender: remetente(process.env.BREVO_FROM),
+      to: [{ email: para }],
+      subject: assunto,
+      htmlContent: html,
+      textContent: texto,
+      ...(responderPara ? { replyTo: { email: responderPara } } : {}),
+    }),
+  });
+  if (!resp.ok) {
+    const corpo = await resp.text().catch(() => '');
+    throw new Error(`Brevo ${resp.status}: ${corpo.slice(0, 300)}`);
+  }
+  return resp.json().catch(() => ({}));
+}
+/** Envio da recuperação de senha (Brevo primeiro, se configurado). */
+export async function enviarEmailRecuperacao(dados) {
+  if (brevoConfigurado()) return enviarBrevo(dados);
+  return enviarEmail(dados);
+}
+
 export async function enviarEmail({ para, assunto, html, texto, responderPara }) {
   if (!emailConfigurado()) {
     throw new Error('Envio de e-mail não configurado (RESEND_API_KEY / EMAIL_FROM).');
