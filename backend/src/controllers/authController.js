@@ -168,50 +168,84 @@ async function buscarTokenValido(token) {
   return r.rows[0] || null;
 }
 
+// E-mail de recuperação (o de login de muitos usuários não é uma caixa de verdade) e pedidos ao admin
+const DOMINIOS_REAIS = ['boxersoldas.com.br'];
+let estruturaRecuperacao = null;
+export function garantirRecuperacao() {
+  if (!estruturaRecuperacao) {
+    estruturaRecuperacao = (async () => {
+      await query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS email_recuperacao VARCHAR(255)`);
+      await query(`ALTER TABLE senha_reset_tokens ADD COLUMN IF NOT EXISTS enviado_para TEXT`);
+      await query(`ALTER TABLE senha_reset_tokens ADD COLUMN IF NOT EXISTS erro_envio TEXT`);
+      await query(`CREATE TABLE IF NOT EXISTS senha_pedidos (
+        id SERIAL PRIMARY KEY,
+        usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+        motivo TEXT,
+        criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        atendido_em TIMESTAMPTZ,
+        atendido_por_nome TEXT
+      )`);
+    })().catch(e => { estruturaRecuperacao = null; throw e; });
+  }
+  return estruturaRecuperacao;
+}
+const emailValido = (e) => z.string().email().safeParse(String(e || '').trim()).success;
+const mascarar = (e) => { const [u, d] = String(e).split('@'); return d ? `${u.slice(0, 2)}${'*'.repeat(Math.max(u.length - 2, 3))}@${d}` : e; };
+/** Para onde vai o link: e-mail de recuperação; senão o de login, se for de um domínio real. */
+function destinoRecuperacao(u) {
+  if (emailValido(u.email_recuperacao)) return String(u.email_recuperacao).trim().toLowerCase();
+  const dom = String(u.email || '').split('@')[1]?.toLowerCase();
+  return DOMINIOS_REAIS.includes(dom) ? String(u.email).toLowerCase() : null;
+}
+async function pedidoAoAdmin(usuarioId, motivo) {
+  const ja = await query(`SELECT id FROM senha_pedidos WHERE usuario_id = $1 AND atendido_em IS NULL`, [usuarioId]);
+  if (!ja.rows[0]) await query(`INSERT INTO senha_pedidos (usuario_id, motivo) VALUES ($1, $2)`, [usuarioId, motivo]);
+}
+
 // POST /auth/esqueci-senha { email }
-// Resposta sempre igual (não revela se o e-mail existe).
+// Manda o link para o e-mail de recuperação; sem e-mail real, o pedido vai para o administrador.
 export async function esqueciSenha(req, res, next) {
-  const respostaPadrao = { mensagem: 'Se o e-mail estiver cadastrado, você vai receber um link para criar uma nova senha.' };
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
-    if (!z.string().email().safeParse(email).success) {
-      return res.status(400).json({ erro: 'Selecione seu usuário antes de pedir a recuperação.' });
-    }
-    if (!emailConfigurado()) {
-      return res.status(503).json({ erro: 'Recuperação por e-mail ainda não está configurada. Fale com o administrador.' });
-    }
-
-    const r = await query(`SELECT id, nome, email FROM usuarios WHERE email = $1 AND ativo = TRUE`, [email]);
+    if (!emailValido(email)) return res.status(400).json({ erro: 'Selecione seu usuário antes de pedir a recuperação.' });
+    await garantirRecuperacao();
+    const r = await query(`SELECT id, nome, email, email_recuperacao FROM usuarios WHERE email = $1 AND ativo = TRUE`, [email]);
     const usuario = r.rows[0];
-    if (!usuario) return res.json(respostaPadrao);
+    const respostaAdmin = { modo: 'admin', mensagem: 'Pedido enviado ao administrador. Ele vai te passar uma senha provisória; no primeiro acesso você cria a sua.' };
+    if (!usuario) return res.json(respostaAdmin); // não revela se o usuário existe
+
+    const destino = destinoRecuperacao(usuario);
+    if (!destino || !emailConfigurado()) {
+      await pedidoAoAdmin(usuario.id, !destino ? 'Sem e-mail de recuperação cadastrado' : 'Envio de e-mail não configurado');
+      return res.json(respostaAdmin);
+    }
 
     const recentes = await query(
-      `SELECT COUNT(*)::int AS n FROM senha_reset_tokens WHERE usuario_id = $1 AND created_at > NOW() - INTERVAL '1 hour'`,
-      [usuario.id]
-    );
-    if (recentes.rows[0].n >= RESET_MAX_POR_HORA) return res.json(respostaPadrao);
+      `SELECT COUNT(*)::int AS n FROM senha_reset_tokens WHERE usuario_id = $1 AND created_at > NOW() - INTERVAL '1 hour'`, [usuario.id]);
+    if (recentes.rows[0].n >= RESET_MAX_POR_HORA) {
+      return res.json({ modo: 'email', para: mascarar(destino), mensagem: `Já enviamos links recentemente para ${mascarar(destino)}. Confira sua caixa de entrada (e o spam).` });
+    }
 
     const token = crypto.randomBytes(32).toString('hex');
-    await query(
-      `INSERT INTO senha_reset_tokens (usuario_id, token_hash, expira_em, ip)
-       VALUES ($1, $2, NOW() + ($3 || ' minutes')::interval, $4)`,
-      [usuario.id, hashToken(token), String(RESET_MINUTOS), req.ip || null]
-    );
+    const ins = await query(
+      `INSERT INTO senha_reset_tokens (usuario_id, token_hash, expira_em, ip, enviado_para)
+       VALUES ($1, $2, NOW() + ($3 || ' minutes')::interval, $4, $5) RETURNING id`,
+      [usuario.id, hashToken(token), String(RESET_MINUTOS), req.ip || null, destino]);
 
     const link = `${APP_URL()}/redefinir-senha?token=${token}`;
     const { assunto, html, texto } = emailRecuperacaoSenha({ nome: usuario.nome, link, minutos: RESET_MINUTOS });
     try {
-      await enviarEmail({ para: usuario.email, assunto, html, texto });
+      await enviarEmail({ para: destino, assunto, html, texto });
     } catch (err) {
       console.error('[esqueciSenha] falha ao enviar e-mail:', err.message);
-      return res.status(502).json({ erro: 'Não foi possível enviar o e-mail agora. Tente novamente em alguns minutos.' });
+      await query(`UPDATE senha_reset_tokens SET erro_envio = $2 WHERE id = $1`, [ins.rows[0].id, String(err.message || err).slice(0, 1000)]).catch(() => {});
+      await pedidoAoAdmin(usuario.id, 'O e-mail de recuperação não saiu');
+      return res.json({ modo: 'admin', mensagem: 'Não consegui enviar o e-mail agora, então o pedido foi para o administrador. Ele vai te passar uma senha provisória.' });
     }
 
-    await query(
-      `INSERT INTO logs (usuario_id, acao, payload_json, ip) VALUES ($1, 'SENHA_RESET_SOLICITADO', $2, $3)`,
-      [usuario.id, JSON.stringify({ email: usuario.email }), req.ip]
-    );
-    res.json(respostaPadrao);
+    await query(`INSERT INTO logs (usuario_id, acao, payload_json, ip) VALUES ($1, 'SENHA_RESET_SOLICITADO', $2, $3)`,
+      [usuario.id, JSON.stringify({ para: destino }), req.ip]).catch(() => {});
+    res.json({ modo: 'email', para: mascarar(destino), mensagem: `Enviamos um link para ${mascarar(destino)}. Abra o e-mail e clique em "Criar nova senha" (vale por ${RESET_MINUTOS} minutos).` });
   } catch (err) {
     next(err);
   }

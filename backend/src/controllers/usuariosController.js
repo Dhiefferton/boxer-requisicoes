@@ -4,7 +4,9 @@
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { query } from '../config/db.js';
+import crypto from 'crypto';
 import { garantirColunaTelas, normalizarTelas, limparCacheTelas } from '../middlewares/telas.js';
+import { garantirRecuperacao } from './authController.js';
 
 const criarUsuarioSchema = z.object({
   nome:            z.string().min(2, 'Nome muito curto'),
@@ -19,14 +21,14 @@ const criarUsuarioSchema = z.object({
 export async function listarUsuarios(req, res, next) {
   try {
     const sql = (comTelas) => query(
-      `SELECT u.id, u.nome, u.email, u.perfil, u.ativo, u.trocar_senha, u.ultimo_acesso, u.created_at${comTelas ? ', u.telas' : ''},
+      `SELECT u.id, u.nome, u.email, u.perfil, u.ativo, u.trocar_senha, u.ultimo_acesso, u.created_at${comTelas ? ', u.telas, u.email_recuperacao' : ''},
               d.id AS departamento_id, d.nome AS departamento_nome, d.codigo AS departamento_codigo
        FROM usuarios u
        LEFT JOIN departamentos d ON d.id = u.departamento_id
        ORDER BY u.nome`
     );
     // Coluna "telas" criada na primeira vez; se não der, a lista sai sem ela
-    const result = await garantirColunaTelas().then(() => sql(true)).catch(() => sql(false));
+    const result = await garantirColunaTelas().then(() => garantirRecuperacao().catch(() => {})).then(() => sql(true)).catch(() => sql(false));
     res.json({ usuarios: result.rows });
   } catch (err) {
     next(err);
@@ -62,6 +64,14 @@ export async function atualizarUsuario(req, res, next) {
       const telas = normalizarTelas(req.body.telas);
       await query(`UPDATE usuarios SET telas = $1::jsonb, updated_at = NOW() WHERE id = $2`, [telas ? JSON.stringify(telas) : null, parseInt(id)]);
       limparCacheTelas(id);
+    }
+
+    // E-mail para recuperação de senha (vazio = apaga)
+    if (req.body?.email_recuperacao !== undefined) {
+      const er = String(req.body.email_recuperacao || '').trim().toLowerCase();
+      if (er && !z.string().email().safeParse(er).success) return res.status(400).json({ erro: 'E-mail de recuperação inválido.' });
+      await garantirRecuperacao();
+      await query(`UPDATE usuarios SET email_recuperacao = $1, updated_at = NOW() WHERE id = $2`, [er || null, parseInt(id)]);
     }
 
     let senha_hash = null;
@@ -200,4 +210,33 @@ export async function buscarUsuarios(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+
+// ── Pedidos de nova senha (quem clicou "Esqueci minha senha" sem e-mail real) ──
+// GET /admin/senha-pedidos
+export async function listarPedidosSenha(req, res, next) {
+  try {
+    await garantirRecuperacao();
+    const r = await query(`SELECT p.id, p.usuario_id, p.motivo, p.criado_em, u.nome, u.email
+      FROM senha_pedidos p JOIN usuarios u ON u.id = p.usuario_id WHERE p.atendido_em IS NULL ORDER BY p.criado_em`);
+    res.json({ pedidos: r.rows });
+  } catch (err) { next(err); }
+}
+// POST /admin/senha-pedidos/:id/resolver { descartar? } — gera senha provisória (troca no primeiro acesso)
+export async function resolverPedidoSenha(req, res, next) {
+  try {
+    await garantirRecuperacao();
+    const p = (await query(`SELECT * FROM senha_pedidos WHERE id = $1 AND atendido_em IS NULL`, [parseInt(req.params.id) || 0])).rows[0];
+    if (!p) return res.status(404).json({ erro: 'Pedido não encontrado (ou já atendido).' });
+    let senha = null;
+    if (!req.body?.descartar) {
+      const letras = 'abcdefghjkmnpqrstuvwxyz', nums = '23456789';
+      const pega = (c) => c[crypto.randomInt(c.length)];
+      senha = `${pega(letras).toUpperCase()}${Array.from({ length: 4 }, () => pega(letras)).join('')}${Array.from({ length: 3 }, () => pega(nums)).join('')}`;
+      await query(`UPDATE usuarios SET senha_hash = $1, trocar_senha = TRUE, updated_at = NOW() WHERE id = $2`, [await bcrypt.hash(senha, 10), p.usuario_id]);
+    }
+    await query(`UPDATE senha_pedidos SET atendido_em = NOW(), atendido_por_nome = $2 WHERE usuario_id = $1 AND atendido_em IS NULL`, [p.usuario_id, req.usuario?.nome || null]);
+    res.json({ senha });
+  } catch (err) { next(err); }
 }
