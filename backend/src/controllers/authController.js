@@ -9,7 +9,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { query } from '../config/db.js';
-import { enviarEmail, emailConfigurado, emailRecuperacaoSenha } from '../integrations/email.js';
+import { enviarEmailRecuperacao, recuperacaoConfigurada, emailRecuperacaoSenha } from '../integrations/email.js';
 
 const loginSchema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -215,7 +215,7 @@ export async function esqueciSenha(req, res, next) {
     if (!usuario) return res.json(respostaAdmin); // não revela se o usuário existe
 
     const destino = destinoRecuperacao(usuario);
-    if (!destino || !emailConfigurado()) {
+    if (!destino || !recuperacaoConfigurada()) {
       await pedidoAoAdmin(usuario.id, !destino ? 'Sem e-mail de recuperação cadastrado' : 'Envio de e-mail não configurado');
       return res.json(respostaAdmin);
     }
@@ -235,7 +235,7 @@ export async function esqueciSenha(req, res, next) {
     const link = `${APP_URL()}/redefinir-senha?token=${token}`;
     const { assunto, html, texto } = emailRecuperacaoSenha({ nome: usuario.nome, link, minutos: RESET_MINUTOS });
     try {
-      await enviarEmail({ para: destino, assunto, html, texto });
+      await enviarEmailRecuperacao({ para: destino, assunto, html, texto });
     } catch (err) {
       console.error('[esqueciSenha] falha ao enviar e-mail:', err.message);
       await query(`UPDATE senha_reset_tokens SET erro_envio = $2 WHERE id = $1`, [ins.rows[0].id, String(err.message || err).slice(0, 1000)]).catch(() => {});
