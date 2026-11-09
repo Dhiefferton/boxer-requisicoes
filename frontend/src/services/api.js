@@ -201,6 +201,8 @@ export const adminService = {
   atualizarUsuario: (id, d)  => api.patch(`/admin/usuarios/${id}`, d),
   excluirUsuario:   (id)     => api.delete(`/admin/usuarios/${id}`),
   departamentos:    ()       => api.get('/admin/departamentos'),
+  pedidosSenha:     ()       => api.get('/admin/senha-pedidos'),
+  resolverPedidoSenha: (id, descartar = false) => api.post(`/admin/senha-pedidos/${id}/resolver`, { descartar }),
   pipefyUso:        ()       => api.get('/admin/pipefy-uso'),
   pipefyChamadas:   (params) => api.get('/admin/pipefy-uso/chamadas', { params, timeout: 30000 }),
 };
