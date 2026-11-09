@@ -958,11 +958,12 @@ function NovoPedido({ config, onFechar, onSalvo }) {
               {erroCliente && <p className="text-xs text-red-400 mt-1">{erroCliente}</p>}
             </div>
           </div>
-          {!faturada && <label className="flex items-center gap-2.5 w-fit cursor-pointer select-none text-sm text-[var(--c-texto)]">
+          <label className="flex items-center gap-2.5 w-fit cursor-pointer select-none text-sm text-[var(--c-texto)]">
             <input type="checkbox" checked={autorizado} onChange={e => setAutorizado(e.target.checked)}
               className="w-4 h-4 accent-[var(--c-destaque)]" />
             Cliente é <b>Assistente Autorizado</b>
-          </label>}
+            {faturada && <span className="text-[11px] text-[var(--c-suave)]">({DESC_AUTORIZADO}% de desconto em cada peça)</span>}
+          </label>
 
           {/* 2. Data / 4. Nº pedido / 5. Vendedora */}
           <div className="grid gap-4 sm:grid-cols-2">
