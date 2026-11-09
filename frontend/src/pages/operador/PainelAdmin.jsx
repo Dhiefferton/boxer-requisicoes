@@ -100,7 +100,19 @@ function AbaUsuarios() {
   const [editando,      setEditando]      = useState(null);
   const [busca,         setBusca]         = useState('');
   const [form,          setForm]          = useState({ nome: '', email: '', senha: '', perfil: 'colaborador', departamento_id: '' });
-  const [formEdit,      setFormEdit]      = useState({ email: '', senha: '', perfil: 'colaborador', departamento_id: '', telas: {} });
+  const [formEdit,      setFormEdit]      = useState({ email: '', email_recuperacao: '', senha: '', perfil: 'colaborador', departamento_id: '', telas: {} });
+  // Pedidos de nova senha ("Esqueci minha senha" de quem não tem e-mail real)
+  const [pedidosSenha,  setPedidosSenha]  = useState([]);
+  const [senhaGerada,   setSenhaGerada]   = useState(null); // { nome, senha }
+  const carregarPedidosSenha = () => adminService.pedidosSenha().then(r => setPedidosSenha(r.data.pedidos || [])).catch(() => {});
+  useEffect(() => { carregarPedidosSenha(); }, []);
+  async function resolverPedido(p, descartar = false) {
+    try {
+      const { data } = await adminService.resolverPedidoSenha(p.id, descartar);
+      if (data.senha) setSenhaGerada({ nome: p.nome, senha: data.senha });
+      carregarPedidosSenha();
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao atender o pedido.'); }
+  }
   const [erro,          setErro]          = useState('');
   const [erroEdit,      setErroEdit]      = useState('');
   const [salvando,      setSalvando]      = useState(false);
@@ -142,6 +154,7 @@ function AbaUsuarios() {
     try {
       const payload = {};
       if (formEdit.email)  payload.email  = formEdit.email;
+      payload.email_recuperacao = formEdit.email_recuperacao || '';
       if (formEdit.senha)  payload.senha  = formEdit.senha;
       if (formEdit.perfil) payload.perfil = formEdit.perfil;
       if (formEdit.departamento_id !== undefined) payload.departamento_id = formEdit.departamento_id ? parseInt(formEdit.departamento_id) : null;
@@ -167,7 +180,7 @@ function AbaUsuarios() {
 
   function abrirEdicao(u) {
     setEditando(u);
-    setFormEdit({ email: u.email, senha: '', perfil: u.perfil, departamento_id: u.departamento_id || '', telas: { ...(u.telas || {}) } });
+    setFormEdit({ email: u.email, email_recuperacao: u.email_recuperacao || '', senha: '', perfil: u.perfil, departamento_id: u.departamento_id || '', telas: { ...(u.telas || {}) } });
     setErroEdit('');
   }
 
@@ -191,6 +204,29 @@ function AbaUsuarios() {
 
   return (
     <div className="space-y-4">
+      {(pedidosSenha.length > 0 || senhaGerada) && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+          <p className="text-sm font-semibold text-[var(--c-texto)]">Pedidos de nova senha {pedidosSenha.length > 0 && `(${pedidosSenha.length})`}</p>
+          {senhaGerada && (
+            <div className="rounded-lg bg-green-500/10 border border-green-500/30 p-2.5 text-sm text-[var(--c-texto)] flex items-center gap-2 flex-wrap">
+              <span>Senha provisória de <b>{senhaGerada.nome}</b>:</span>
+              <span className="font-mono font-bold text-base select-all">{senhaGerada.senha}</span>
+              <span className="text-xs text-[var(--c-suave)]">Passe para o colaborador. No primeiro acesso ele cria a senha dele.</span>
+              <button onClick={() => setSenhaGerada(null)} className="ml-auto text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">fechar</button>
+            </div>
+          )}
+          {pedidosSenha.map(p => (
+            <div key={p.id} className="flex items-center gap-2 flex-wrap text-sm">
+              <span className="font-medium text-[var(--c-texto)]">{p.nome}</span>
+              <span className="text-xs text-[var(--c-suave)]">{p.email} · {new Date(p.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}{p.motivo ? ` · ${p.motivo}` : ''}</span>
+              <span className="ml-auto flex gap-2">
+                <button onClick={() => resolverPedido(p)} className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white">Gerar senha provisória</button>
+                <button onClick={() => resolverPedido(p, true)} className="px-2.5 py-1 rounded-lg text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)]">Descartar</button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="text-sm text-[var(--c-suave)]">{usuariosFiltrados.length} de {usuarios.length} usuário(s)</p>
         <div className="flex gap-2">
@@ -251,6 +287,11 @@ function AbaUsuarios() {
               <div>
                 <label className="text-xs text-[var(--c-suave)] mb-1 block">E-mail</label>
                 <input value={formEdit.email} onChange={e => setFormEdit(f => ({...f, email: e.target.value}))} placeholder="novo@email.com" className={inputClass} type="email" />
+              </div>
+              <div>
+                <label className="text-xs text-[var(--c-suave)] mb-1 block">E-mail para recuperação de senha</label>
+                <input value={formEdit.email_recuperacao} onChange={e => setFormEdit(f => ({...f, email_recuperacao: e.target.value}))} placeholder="e-mail real do colaborador" className={inputClass} type="email" />
+                <p className="text-[10px] text-[var(--c-suave)] mt-1">É para onde vai o link do "Esqueci minha senha". Sem ele, o pedido chega aqui para o admin.</p>
               </div>
               <div>
                 <label className="text-xs text-[var(--c-suave)] mb-1 block">Nova senha (deixe em branco para manter)</label>
