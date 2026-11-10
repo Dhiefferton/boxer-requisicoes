@@ -294,19 +294,39 @@ export async function importarRegistros(req, res, next) {
     if (!b) return res.status(404).json({ erro: 'Database não encontrada.' });
     const linhas = Array.isArray(req.body?.linhas) ? req.body.linhas.slice(0, 2000) : [];
     let novos = 0, atualizados = 0, ignorados = 0;
+    // Prepara tudo em memória; repetida na própria planilha vale a última
+    const porChave = new Map();
     for (const l of linhas) {
       const descricao = limpar(l?.descricao, 300);
       const valor = b.com_valor ? lerValor(l?.valor ?? 0) : 0;
       if (descricao.length < 2 || !Number.isFinite(valor) || valor < 0) { ignorados++; continue; }
-      const dados = limparDados(l?.dados, b.colunas);
-      const ja = (await query(`SELECT id, dados FROM bx_base_registros WHERE base_id = $1 AND ativo AND LOWER(descricao) = LOWER($2)`, [b.id, descricao])).rows[0];
-      if (ja) {
-        await query(`UPDATE bx_base_registros SET valor = $2, dados = $3::jsonb, atualizado_em = NOW() WHERE id = $1`, [ja.id, valor, JSON.stringify({ ...(ja.dados || {}), ...dados })]);
-        atualizados++;
-      } else {
-        await query(`INSERT INTO bx_base_registros (base_id, descricao, valor, criado_por_nome, dados) VALUES ($1,$2,$3,$4,$5::jsonb)`,
-          [b.id, descricao, valor, req.usuario?.nome || null, JSON.stringify(dados)]);
-        novos++;
+      porChave.set(descricao.toLowerCase(), { descricao, valor, dados: limparDados(l?.dados, b.colunas) });
+    }
+    const itens = [...porChave.values()];
+    if (itens.length) {
+      const ja = (await query(
+        `SELECT id, dados, LOWER(descricao) AS k FROM bx_base_registros WHERE base_id = $1 AND ativo AND LOWER(descricao) = ANY($2::text[])`,
+        [b.id, [...porChave.keys()]])).rows;
+      const existentes = new Map(ja.map(r => [r.k, r]));
+      const upd = [], ins = [];
+      for (const it of itens) {
+        const e = existentes.get(it.descricao.toLowerCase());
+        if (e) upd.push({ id: e.id, valor: it.valor, dados: { ...(e.dados || {}), ...it.dados } });
+        else ins.push(it);
+      }
+      if (upd.length) {
+        await query(
+          `UPDATE bx_base_registros r SET valor = t.valor, dados = t.dados::jsonb, atualizado_em = NOW()
+             FROM unnest($1::int[], $2::numeric[], $3::text[]) AS t(id, valor, dados) WHERE r.id = t.id`,
+          [upd.map(u => u.id), upd.map(u => u.valor), upd.map(u => JSON.stringify(u.dados))]);
+        atualizados = upd.length;
+      }
+      if (ins.length) {
+        await query(
+          `INSERT INTO bx_base_registros (base_id, descricao, valor, criado_por_nome, dados)
+           SELECT $1, t.d, t.v, $2, t.x::jsonb FROM unnest($3::text[], $4::numeric[], $5::text[]) AS t(d, v, x)`,
+          [b.id, req.usuario?.nome || null, ins.map(i => i.descricao), ins.map(i => i.valor), ins.map(i => JSON.stringify(i.dados))]);
+        novos = ins.length;
       }
     }
     res.json({ novos, atualizados, ignorados });
