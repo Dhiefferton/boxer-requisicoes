@@ -528,6 +528,26 @@ function SeletorRegistroCartoes({ campo, valor, onChange, textoSimples = false }
   );
 }
 
+// Gatilho dos campos de escolha: "+ Criar ou escolher registro" ou o valor escolhido com Trocar / X
+function GatilhoEscolha({ atual, onAbrir, onLimpar }) {
+  if (!atual) {
+    return (
+      <button type="button" onClick={onAbrir} className="flex items-center gap-1.5 text-xs font-semibold text-[var(--c-destaque)] hover:underline">
+        <Plus size={13} /> Criar ou escolher registro
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] px-3 py-2">
+      <p className="flex-1 text-sm font-semibold text-[var(--c-texto)] break-words">{atual}</p>
+      <button type="button" onClick={onAbrir} className="text-[11px] font-semibold text-[var(--c-destaque)] hover:underline">Trocar</button>
+      <button type="button" onClick={onLimpar} title="Tirar" className="text-[var(--c-suave)] hover:text-red-400"><X size={13} /></button>
+    </div>
+  );
+}
+const CLASSE_BUSCA = 'w-full pl-9 pr-8 py-2 rounded-full text-sm bg-[var(--c-fundo)] border-2 border-[var(--c-destaque)] text-[var(--c-texto)] focus:outline-none';
+const classeCartaoOpcao = (sel) => `w-full flex items-center gap-1.5 text-left rounded-lg border-l-4 border-[var(--c-destaque)]/40 bg-[var(--c-fundo)] border-y border-r border-y-[var(--c-borda)] border-r-[var(--c-borda)] px-3 py-2.5 text-sm font-bold hover:shadow-md hover:border-l-[var(--c-destaque)] ${sel ? 'ring-1 ring-[var(--c-destaque)] text-[var(--c-destaque)]' : 'text-[var(--c-texto)]'}`;
+
 // ── Modelo máquina: lista do B-Requisições, com busca e "Criar registro" ──
 let modelosCache = null;
 function carregarModelos(forcar = false) {
@@ -566,12 +586,9 @@ function SeletorModelo({ valor, onChange }) {
   }
   return (
     <div className="relative">
-      <button type="button" onClick={() => setAberto(a => !a)}
-        className="w-full text-left bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1.5 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]">
-        {atual || <span className="text-[var(--c-suave)]">Selecione o modelo…</span>}
-      </button>
+      <GatilhoEscolha atual={atual} onAbrir={() => setAberto(a => !a)} onLimpar={() => escolher('')} />
       {aberto && (
-        <div className="absolute z-20 mt-1 w-full bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl shadow-xl p-2 space-y-2">
+        <div className="absolute z-20 mt-1 w-full min-w-[260px] bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl shadow-2xl p-3 space-y-2">
           {/* Criar registro: campo próprio, separado da pesquisa */}
           {novo === null ? (
             <button type="button" onClick={() => { setNovo(''); setErro(''); }}
@@ -597,10 +614,10 @@ function SeletorModelo({ valor, onChange }) {
             </div>
           )}
           <div className="relative">
-            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
             <input autoFocus={novo === null} value={busca} onChange={e => setBusca(e.target.value)} placeholder="Pesquisar modelo"
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (filtrados.length === 1) escolher(filtrados[0]); } if (e.key === 'Escape') setAberto(false); }}
-              className="w-full pl-7 pr-7 py-1.5 rounded-lg text-xs bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]" />
+              className={CLASSE_BUSCA} />
             {busca && <button type="button" onClick={() => setBusca('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
           </div>
           {erro && <p className="text-[11px] text-red-400">{erro}</p>}
@@ -609,7 +626,7 @@ function SeletorModelo({ valor, onChange }) {
             {atual && <button type="button" onClick={() => escolher('')} className="w-full text-left px-2 py-1 rounded-lg text-[11px] text-[var(--c-suave)] hover:bg-[var(--c-borda)]/40">Limpar seleção</button>}
             {filtrados.map(m => (
               <button key={m} type="button" onClick={() => escolher(m)}
-                className={`w-full flex items-center gap-1.5 text-left px-2 py-1.5 rounded-lg text-xs hover:bg-[var(--c-borda)]/40 ${m === atual ? 'text-[var(--c-destaque)] font-semibold' : 'text-[var(--c-texto)]'}`}>
+                className={classeCartaoOpcao(m === atual)}>
                 {m === atual && <Check size={12} />}{m}
               </button>
             ))}
@@ -701,13 +718,9 @@ function ListaBusca({ campo, valor, onChange }) {
   const inp = 'w-full py-1.5 rounded-lg text-xs bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]';
   return (
     <div ref={caixa} className="relative">
-      <button type="button" onClick={() => setAberto(a => !a)}
-        className="w-full flex items-center gap-2 text-left bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-lg px-2 py-1.5 text-xs text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]">
-        <span className="flex-1 truncate">{atual || <span className="text-[var(--c-suave)]">Selecione…</span>}</span>
-        <ChevronDown size={13} className="shrink-0 text-[var(--c-suave)]" />
-      </button>
+      <GatilhoEscolha atual={atual} onAbrir={() => setAberto(a => !a)} onLimpar={() => escolher('')} />
       {aberto && (
-        <div className="absolute z-30 mt-1 w-full bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-xl shadow-xl p-2 space-y-2">
+        <div className="absolute z-30 mt-1 w-full min-w-[260px] bg-[var(--c-superficie)] border border-[var(--c-borda)] rounded-2xl shadow-2xl p-3 space-y-2">
           {novo === null ? (
             <button type="button" onClick={() => { setNovo(busca); setErro(''); }}
               className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/10">
@@ -729,10 +742,10 @@ function ListaBusca({ campo, valor, onChange }) {
             </div>
           )}
           <div className="relative">
-            <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)]" />
             <input autoFocus={novo === null} value={busca} onChange={e => setBusca(e.target.value)} placeholder="Pesquisar"
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (filtradas.length === 1) escolher(filtradas[0]); } if (e.key === 'Escape') setAberto(false); }}
-              className={`${inp} pl-7 pr-7`} />
+              className={CLASSE_BUSCA} />
             {busca && <button type="button" onClick={() => setBusca('')} title="Limpar" className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={12} /></button>}
           </div>
           {erro && <p className="text-[11px] text-red-400">{erro}</p>}
@@ -740,7 +753,7 @@ function ListaBusca({ campo, valor, onChange }) {
             {atual && <button type="button" onClick={() => escolher('')} className="w-full text-left px-2 py-1 rounded-lg text-[11px] text-[var(--c-suave)] hover:bg-[var(--c-borda)]/40">Limpar seleção</button>}
             {filtradas.map(o => (
               <button key={o} type="button" onClick={() => escolher(o)}
-                className={`w-full flex items-center gap-1.5 text-left px-2 py-1.5 rounded-lg text-xs hover:bg-[var(--c-borda)]/40 ${o === atual ? 'text-[var(--c-destaque)] font-semibold' : 'text-[var(--c-texto)]'}`}>
+                className={classeCartaoOpcao(o === atual)}>
                 {o === atual && <Check size={12} />}{o}
               </button>
             ))}
