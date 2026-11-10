@@ -43,6 +43,21 @@ const valorPipefy = (p, ...ids) => {
   }
   return '';
 };
+// Número da remessa de conserto (campo "Remessa de conserto Nº" do formulário do Pipefy) — achado pelo nome do campo
+const remessaPipefy = (p) => {
+  const f = camposPipefy(p).find(x => /remessa/i.test(String(x.nome || '')) || /^remessa/i.test(String(x.id || '')));
+  return f ? (Array.isArray(f.texto) ? f.texto.join(', ') : f.texto) : '';
+};
+// Rótulo pequeno em cima e valor embaixo — mesmo visual das informações do card de Orçamento
+function InfoCard({ rotulo, valor }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[var(--c-suave)]">{rotulo}</dt>
+      <dd className="text-[var(--c-texto)] truncate" title={valor || ''}>{valor || '—'}</dd>
+    </div>
+  );
+}
+
 function CamposPipefy({ p }) {
   const lista = camposPipefy(p);
   if (!lista.length) return <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido no Pipefy.</p>;
@@ -257,6 +272,9 @@ function CardCif({ p, campos, movendo, onAbrir, onArrastar, onFimArraste }) {
         <>
           <p className="text-[13px] font-semibold text-[var(--c-texto)] leading-snug">{p.cliente_nome}</p>
           {valorPipefy(p, 'modelo_m_quina') && <p className="text-[11px] text-[var(--c-suave)]">{valorPipefy(p, 'modelo_m_quina')}</p>}
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+            <InfoCard rotulo="Remessa de conserto Nº" valor={remessaPipefy(p)} />
+          </dl>
           <div className="flex flex-wrap gap-1.5 pt-0.5">
             <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-sky-500/15 text-sky-400">Pipefy</span>
             {valorPipefy(p, 'situa_o_p') && <span className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--c-borda)] text-[var(--c-texto)]">{valorPipefy(p, 'situa_o_p')}</span>}
