@@ -156,7 +156,7 @@ export default function LogisticaCif() {
 
   return (
     <FotosProvider servico={SERVICO_FOTOS}>
-    <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-3.1rem)]">
+    <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-6.6rem)]">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-lg font-bold text-[var(--c-texto)]"><NomeTela chave="logistica_cif" padrao="Garantia - Boxer Soldas" /></h1>
@@ -190,7 +190,7 @@ export default function LogisticaCif() {
       {!pedidos ? (
         <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-2 xl:flex-1 xl:min-h-0">
+        <div className="flex gap-4 overflow-x-auto pb-2 xl:flex-1 xl:min-h-0 [&::-webkit-scrollbar]:h-2.5">
           {colunas.map(col => {
             const doStatus = lista.filter(p => p.cif_status === col.status && combinaBusca(p, busca));
             return (

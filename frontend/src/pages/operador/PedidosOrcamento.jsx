@@ -165,8 +165,8 @@ export default function PedidosOrcamento() {
   }, []);
 
   return (
-    // Tela grande (5 colunas): tela travada na altura da janela e cada coluna rola sozinha
-    <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-3.1rem)]">
+    // Tela grande (5 colunas): tela travada na altura da janela (menos a barra do topo 3.5rem + margens da página 3rem) — assim a barra de rolagem horizontal fica sempre à vista no rodapé e cada coluna rola sozinha
+    <div className="space-y-5 xl:space-y-0 xl:flex xl:flex-col xl:gap-5 xl:h-[calc(100dvh-6.6rem)]">
       {/* ── Cabeçalho ───────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -217,7 +217,7 @@ export default function PedidosOrcamento() {
       {loading ? (
         <div className="flex justify-center py-16"><Spinner className="text-[var(--c-destaque)]" /></div>
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-2 xl:flex-1 xl:min-h-0">
+        <div className="flex gap-4 overflow-x-auto pb-2 xl:flex-1 xl:min-h-0 [&::-webkit-scrollbar]:h-2.5">
           {COLUNAS.map(({ status, titulo, cor, badge, arquivada, admin, hex }) => {
             const itens = pedidos.filter(p => p.status === status && combinaBusca(p, busca));
             // Requisitar Peças fica sempre visível (é onde o card entra para criar o pedido no Zen)
