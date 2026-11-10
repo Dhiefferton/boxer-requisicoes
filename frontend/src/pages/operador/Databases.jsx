@@ -333,6 +333,73 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
     } catch (e) { setErro(erroDe(e, 'Erro ao exportar.')); }
     finally { setOcupado(''); }
   }
+  // Importar planilha (.xlsx, .xls, .csv): o sistema acha o cabeçalho, as colunas e os valores sozinho
+  async function importarArquivo(arquivo) {
+    if (!arquivo) return;
+    setErro(''); setAviso('');
+    setOcupado('Lendo a planilha…');
+    try {
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(await arquivo.arrayBuffer(), { type: 'array', cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const m = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: false })
+        .map(l => l.map(c => (typeof c === 'string' ? c.trim() : c)))
+        .filter(l => l.some(c => c !== ''));
+      if (!m.length) throw new Error('A planilha está vazia.');
+      const ehDesc = c => /^(descricao|titulo|nome|produto|item|peca)/.test(semAcento(String(c).trim()));
+      const ih = m.slice(0, 20).findIndex(l => l.some(ehDesc));
+      let iDesc, iValor = -1, mapa = [];
+      let corpo;
+      if (ih >= 0) {
+        const cab = m[ih].map(c => semAcento(String(c).trim()));
+        iDesc = cab.findIndex(c => /^(descricao|titulo|nome|produto|item|peca)/.test(c));
+        iValor = info.com_valor ? cab.findIndex(c => /^(valor|preco|vlr)/.test(c)) : -1;
+        corpo = m.slice(ih + 1);
+        // Toda coluna da planilha vira coluna da database (as que ainda não existem são criadas)
+        const rotulos = m[ih].map(c => String(c).trim());
+        const existentes = new Set(colunas.map(c => semAcento(c.nome)));
+        const criar = [];
+        rotulos.forEach((r, i) => {
+          const k = semAcento(r);
+          if (!r || i === iDesc || i === iValor || existentes.has(k) || criar.some(c => semAcento(c.nome) === k)) return;
+          criar.push({ nome: r.slice(0, 60), tipo: 'texto', opcoes: [] });
+        });
+        let cols = colunas;
+        if (criar.length) {
+          if (colunas.length + criar.length > 40) throw new Error(`A database aceita até 40 colunas (a planilha precisa de ${colunas.length + criar.length}).`);
+          setOcupado(`Criando ${criar.length} coluna(s)…`);
+          const { data } = await basesService.editarBase(base.id, { colunas: [...colunas, ...criar] });
+          setInfo(x => ({ ...x, ...data.base, com_valor: data.base.com_valor !== false }));
+          cols = data.base.colunas;
+        }
+        mapa = cols.map(c => ({ id: c.id, i: cab.indexOf(semAcento(c.nome)), nome: c.nome })).filter(x => x.i >= 0 && x.i !== iDesc && x.i !== iValor);
+      } else { // sem cabeçalho: 1ª coluna = descrição; a 1ª coluna numérica depois dela = valor
+        iDesc = 0; corpo = m;
+        if (info.com_valor) {
+          const amostra = m.slice(0, 20);
+          const n = Math.max(...amostra.map(l => l.length));
+          for (let j = 1; j < n; j++) {
+            if (amostra.every(l => l[j] === '' || typeof l[j] === 'number' || /^[\sR$\d.,-]+$/.test(String(l[j])))) { iValor = j; break; }
+          }
+        }
+      }
+      const dados = corpo.filter(l => String(l[iDesc] ?? '').trim()).map(l => ({
+        descricao: String(l[iDesc]).trim(),
+        valor: iValor >= 0 && l[iValor] !== '' ? l[iValor] : 0,
+        dados: Object.fromEntries(mapa.map(x => [x.id, textoCelula(l[x.i], x.nome)])),
+      }));
+      if (!dados.length) throw new Error('Não achei linhas com descrição na planilha.');
+      let tot = { novos: 0, atualizados: 0, ignorados: 0 };
+      for (let i = 0; i < dados.length; i += 1000) {
+        setOcupado(`Importando… ${Math.min(i + 1000, dados.length)} de ${dados.length}`);
+        const { data } = await basesService.importar(base.id, dados.slice(i, i + 1000));
+        tot = { novos: tot.novos + data.novos, atualizados: tot.atualizados + data.atualizados, ignorados: tot.ignorados + data.ignorados };
+      }
+      setAviso(`Planilha "${arquivo.name}": ${tot.novos} novo(s), ${tot.atualizados} atualizado(s)${tot.ignorados ? `, ${tot.ignorados} ignorado(s)` : ''}.`);
+      await carregar(busca, limite); onMudou(base.id);
+    } catch (e) { setErro(erroDe(e, e?.message || 'Erro ao importar a planilha.')); }
+    finally { setOcupado(''); }
+  }
   async function trazerPipefy() {
     if (!confirm('Atualizar esta database com a "Peças em Geral" do Pipefy (descrição e preço)? Só lê o Pipefy.')) return;
     setErro(''); setOcupado('Lendo o Pipefy…');
