@@ -239,6 +239,7 @@ async function enviarParaSeparacaoAuto(id, usuario) {
   if (!(pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0)) {
     return registrarErro('Reparo sem peças');
   }
+  await renovarClienteDoCard(pedido);
   try {
     // Card que já tinha pedido no Zen e voltou para Requisitar Peças (ex.: revertido para
     // incluir peça): reverte o pedido no Zen, acerta as peças com as do card e gera nova
@@ -560,7 +561,7 @@ export async function moverPedido(req, res, next) {
 // Antes de criar o pedido no Zen: relê o cadastro do cliente no Pipefy. A sincronização mantém
 // o cadastro lido na 1ª vez; se o CNPJ foi corrigido depois, o card ficava com o CNPJ velho.
 async function renovarClienteDoCard(pedido) {
-  if (!PIPEFY_ATIVO || !pedido?.pipefy_card_id) return;
+  if (!pedido?.pipefy_card_id) return;
   try {
     const campos = await renovarClienteDosCampos(pedido.pipefy_card_id, Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []);
     const d = extrairDadosOrcamento({ campos, titulo: null });
