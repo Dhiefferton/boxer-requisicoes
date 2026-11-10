@@ -55,6 +55,7 @@ import {
   listarNotas as listarNotasRecImp, detalharNota as detalharNotaRecImp, verFoto as verFotoRecImp,
   fotoCatalogo as fotoCatalogoRecImp, enviarFoto as enviarFotoRecImp, excluirFoto as excluirFotoRecImp,
   marcarItem as marcarItemRecImp, substituirFoto as substituirFotoRecImp,
+  adicionarExtra as adicionarExtraRecImp, excluirExtra as excluirExtraRecImp,
 } from '../controllers/recebimentoImportacaoController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { acessoConstrutor, statusConstrutor, ligarConstrutor, listarRascunhos, verRascunho, criarRascunho, salvarRascunho, excluirRascunho, aprovarRascunho, telasParaCopiar, copiarTela } from '../controllers/construtorController.js';
@@ -355,5 +356,7 @@ router.patch('/recebimento-importacao/fotos/:id',           ...recImp, substitui
 router.get('/recebimento-importacao/catalogo/:sku/foto',    ...recImp, fotoCatalogoRecImp);
 router.post('/recebimento-importacao/itens/:itemId/fotos',  ...recImp, enviarFotoRecImp);
 router.patch('/recebimento-importacao/itens/:itemId',       ...recImp, marcarItemRecImp);
+router.post('/recebimento-importacao/notas/:id/extras',     ...recImp, adicionarExtraRecImp);
+router.delete('/recebimento-importacao/extras/:id',         ...recImp, excluirExtraRecImp);
 
 export default router;

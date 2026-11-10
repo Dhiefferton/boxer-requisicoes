@@ -81,6 +81,17 @@ function garantirEstrutura() {
       );
       CREATE INDEX IF NOT EXISTS idx_rec_imp_fotos_item ON rec_imp_fotos (item_erp_id);
       CREATE INDEX IF NOT EXISTS idx_rec_imp_fotos_nf ON rec_imp_fotos (nf_erp_id);
+      CREATE TABLE IF NOT EXISTS rec_imp_extras (
+        id          SERIAL PRIMARY KEY,
+        nf_erp_id   BIGINT NOT NULL,
+        sku         VARCHAR(60),
+        descricao   VARCHAR(255),
+        quantidade  NUMERIC(14,3) NOT NULL DEFAULT 1,
+        observacao  TEXT,
+        usuario_id  INTEGER,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_rec_imp_extras_nf ON rec_imp_extras (nf_erp_id);
       CREATE TABLE IF NOT EXISTS catalogo_fotos (
         codigo        VARCHAR(60) PRIMARY KEY,
         imagem        BYTEA,
@@ -224,6 +235,10 @@ export async function detalharNota(req, res, next) {
       skus.length ? query(`SELECT UPPER(TRIM(codigo)) AS codigo FROM materiais WHERE UPPER(TRIM(codigo)) = ANY($1::text[]) AND ativo = TRUE`, [skus.map(s => s.toUpperCase())]) : { rows: [] },
       skus.length ? query(`SELECT UPPER(codigo) AS codigo, (imagem IS NOT NULL) AS tem, tentado_em FROM catalogo_fotos WHERE UPPER(codigo) = ANY($1::text[])`, [skus.map(s => s.toUpperCase())]) : { rows: [] },
     ]);
+    const extras = await query(
+      `SELECT e.id, e.sku, e.descricao, e.quantidade, e.observacao, e.created_at, u.nome AS usuario
+         FROM rec_imp_extras e LEFT JOIN usuarios u ON u.id = e.usuario_id
+        WHERE e.nf_erp_id = $1 ORDER BY e.id`, [id]);
     const sitPor = new Map(sit.rows.map(r => [String(r.item_erp_id), r]));
     const fotosPor = new Map();
     for (const f of fotos.rows) {
@@ -258,6 +273,7 @@ export async function detalharNota(req, res, next) {
         valor_total: nota.totalValue ?? null, total_itens: total,
       },
       itens,
+      extras: extras.rows,
       pmd_configurado: pmd,
     });
   } catch (err) { next(err); }
@@ -456,6 +472,37 @@ export async function marcarItem(req, res, next) {
          usuario_id = EXCLUDED.usuario_id, atualizado_em = NOW()`,
       [itemId, nfId, String(req.body?.sku || '').trim() || null, situacao,
        String(req.body?.observacao || '').trim() || null, req.usuario.id]);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+}
+
+// POST /recebimento-importacao/notas/:id/extras  { sku, descricao, quantidade, observacao }
+// Peça que chegou junto da carga mas NÃO está na nota fiscal.
+export async function adicionarExtra(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const nfId = Number(req.params.id);
+    const sku = String(req.body?.sku || '').trim().slice(0, 60);
+    const descricao = String(req.body?.descricao || '').trim().slice(0, 255);
+    const quantidade = Number(String(req.body?.quantidade ?? '').replace(',', '.'));
+    if (!nfId) return res.status(400).json({ erro: 'Nota inválida.' });
+    if (!sku && !descricao) return res.status(400).json({ erro: 'Informe o código ou a descrição da peça.' });
+    if (!Number.isFinite(quantidade) || quantidade <= 0) return res.status(400).json({ erro: 'Informe a quantidade.' });
+    const r = await query(
+      `INSERT INTO rec_imp_extras (nf_erp_id, sku, descricao, quantidade, observacao, usuario_id)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       RETURNING id, sku, descricao, quantidade, observacao, created_at`,
+      [nfId, sku || null, descricao || null, quantidade, String(req.body?.observacao || '').trim() || null, req.usuario.id]);
+    res.status(201).json({ ...r.rows[0], usuario: req.usuario.nome || null });
+  } catch (err) { next(err); }
+}
+
+// DELETE /recebimento-importacao/extras/:id
+export async function excluirExtra(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const r = await query(`DELETE FROM rec_imp_extras WHERE id = $1 RETURNING id`, [Number(req.params.id) || 0]);
+    if (!r.rowCount) return res.status(404).json({ erro: 'Peça não encontrada.' });
     res.json({ ok: true });
   } catch (err) { next(err); }
 }

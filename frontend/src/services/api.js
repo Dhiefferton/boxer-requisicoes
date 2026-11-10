@@ -122,6 +122,8 @@ export const recebimentoImportacaoService = {
   excluirFoto: (id)            => api.delete(`/recebimento-importacao/fotos/${id}`),
   substituirFoto: (id, dados)  => api.patch(`/recebimento-importacao/fotos/${id}`, dados, { timeout: 60000 }),
   marcarItem: (itemId, dados)  => api.patch(`/recebimento-importacao/itens/${itemId}`, dados),
+  adicionarExtra: (nfId, dados) => api.post(`/recebimento-importacao/notas/${nfId}/extras`, dados),
+  excluirExtra: (id)           => api.delete(`/recebimento-importacao/extras/${id}`),
 };
 
 // Bases de registros (descrição + valor) — campo "Registro"

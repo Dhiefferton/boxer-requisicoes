@@ -349,6 +349,73 @@ function FotoAmpliada({ url, onFechar, onSalvarGiro }) {
 // ============================================================
 // Página
 // ============================================================
+// Peças que vieram na carga mas não estão na nota fiscal
+function PecasForaDaNota({ nota, extras, onMudou }) {
+  const [sku, setSku] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [qtd, setQtd] = useState('1');
+  const [obs, setObs] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  async function adicionar(e) {
+    e.preventDefault();
+    setErro(''); setSalvando(true);
+    try {
+      const { data } = await recebimentoImportacaoService.adicionarExtra(nota.id, { sku, descricao, quantidade: qtd, observacao: obs });
+      onMudou([...extras, data]);
+      setSku(''); setDescricao(''); setQtd('1'); setObs('');
+    } catch (err) { setErro(err.response?.data?.erro || 'Não consegui salvar a peça.'); }
+    finally { setSalvando(false); }
+  }
+  async function remover(id) {
+    if (!window.confirm('Remover esta peça da lista?')) return;
+    try { await recebimentoImportacaoService.excluirExtra(id); onMudou(extras.filter(x => x.id !== id)); }
+    catch (err) { setErro(err.response?.data?.erro || 'Não consegui remover.'); }
+  }
+  const campo = 'rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] px-2.5 py-2 text-xs text-[var(--c-texto)] outline-none focus:border-[var(--c-destaque)]';
+
+  return (
+    <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-fundo)] p-3 space-y-3">
+      <div>
+        <h3 className="text-sm font-bold text-[var(--c-texto)] flex items-center gap-1.5"><Package size={14} /> Peças fora da nota</h3>
+        <p className="text-[11px] text-[var(--c-suave)]">Chegaram junto da carga, mas não estão na NF {nota.numero}.</p>
+      </div>
+      {extras.length > 0 && (
+        <ul className="space-y-1.5">
+          {extras.map(x => (
+            <li key={x.id} className="flex items-start gap-2 rounded-lg border border-[var(--c-borda)] bg-[var(--c-superficie)] p-2">
+              <div className="min-w-0 flex-1 text-xs">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {x.sku && <span className="font-mono font-bold text-[var(--c-destaque-claro)]">{x.sku}</span>}
+                  <span className="text-[var(--c-texto)]">{x.descricao}</span>
+                  <span className="font-semibold text-[var(--c-texto)]">× {fmtQtd(x.quantidade)}</span>
+                </div>
+                {x.observacao && <p className="text-[11px] text-[var(--c-suave)] whitespace-pre-line">{x.observacao}</p>}
+                <p className="text-[10px] text-[var(--c-suave)]">{x.usuario ? `por ${x.usuario} · ` : ''}{new Date(x.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</p>
+              </div>
+              <button type="button" onClick={() => remover(x.id)} title="Remover" className="p-1 text-[var(--c-suave)] hover:text-red-400"><Trash2 size={13} /></button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={adicionar} className="grid grid-cols-2 md:grid-cols-[8rem_1fr_5rem] gap-2">
+        <input className={campo} placeholder="Código (SKU)" value={sku} onChange={e => setSku(e.target.value)} />
+        <input className={`${campo} col-span-2 md:col-span-1 order-last md:order-none`} placeholder="Descrição da peça" value={descricao} onChange={e => setDescricao(e.target.value)} />
+        <input className={campo} type="number" min="0" step="any" inputMode="decimal" placeholder="Qtd" value={qtd} onChange={e => setQtd(e.target.value)} />
+        <input className={`${campo} col-span-2 md:col-span-3`} placeholder="Observação (opcional)" value={obs} onChange={e => setObs(e.target.value)} />
+        <div className="col-span-2 md:col-span-3 flex items-center gap-3">
+          <button type="submit" disabled={salvando || (!sku.trim() && !descricao.trim())}
+                  className="rounded-lg bg-[var(--c-destaque)] text-white text-xs font-semibold px-3 py-2 disabled:opacity-40 flex items-center gap-1.5">
+            {salvando ? <Spinner size={12} /> : <Check size={13} />} Adicionar peça
+          </button>
+          {erro && <span className="text-[11px] text-red-400">{erro}</span>}
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function RecebimentoImportacao() {
   const [notas, setNotas] = useState([]);
   const [verificando, setVerificando] = useState(0);
@@ -656,6 +723,9 @@ export default function RecebimentoImportacao() {
                       </tbody>
                     </table>
                   </div>
+
+                  <PecasForaDaNota nota={detalhe.nota} extras={detalhe.extras || []}
+                                   onMudou={(extras) => setDetalhe(d => ({ ...d, extras }))} />
                 </>
               )}
             </div>
