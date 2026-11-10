@@ -121,6 +121,22 @@ async function baseDeRegistro(rotuloRe, nomeBaseRe) {
   } catch { /* sem bases */ }
   return null;
 }
+// Liga o campo "Cliente" do Novo card da Tratativa à database de clientes (Cadastro Cliente), uma vez só,
+// quando ele ainda é texto simples (como foi semeado antes da database existir).
+async function ligarClienteSac(qid, TF) {
+  const chave = `upg_cliente_${qid}`;
+  try {
+    const base = (await query(`SELECT id FROM bx_bases WHERE ativo AND nome ~* '^(cadastro +)?clientes?$' ORDER BY id LIMIT 1`)).rows[0];
+    if (!base) return; // a database ainda não existe: tenta de novo na próxima abertura
+    const reserva = await query(`INSERT INTO bx_config (chave, valor) VALUES ($1, 'true'::jsonb) ON CONFLICT (chave) DO NOTHING RETURNING chave`, [chave]);
+    if (!reserva.rows[0]) return;
+    await query(`UPDATE ${TF} SET tipo = 'registro', lista = $1 WHERE ativo AND coluna = 'inicio' AND tipo = 'texto' AND rotulo ~* '^cliente'`, [String(base.id)]);
+    cfgDe(qid).invalidar();
+  } catch (e) {
+    console.error('⚠️ Cliente da Tratativa:', e.message);
+    await query(`DELETE FROM bx_config WHERE chave = $1`, [chave]).catch(() => {});
+  }
+}
 async function semearFormularioSac(qid) {
   try {
     const q = (await query(`SELECT id, nome FROM bx_quadros WHERE id = $1`, [qid])).rows[0];
@@ -128,10 +144,10 @@ async function semearFormularioSac(qid) {
     const chave = `seed_inicio_${qid}`;
     // "Reserva" a semeadura de forma atômica: só uma requisição por vez faz (evita campos duplicados)
     const reserva = await query(`INSERT INTO bx_config (chave, valor) VALUES ($1, 'true'::jsonb) ON CONFLICT (chave) DO NOTHING RETURNING chave`, [chave]);
-    if (!reserva.rows[0]) return;
     const c = cfgDe(qid);
     await c.ler(); // cria as tabelas do quadro, se ainda não existirem
     const TF = `qd${Number(qid)}_campos`;
+    if (!reserva.rows[0]) { await ligarClienteSac(qid, TF); return; }
     const ja = (await query(`SELECT COUNT(*)::int AS n FROM ${TF} WHERE ativo AND coluna = 'inicio'`)).rows[0].n;
     if (!ja) {
       const cliente = await baseDeRegistro('^cliente', 'cliente');
@@ -152,6 +168,7 @@ async function semearFormularioSac(qid) {
       }
       c.invalidar();
     }
+    await ligarClienteSac(qid, TF);
   } catch (e) {
     console.error('⚠️ Formulário inicial do SAC:', e.message);
     await query(`DELETE FROM bx_config WHERE chave = $1`, [`seed_inicio_${qid}`]).catch(() => {}); // tenta de novo na próxima abertura
