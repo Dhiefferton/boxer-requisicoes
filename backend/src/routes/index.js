@@ -62,6 +62,10 @@ import {
   listarPipes as listarPipesRel, executarRelatorio as executarRel, listarRelatorios as listarRel, verRelatorio as verRel,
   criarRelatorio as criarRel, salvarRelatorio as salvarRel, excluirRelatorio as excluirRel,
 } from '../controllers/relatoriosController.js';
+import {
+  opcoesIntegracao, listarChaves as listarChavesApi, criarChave as criarChaveApi, editarChave as editarChaveApi,
+  excluirChave as excluirChaveApi, acessosDaChave,
+} from '../controllers/apiPublicaController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { acessoConstrutor, statusConstrutor, ligarConstrutor, listarRascunhos, verRascunho, criarRascunho, salvarRascunho, excluirRascunho, aprovarRascunho, telasParaCopiar, copiarTela } from '../controllers/construtorController.js';
 import { relatorioUsoPipefy, chamadasPipefy } from '../integrations/usoPipefy.js';
@@ -350,6 +354,16 @@ router.get('/logistica-cif/quadro-config',        ...cif, verConfigCif);
 router.get('/logistica-cif/lojinha-config',       ...cif, verConfigLojinha);   // campos da Lojinha, só para mostrar no card
 router.post('/logistica-cif/quadro-config',       ...cif, exigirPerfil('admin'), salvarConfigCif);
 router.post('/logistica-cif/quadro-config/campos/:id/opcoes', ...cif, adicionarOpcaoCif);
+
+// ── Integrações: chaves da API pública (só admin)
+const soAdminReal = (req, res, next) => (req.usuario?.perfil === 'admin' ? next() : res.status(403).json({ erro: 'Só o administrador gerencia as chaves da API.' }));
+const apiAdmin = [autenticar, soAdminReal];
+router.get('/integracoes/opcoes',            ...apiAdmin, opcoesIntegracao);
+router.get('/integracoes/chaves',            ...apiAdmin, listarChavesApi);
+router.post('/integracoes/chaves',           ...apiAdmin, criarChaveApi);
+router.patch('/integracoes/chaves/:id',      ...apiAdmin, editarChaveApi);
+router.delete('/integracoes/chaves/:id',     ...apiAdmin, excluirChaveApi);
+router.get('/integracoes/chaves/:id/acessos', ...apiAdmin, acessosDaChave);
 
 // ── Relatórios (histórico do Pipefy dentro do sistema)
 const relBase = [autenticar, exigirPerfil('operador', 'admin')];

@@ -54,6 +54,7 @@ const ROTAS = [
   [null,    /^\/(inventarios|marketplace)(\/|$)/,   ['inventario']],
   [null,    /^\/recebimento-importacao(\/|$)/,      ['recebimento_importacao']],
   [null,    /^\/relatorios(\/|$)/,                  ['relatorios']],
+  [null,    /^\/integracoes(\/|$)/,                 ['admin']],
   [null,    /^\/necessidades-pecas(\/|$)/,          ['necessidade_pecas']],
   [null,    /^\/entradas(\/|$)/,                    ['entradas']],
   [null,    /^\/mrp(\/|$)/,                         ['mrp']],

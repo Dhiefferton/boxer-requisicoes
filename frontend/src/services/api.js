@@ -298,3 +298,12 @@ export const relatoriosService = {
   lerPipes:    ()            => api.post('/relatorios/importacao/pipes', {}, { timeout: 60000 }),
   importarLote: (pipe_id, recomecar = false) => api.post('/relatorios/importacao/lote', { pipe_id, recomecar }, { timeout: 120000 }),
 };
+
+export const integracoesService = {
+  opcoes:  ()          => api.get('/integracoes/opcoes'),
+  chaves:  ()          => api.get('/integracoes/chaves'),
+  criar:   (dados)     => api.post('/integracoes/chaves', dados),
+  editar:  (id, dados) => api.patch(`/integracoes/chaves/${id}`, dados),
+  excluir: (id)        => api.delete(`/integracoes/chaves/${id}`),
+  acessos: (id)        => api.get(`/integracoes/chaves/${id}/acessos`),
+};

@@ -423,3 +423,13 @@ export async function excluirRelatorio(req, res, next) {
     res.json({ ok: true });
   } catch (err) { next(err); }
 }
+
+// Usado pela API pública: roda um relatório salvo (filtros, colunas e fórmulas) e devolve o resultado
+export async function rodarRelatorioSalvo(id, { pagina = 1, todos = false } = {}) {
+  await garantirEstrutura();
+  const r = await query(`SELECT id, nome, pipe_id, config FROM rel_relatorios WHERE id = $1`, [Number(id) || 0]);
+  const rel = r.rows[0];
+  if (!rel) return null;
+  const res = await executar({ ...rel.config, pipe_id: rel.pipe_id }, { pagina, todos });
+  return { id: rel.id, nome: rel.nome, ...res };
+}

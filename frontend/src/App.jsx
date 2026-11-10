@@ -29,6 +29,7 @@ import Databases from './pages/operador/Databases';
 import Armazenamento from './pages/operador/Armazenamento';
 import RecebimentoImportacao from './pages/operador/RecebimentoImportacao';
 import Relatorios from './pages/operador/Relatorios';
+import Integracoes from './pages/operador/Integracoes';
 import PedidosOrcamento from './pages/operador/PedidosOrcamento';
 import Inventario       from './pages/operador/Inventario';
 import InventarioDetalhe from './pages/operador/InventarioDetalhe';
@@ -107,6 +108,9 @@ export default function App() {
             } />
             <Route path="/recebimento-importacao" element={
               <RotaTela tela="recebimento_importacao"><RecebimentoImportacao /></RotaTela>
+            } />
+            <Route path="/integracoes" element={
+              <RotaTela tela="admin"><Integracoes /></RotaTela>
             } />
             <Route path="/relatorios" element={
               <RotaTela tela="relatorios"><Relatorios /></RotaTela>
