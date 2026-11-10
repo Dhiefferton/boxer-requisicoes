@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Pencil, Save, Paperclip, RotateCcw, Search, Plus, Check, ChevronDown } from 'lucide-react';
 import { pedidosOrcamentoService, basesService } from '../../services/api';
 import { Spinner } from '../ui';
+import { useAuth } from '../../context/AuthContext';
 import { FotosCampo, useServicoQuadro } from './FotosOrcamento';
 import { CONFIG_ORCAMENTO, COLUNAS_ORCAMENTO } from '../../utils/fasesOrcamento';
 import { campoDaConfig } from './ConfigOrcamento';
@@ -290,6 +291,133 @@ function SeletorRegistro({ campo, valor, onChange, semValor = false }) {
   );
 }
 
+// ── Formulário "Criar registro" (cadastro completo, igual ao do Pipefy) ──
+const UFS = ['AC - Acre', 'AL - Alagoas', 'AP - Amapá', 'AM - Amazonas', 'BA - Bahia', 'CE - Ceará', 'DF - Distrito Federal', 'ES - Espírito Santo', 'GO - Goiás', 'MA - Maranhão', 'MT - Mato Grosso', 'MS - Mato Grosso do Sul', 'MG - Minas Gerais', 'PA - Pará', 'PB - Paraíba', 'PR - Paraná', 'PE - Pernambuco', 'PI - Piauí', 'RJ - Rio de Janeiro', 'RN - Rio Grande do Norte', 'RS - Rio Grande do Sul', 'RO - Rondônia', 'RR - Roraima', 'SC - Santa Catarina', 'SP - São Paulo', 'SE - Sergipe', 'TO - Tocantins'];
+const OPCOES_PADRAO = [[/tipo de cliente/, ['Consumidor Final', 'Lojista/Revenda', 'Posto Autorizado']], [/^pessoa/, ['Fisica', 'Juridica']], [/^estado|^uf\b/, UFS]];
+const OCULTOS = /^(id registro|titulo|status|criador|finalizado|criado em|atualizado em|expirado|vencido)/;
+const OBRIGATORIOS = /contato com|^e-?mail$|cpf|cnpj|^estado|numero.*contato|tipo de cliente|^pessoa/;
+const soDigitos = (v) => String(v || '').replace(/\D/g, '');
+function mascaraTelefone(v) {
+  const d = soDigitos(v).replace(/^55(?=\d{10,11}$)/, '').slice(0, 11);
+  if (d.length <= 2) return d ? `(${d}` : '';
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+function FormNovoRegistro({ base, comValor, colunas, inicial, salvando, erro, onFechar, onSalvar }) {
+  const { usuario } = useAuth();
+  const [descricao, setDescricao] = useState(inicial?.descricao || '');
+  const [valor, setValor] = useState('');
+  const [dados, setDados] = useState({});
+  const [aviso, setAviso] = useState('');
+  const hoje = new Date();
+  const p2 = n => String(n).padStart(2, '0');
+  const iso = `${hoje.getFullYear()}-${p2(hoje.getMonth() + 1)}-${p2(hoje.getDate())}`;
+  const dataHora = `${p2(hoje.getDate())}/${p2(hoje.getMonth() + 1)}/${hoje.getFullYear()} ${p2(hoje.getHours())}:${p2(hoje.getMinutes())}`;
+  const nome = (c) => normBusca(c.nome).trim();
+  const visiveis = colunas.filter(c => !OCULTOS.test(nome(c)) && !/^data de cadastro/.test(nome(c)));
+  const opcoesDe = (c) => {
+    if (c.tipo === 'opcoes' && c.opcoes?.length) return c.opcoes;
+    const f = OPCOES_PADRAO.find(([re]) => re.test(nome(c)));
+    return f ? f[1] : null;
+  };
+  const obrigatoria = (c) => OBRIGATORIOS.test(nome(c)) && !/cobranc/.test(nome(c));
+  const set = (id, v) => setDados(d => ({ ...d, [id]: v }));
+  function salvar() {
+    if (descricao.trim().length < 2) { setAviso(`Preencha ${colunas.length ? 'o nome' : 'a descrição'}.`); return; }
+    if (comValor && String(valor).trim() === '') { setAviso('Preencha o valor.'); return; }
+    for (const c of visiveis) {
+      if (obrigatoria(c) && !String(dados[c.id] || '').trim()) { setAviso(`Preencha "${c.nome}".`); return; }
+    }
+    const out = { ...dados };
+    for (const c of colunas) {
+      const n = nome(c);
+      if (/^data de cadastro/.test(n)) out[c.id] = iso;
+      else if (/^titulo/.test(n)) out[c.id] = descricao.trim();
+      else if (/^status/.test(n)) out[c.id] = 'Ativo';
+      else if (/^criador/.test(n)) out[c.id] = usuario?.nome || '';
+      else if (/^criado em/.test(n)) out[c.id] = dataHora;
+      else if (/^vencido/.test(n)) out[c.id] = 'Não';
+      else if (/numero.*contato|telefone|celular/.test(n) && out[c.id]) out[c.id] = `+55 ${mascaraTelefone(out[c.id])}`.replace(/^\+55 \((\d\d)\) /, '+55 $1 ');
+    }
+    setAviso('');
+    onSalvar({ descricao: descricao.trim(), valor, dados: out });
+  }
+  const inp = 'w-full px-3 py-2.5 rounded-lg text-sm bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] placeholder:text-[var(--c-suave)] focus:outline-none focus:border-[var(--c-destaque)]';
+  const rot = (t, obr) => <p className="text-sm font-semibold text-[var(--c-texto)] mb-1.5">{obr && <span className="text-red-400">* </span>}{t}</p>;
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-3" onClick={onFechar}>
+      <div className="w-full max-w-md max-h-[94dvh] flex flex-col bg-[var(--c-superficie)] border-4 border-[var(--c-destaque)]/20 rounded-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 pt-4 pb-2">
+          <p className="text-xl font-bold text-[var(--c-texto)]">{base?.nome || 'Novo registro'}</p>
+          <button type="button" onClick={onFechar} className="p-1 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={20} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-3 space-y-4">
+          {colunas.some(c => /^data de cadastro/.test(nome(c))) && (
+            <div><p className="text-xs font-semibold text-[var(--c-suave)]">Data de Cadastro</p><p className="text-sm text-[var(--c-texto)]">{iso.split('-').reverse().join('/')}</p></div>
+          )}
+          <div>{rot(colunas.length ? 'Nome / Razão Social' : 'Descrição', true)}
+            <input autoFocus value={descricao} onChange={e => setDescricao(e.target.value)} maxLength={160} placeholder="Digite aqui ..." className={inp} /></div>
+          {comValor && <div>{rot('Valor (R$)', true)}<input value={valor} onChange={e => setValor(e.target.value)} inputMode="decimal" placeholder="0,00" className={inp} /></div>}
+          {visiveis.map(c => {
+            const n = nome(c), ops = opcoesDe(c), v = dados[c.id] || '', obr = obrigatoria(c);
+            if (ops && ops.length <= 4) {
+              return (
+                <div key={c.id}>{rot(c.nome, obr)}
+                  <div className="flex flex-wrap gap-x-5 gap-y-2">
+                    {ops.map(o => (
+                      <label key={o} className="flex items-center gap-2 text-sm text-[var(--c-texto)] cursor-pointer">
+                        <input type="checkbox" checked={v === o} onChange={() => set(c.id, v === o ? '' : o)} className="w-4 h-4" /> {o}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+            if (ops) {
+              return (
+                <div key={c.id}>{rot(c.nome, obr)}
+                  <select value={v} onChange={e => set(c.id, e.target.value)} className={inp}>
+                    <option value="">Escolha uma opção</option>
+                    {ops.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                </div>
+              );
+            }
+            if (/numero.*contato|telefone|celular/.test(n)) {
+              return (
+                <div key={c.id}>{rot(c.nome, obr)}
+                  <div className="flex gap-2">
+                    <span className="flex items-center justify-center w-16 rounded-lg bg-[var(--c-fundo)] border border-[var(--c-borda)] text-lg" title="Brasil (+55)">🇧🇷</span>
+                    <input value={v} onChange={e => set(c.id, mascaraTelefone(e.target.value))} inputMode="tel" placeholder="(99) 99999-9999" className={inp} />
+                  </div>
+                </div>
+              );
+            }
+            const dig = /cpf|cnpj/.test(n) ? 14 : /^cep$/.test(n) ? 8 : 0;
+            return (
+              <div key={c.id}>{rot(c.nome, obr)}
+                <input value={v} onChange={e => set(c.id, dig ? soDigitos(e.target.value).slice(0, dig) : e.target.value)}
+                  inputMode={dig ? 'numeric' : /e-?mail/.test(n) ? 'email' : 'text'} maxLength={dig || 1000} placeholder="Digite aqui ..." className={inp} />
+              </div>
+            );
+          })}
+          {colunas.some(c => /^id registro/.test(nome(c))) && (
+            <div><p className="text-sm font-semibold text-[var(--c-texto)]">ID Registro</p><p className="text-sm text-[var(--c-suave)]">#</p></div>
+          )}
+        </div>
+        <div className="px-5 pb-4 pt-2 space-y-1.5">
+          {(aviso || erro) && <p className="text-xs text-red-400">{aviso || erro}</p>}
+          <button type="button" onClick={salvar} disabled={salvando}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-full text-sm font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-50">
+            {salvando && <Spinner size={13} />} Criar registro
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Registro de uma database (ex.: Cliente do Cadastro Cliente): busca no servidor, cartões com os dados e "Criar registro" ──
 function SeletorRegistroCartoes({ campo, valor, onChange }) {
   const baseId = Number(String(campo.lista || '').replace(/^base:/, '')) || 0;
@@ -327,13 +455,10 @@ function SeletorRegistroCartoes({ campo, valor, onChange }) {
     onChange(!r ? '' : JSON.stringify({ id: r.id, base_id: r.base_id, base: r.base, descricao: r.descricao, valor: r.valor, criado_em: r.criado_em, ...(comValor ? {} : { sem_valor: true }), ...(r.extras?.length ? { extras: r.extras } : {}) }));
     setAberto(false); setBusca(''); setNovo(null); setErro('');
   };
-  async function criar() {
-    const descricao = String(novo?.descricao || '').replace(/\s+/g, ' ').trim();
-    if (descricao.length < 2) { setErro('Digite a descrição.'); return; }
-    if (comValor && String(novo?.valor ?? '').trim() === '') { setErro('Digite o valor.'); return; }
+  async function criarComForm({ descricao, valor, dados }) {
     setSalvando(true); setErro('');
     try {
-      const { data } = await basesService.criarRegistro(baseId, { descricao, ...(comValor ? { valor: novo.valor } : {}), dados: novo.dados || {} });
+      const { data } = await basesService.criarRegistro(baseId, { descricao, ...(comValor ? { valor } : {}), dados });
       escolher(data.registro);
     } catch (e) {
       if (e.response?.status === 409 && e.response?.data?.registro) { escolher(e.response.data.registro); return; }
@@ -365,24 +490,8 @@ function SeletorRegistroCartoes({ campo, valor, onChange }) {
               className="shrink-0 flex items-center gap-1 text-xs font-semibold text-[var(--c-destaque)] hover:underline"><Plus size={13} /> Criar registro</button>
           </div>
           {novo !== null && (
-            <div className="rounded-lg border border-[var(--c-destaque)]/40 bg-[var(--c-destaque)]/5 p-2.5 space-y-1.5 max-h-72 overflow-y-auto">
-              <p className="text-[11px] font-semibold text-[var(--c-texto)]">Novo registro</p>
-              <input autoFocus value={novo.descricao} onChange={e => setNovo(n => ({ ...n, descricao: e.target.value }))} placeholder="Nome / descrição" maxLength={160} className={`${inp} px-2`} />
-              {comValor && <input value={novo.valor} onChange={e => setNovo(n => ({ ...n, valor: e.target.value }))} placeholder="Valor (R$)" inputMode="decimal" className={`${inp} px-2`} />}
-              {colunas.map(c => (
-                <div key={c.id}>
-                  <p className="text-[10px] text-[var(--c-suave)] mb-0.5">{c.nome}</p>
-                  <input value={novo.dados?.[c.id] || ''} onChange={e => setNovo(n => ({ ...n, dados: { ...(n.dados || {}), [c.id]: e.target.value } }))} className={`${inp} px-2`} />
-                </div>
-              ))}
-              <div className="flex justify-end gap-1.5 pt-1">
-                <button type="button" onClick={() => setNovo(null)} className="px-2 py-1 rounded-lg text-[11px] text-[var(--c-suave)] hover:text-[var(--c-texto)]">Cancelar</button>
-                <button type="button" onClick={criar} disabled={salvando}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">
-                  {salvando ? <Spinner size={11} /> : <Check size={11} />} Salvar registro
-                </button>
-              </div>
-            </div>
+            <FormNovoRegistro base={baseInfo} comValor={comValor} colunas={colunas} inicial={novo} salvando={salvando} erro={erro}
+              onFechar={() => setNovo(null)} onSalvar={criarComForm} />
           )}
           {erro && <p className="text-[11px] text-red-400">{erro}</p>}
           <div className="max-h-80 overflow-y-auto space-y-2 pr-1">

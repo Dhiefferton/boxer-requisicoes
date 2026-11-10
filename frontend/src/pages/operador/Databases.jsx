@@ -362,7 +362,13 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
         rotulos.forEach((r, i) => {
           const k = semAcento(r);
           if (!r || i === iDesc || i === iValor || existentes.has(k) || criar.some(c => semAcento(c.nome) === k)) return;
-          criar.push({ nome: r.slice(0, 60), tipo: 'texto', opcoes: [] });
+          // poucas opções repetidas na planilha (Estado, Tipo de cliente, Pessoa…) viram coluna de opções
+          const distintos = new Set();
+          if (corpo.length >= 30 && !/nome|descri|cidade|bairro|contato|e-?mail|cpf|cnpj|cep|telefone|numero|data|criad|atualizad|finalizad|expirad|^id |titulo/.test(k)) {
+            for (const l of corpo) { const t = textoCelula(l[i], r); if (t) { distintos.add(t); if (distintos.size > 30) break; } }
+          }
+          if (distintos.size >= 1 && distintos.size <= 30) criar.push({ nome: r.slice(0, 60), tipo: 'opcoes', opcoes: [...distintos].sort((a, b) => a.localeCompare(b, 'pt-BR')) });
+          else criar.push({ nome: r.slice(0, 60), tipo: 'texto', opcoes: [] });
         });
         let cols = colunas;
         if (criar.length) {
