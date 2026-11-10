@@ -57,6 +57,11 @@ import {
   marcarItem as marcarItemRecImp, substituirFoto as substituirFotoRecImp,
   adicionarExtra as adicionarExtraRecImp, excluirExtra as excluirExtraRecImp,
 } from '../controllers/recebimentoImportacaoController.js';
+import {
+  estadoImportacao as estadoImpRel, listarPipesPipefy as listarPipesPipefyRel, importarLote as importarLoteRel,
+  listarPipes as listarPipesRel, executarRelatorio as executarRel, listarRelatorios as listarRel, verRelatorio as verRel,
+  criarRelatorio as criarRel, salvarRelatorio as salvarRel, excluirRelatorio as excluirRel,
+} from '../controllers/relatoriosController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
 import { acessoConstrutor, statusConstrutor, ligarConstrutor, listarRascunhos, verRascunho, criarRascunho, salvarRascunho, excluirRascunho, aprovarRascunho, telasParaCopiar, copiarTela } from '../controllers/construtorController.js';
 import { relatorioUsoPipefy, chamadasPipefy } from '../integrations/usoPipefy.js';
@@ -345,6 +350,20 @@ router.get('/logistica-cif/quadro-config',        ...cif, verConfigCif);
 router.get('/logistica-cif/lojinha-config',       ...cif, verConfigLojinha);   // campos da Lojinha, só para mostrar no card
 router.post('/logistica-cif/quadro-config',       ...cif, exigirPerfil('admin'), salvarConfigCif);
 router.post('/logistica-cif/quadro-config/campos/:id/opcoes', ...cif, adicionarOpcaoCif);
+
+// ── Relatórios (histórico do Pipefy dentro do sistema)
+const relBase = [autenticar, exigirPerfil('operador', 'admin')];
+const relAdmin = [autenticar, exigirPerfil('admin')];
+router.get('/relatorios/importacao',               ...relBase,  estadoImpRel);
+router.post('/relatorios/importacao/pipes',        ...relAdmin, listarPipesPipefyRel);
+router.post('/relatorios/importacao/lote',         ...relAdmin, importarLoteRel);
+router.get('/relatorios/pipes',                    ...relBase,  listarPipesRel);
+router.post('/relatorios/executar',                ...relBase,  executarRel);
+router.get('/relatorios',                          ...relBase,  listarRel);
+router.get('/relatorios/:id',                      ...relBase,  verRel);
+router.post('/relatorios',                         ...relBase,  criarRel);
+router.patch('/relatorios/:id',                    ...relBase,  salvarRel);
+router.delete('/relatorios/:id',                   ...relBase,  excluirRel);
 
 // ── Recebimento/Importação (fotos das peças das NFs de importação)
 const recImp = [autenticar, exigirPerfil('operador', 'admin')];

@@ -285,3 +285,16 @@ export const quadroService = (qid) => ({
   excluirFoto:  (fotoId)        => api.delete(`/quadros/${qid}/fotos/${fotoId}`),
   movimentos:   (params)        => api.get(`/quadros/${qid}/movimentos`, { params, timeout: 30000 }),
 });
+
+export const relatoriosService = {
+  lista:       ()            => api.get('/relatorios'),
+  ver:         (id)          => api.get(`/relatorios/${id}`),
+  criar:       (dados)       => api.post('/relatorios', dados),
+  salvar:      (id, dados)   => api.patch(`/relatorios/${id}`, dados),
+  excluir:     (id)          => api.delete(`/relatorios/${id}`),
+  pipes:       ()            => api.get('/relatorios/pipes'),
+  executar:    (config, pagina = 1, todos = false) => api.post('/relatorios/executar', { config, pagina, todos }, { timeout: 120000 }),
+  importacao:  ()            => api.get('/relatorios/importacao'),
+  lerPipes:    ()            => api.post('/relatorios/importacao/pipes', null, { timeout: 60000 }),
+  importarLote: (pipe_id, recomecar = false) => api.post('/relatorios/importacao/lote', { pipe_id, recomecar }, { timeout: 120000 }),
+};
