@@ -106,7 +106,10 @@ async function buscarEmbalagem(codigo) {
 
 // ---------- Cliente (pelo CNPJ/CPF do card) ----------
 function mascararDocumento(doc) {
-  const d = String(doc || '').replace(/\D/g, '');
+  let d = String(doc || '').replace(/\D/g, '');
+  // Planilha/Pipefy como número perde o zero à esquerda (ex.: 5794316000116 → 05794316000116)
+  if (d.length === 13) d = d.padStart(14, '0');
+  else if (d.length === 10) d = d.padStart(11, '0');
   if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
   if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
   return null;
