@@ -104,6 +104,60 @@ function cfgDe(id) {
   return cfgs.get(n);
 }
 
+
+// ── Formulário inicial do SAC ───────────────────────────────
+// A tela "Tratativa de manutenção - SAC" nasceu sem campos no Novo card. Na primeira vez que ela é
+// aberta (uma vez só) o Formulário inicial recebe os campos do formulário do Pipefy:
+// Nº do ticket (Blip), Telefone, Cliente, Origem do Card, Responsável pelo caso, Modelo máquina e problemas.
+// Depois disso o admin edita tudo em Configurar → Formulário inicial (nada é refeito).
+async function baseDeRegistro(rotuloRe, nomeBaseRe) {
+  try { // reaproveita a base usada pelo mesmo campo no quadro de Orçamentos
+    const r = await query(`SELECT lista FROM orc_campos WHERE ativo AND tipo = 'registro' AND lista IS NOT NULL AND rotulo ~* $1 ORDER BY id LIMIT 1`, [rotuloRe]);
+    if (r.rows[0]?.lista) return String(r.rows[0].lista);
+  } catch { /* quadro de orçamentos ainda sem campos */ }
+  try {
+    const r = await query(`SELECT id FROM bx_bases WHERE ativo AND nome ~* $1 ORDER BY id LIMIT 1`, [nomeBaseRe]);
+    if (r.rows[0]) return String(r.rows[0].id);
+  } catch { /* sem bases */ }
+  return null;
+}
+async function semearFormularioSac(qid) {
+  try {
+    const q = (await query(`SELECT id, nome FROM bx_quadros WHERE id = $1`, [qid])).rows[0];
+    if (!q || !/tratativa.*manuten/i.test(q.nome)) return;
+    const chave = `seed_inicio_${qid}`;
+    // "Reserva" a semeadura de forma atômica: só uma requisição por vez faz (evita campos duplicados)
+    const reserva = await query(`INSERT INTO bx_config (chave, valor) VALUES ($1, 'true'::jsonb) ON CONFLICT (chave) DO NOTHING RETURNING chave`, [chave]);
+    if (!reserva.rows[0]) return;
+    const c = cfgDe(qid);
+    await c.ler(); // cria as tabelas do quadro, se ainda não existirem
+    const TF = `qd${Number(qid)}_campos`;
+    const ja = (await query(`SELECT COUNT(*)::int AS n FROM ${TF} WHERE ativo AND coluna = 'inicio'`)).rows[0].n;
+    if (!ja) {
+      const cliente = await baseDeRegistro('^cliente', 'cliente');
+      const resp = await baseDeRegistro('respons', 'respons');
+      const campos = [
+        { tipo: 'texto', rotulo: 'Nº do ticket (Blip)' },
+        { tipo: 'telefone', rotulo: 'Telefone', obrigatorio: true },
+        cliente ? { tipo: 'registro', rotulo: 'Cliente', obrigatorio: true, lista: cliente } : { tipo: 'texto', rotulo: 'Cliente', obrigatorio: true },
+        { tipo: 'unica', rotulo: 'Origem do Card', obrigatorio: true, opcoes: ['COMERCIAL', 'SUPORTE', 'ORÇAMENTO'], cria_opcoes: true },
+        resp ? { tipo: 'registro', rotulo: 'Responsável pelo caso', lista: resp } : { tipo: 'texto', rotulo: 'Responsável pelo caso' },
+        { tipo: 'conexao', rotulo: 'Modelo máquina', obrigatorio: true, lista: 'Modelos de máquina' },
+        { tipo: 'longo', rotulo: 'Qual(is) o(s) problema(s) identificado(s)?' },
+      ];
+      for (const [i, f] of campos.entries()) {
+        await query(
+          `INSERT INTO ${TF} (coluna, tipo, rotulo, obrigatorio, opcoes, lista, ordem, cria_opcoes) VALUES ('inicio',$1,$2,$3,$4::jsonb,$5,$6,$7)`,
+          [f.tipo, f.rotulo, !!f.obrigatorio, JSON.stringify(f.opcoes || []), f.lista || null, (i + 1) * 10, !!f.cria_opcoes]);
+      }
+      c.invalidar();
+    }
+  } catch (e) {
+    console.error('⚠️ Formulário inicial do SAC:', e.message);
+    await query(`DELETE FROM bx_config WHERE chave = $1`, [`seed_inicio_${qid}`]).catch(() => {}); // tenta de novo na próxima abertura
+  }
+}
+
 const limpar = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 /** Grava colunas e campos num quadro (mesmo caminho do "Configurar"). Usado pelo Construtor de telas ao aprovar. */
@@ -220,7 +274,7 @@ export async function salvarNomesTelas(req, res, next) {
 }
 
 // ── Configuração do quadro (engrenagem) ─────────────────────
-export const verConfigQuadro = (req, res, next) => cfgDe(req.params.qid).verConfig(req, res, next);
+export const verConfigQuadro = async (req, res, next) => { await semearFormularioSac(Number(req.params.qid)); return cfgDe(req.params.qid).verConfig(req, res, next); };
 export const salvarConfigQuadroDin = (req, res, next) => cfgDe(req.params.qid).salvarConfig(req, res, next);
 export const adicionarOpcaoQuadro = (req, res, next) => cfgDe(req.params.qid).adicionarOpcao(req, res, next);
 
@@ -376,6 +430,7 @@ const SELECT_CARD = `SELECT c.*, (SELECT COALESCE(json_agg(json_build_object('id
 export async function listarCards(req, res, next) {
   try {
     const qid = req.quadro.id;
+    await semearFormularioSac(qid);
     const cfg = await cfgDe(qid).ler();
     const arquivadas = cfg.colunas.filter(c => c.arquivada).map(c => c.chave);
     const r = await query(
