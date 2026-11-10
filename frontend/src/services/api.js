@@ -132,7 +132,7 @@ export const basesService = {
   listar:         ()               => api.get('/bases'),
   criar:          (nome, comValor = true) => api.post('/bases', { nome, com_valor: comValor }),
   excluir:        (baseId)         => api.delete(`/bases/${baseId}`),
-  registros:      (baseId)         => api.get(`/bases/${baseId}/registros`),
+  registros:      (baseId, params) => api.get(`/bases/${baseId}/registros`, params ? { params } : undefined),
   criarRegistro:  (baseId, dados)  => api.post(`/bases/${baseId}/registros`, dados),
   editarRegistro: (id, dados)      => api.patch(`/bases/registros/${id}`, dados),
   editarBase:     (baseId, dados)  => api.patch(`/bases/${baseId}`, dados),

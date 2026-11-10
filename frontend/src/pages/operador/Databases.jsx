@@ -104,6 +104,25 @@ function EditorColuna({ coluna, onSalvar, onExcluir, onFechar }) {
   );
 }
 
+// Texto de uma célula da planilha: datas em dd/mm/aaaa, CPF/CNPJ/CEP com os zeros, sim/não
+function textoCelula(v, rotulo = '') {
+  if (v === null || v === undefined || v === '') return '';
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) return '';
+    const p = n => String(n).padStart(2, '0');
+    const d = `${p(v.getDate())}/${p(v.getMonth() + 1)}/${v.getFullYear()}`;
+    return v.getHours() || v.getMinutes() || v.getSeconds() ? `${d} ${p(v.getHours())}:${p(v.getMinutes())}` : d;
+  }
+  if (typeof v === 'boolean') return v ? 'Sim' : 'Não';
+  const r = semAcento(String(rotulo));
+  if (typeof v === 'number' && Number.isInteger(v)) {
+    if (/cpf|cnpj/.test(r)) return String(v).padStart(String(v).length > 11 ? 14 : 11, '0');
+    if (/\bcep\b/.test(r)) return String(v).padStart(8, '0');
+    return String(v);
+  }
+  return String(v).trim();
+}
+
 export default function Databases() {
   const { usuario } = useAuth();
   const podeEditar = mexeTela(usuario, 'databases');
@@ -202,6 +221,7 @@ export default function Databases() {
 function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
   const [info, setInfo] = useState({ nome: base.nome, com_valor: base.com_valor !== false, colunas: Array.isArray(base.colunas) ? base.colunas : [], pipefy_tabela: base.pipefy_tabela });
   const [registros, setRegistros] = useState(null);
+  const [total, setTotal] = useState(0);
   const [busca, setBusca] = useState('');
   const [limite, setLimite] = useState(300);
   const [erro, setErro] = useState('');
@@ -211,11 +231,17 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
   const [ocupado, setOcupado] = useState('');
   const colunas = info.colunas;
 
-  async function carregar() {
-    try { const { data } = await basesService.registros(base.id); setRegistros(data.registros); }
-    catch (e) { setErro(erroDe(e, 'Não consegui carregar os registros.')); setRegistros([]); }
+  async function carregar(q = busca, lim = limite) {
+    try {
+      const { data } = await basesService.registros(base.id, { limite: lim, q: q.trim() });
+      setRegistros(data.registros); setTotal(data.total ?? data.registros.length);
+    } catch (e) { setErro(erroDe(e, 'Não consegui carregar os registros.')); setRegistros([]); setTotal(0); }
   }
-  useEffect(() => { carregar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A lista vem por páginas e a busca é feita no servidor (a database pode ter dezenas de milhares de registros)
+  useEffect(() => {
+    const t = setTimeout(() => carregar(busca, limite), registros === null ? 0 : 350);
+    return () => clearTimeout(t);
+  }, [busca, limite]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function salvarBase(mudanca) {
     setErro('');
@@ -261,68 +287,28 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
     } catch (e) { setErro(erroDe(e, 'Erro ao criar o registro.')); }
   }
   async function excluirDatabase() {
-    if (!confirm(`Excluir a database "${info.nome}" e os ${registros?.length || 0} registro(s)? Os cards que já usaram continuam com o que foi escolhido.`)) return;
+    if (!confirm(`Excluir a database "${info.nome}" e os ${total} registro(s)? Os cards que já usaram continuam com o que foi escolhido.`)) return;
     try { await basesService.excluir(base.id); onMudou(null); }
     catch (e) { setErro(erroDe(e, 'Erro ao excluir a database.')); }
   }
   // Exportar CSV (abre no Excel)
-  function exportar() {
-    const cab = ['Descrição', ...(info.com_valor ? ['Valor'] : []), ...colunas.map(c => c.nome)];
-    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const linhas = (registros || []).map(r => [r.descricao, ...(info.com_valor ? [String(r.valor).replace('.', ',')] : []), ...colunas.map(c => r.dados?.[c.id] ?? '')].map(esc).join(';'));
-    const blob = new Blob(['\ufeff' + [cab.map(esc).join(';'), ...linhas].join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = `${info.nome}.csv`; a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  }
-  // Importar planilha (.xlsx, .xls, .csv): o sistema acha o cabeçalho, as colunas e os valores sozinho
-  async function importarArquivo(arquivo) {
-    if (!arquivo) return;
-    setErro(''); setAviso('');
-    setOcupado('Lendo a planilha…');
+  async function exportar() {
+    setOcupado('Preparando a exportação…'); setErro('');
     try {
-      const XLSX = await import('xlsx');
-      const wb = XLSX.read(await arquivo.arrayBuffer(), { type: 'array', cellDates: false });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const m = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: false })
-        .map(l => l.map(c => (typeof c === 'string' ? c.trim() : c)))
-        .filter(l => l.some(c => c !== ''));
-      if (!m.length) throw new Error('A planilha está vazia.');
-      const ehDesc = c => /^(descricao|titulo|nome|produto|item|peca)/.test(semAcento(String(c).trim()));
-      let ih = m.slice(0, 20).findIndex(l => l.some(ehDesc));
-      let iDesc, iValor = -1, mapa = [];
-      let corpo;
-      if (ih >= 0) {
-        const cab = m[ih].map(c => semAcento(String(c).trim()));
-        iDesc = cab.findIndex(c => /^(descricao|titulo|nome|produto|item|peca)/.test(c));
-        iValor = info.com_valor ? cab.findIndex(c => /^(valor|preco|preço|vlr)/.test(c)) : -1;
-        mapa = colunas.map(c => ({ id: c.id, i: cab.indexOf(semAcento(c.nome)) })).filter(x => x.i >= 0);
-        corpo = m.slice(ih + 1);
-      } else { // sem cabeçalho: 1ª coluna = descrição; a 1ª coluna numérica depois dela = valor
-        iDesc = 0; corpo = m;
-        if (info.com_valor) {
-          const amostra = m.slice(0, 20);
-          const n = Math.max(...amostra.map(l => l.length));
-          for (let j = 1; j < n; j++) {
-            if (amostra.every(l => l[j] === '' || typeof l[j] === 'number' || /^[\sR$\d.,-]+$/.test(String(l[j])))) { iValor = j; break; }
-          }
-        }
+      const todos = [];
+      for (let off = 0; ; off += 2000) {
+        const { data } = await basesService.registros(base.id, { limite: 2000, offset: off, q: busca.trim() });
+        todos.push(...data.registros);
+        if (data.registros.length < 2000) break;
       }
-      const dados = corpo.filter(l => String(l[iDesc] ?? '').trim()).map(l => ({
-        descricao: String(l[iDesc]).trim(),
-        valor: iValor >= 0 && l[iValor] !== '' ? l[iValor] : 0,
-        dados: Object.fromEntries(mapa.map(x => [x.id, String(l[x.i] ?? '').trim()])),
-      }));
-      if (!dados.length) throw new Error('Não achei linhas com descrição na planilha.');
-      let tot = { novos: 0, atualizados: 0, ignorados: 0 };
-      for (let i = 0; i < dados.length; i += 1000) {
-        setOcupado(`Importando… ${Math.min(i + 1000, dados.length)} de ${dados.length}`);
-        const { data } = await basesService.importar(base.id, dados.slice(i, i + 1000));
-        tot = { novos: tot.novos + data.novos, atualizados: tot.atualizados + data.atualizados, ignorados: tot.ignorados + data.ignorados };
-      }
-      setAviso(`Planilha "${arquivo.name}": ${tot.novos} novo(s), ${tot.atualizados} atualizado(s)${tot.ignorados ? `, ${tot.ignorados} ignorado(s)` : ''}.`);
-      await carregar(); onMudou(base.id);
-    } catch (e) { setErro(erroDe(e, e?.message || 'Erro ao importar a planilha.')); }
+      const cab = ['Descrição', ...(info.com_valor ? ['Valor'] : []), ...colunas.map(c => c.nome)];
+      const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const linhas = todos.map(r => [r.descricao, ...(info.com_valor ? [String(r.valor).replace('.', ',')] : []), ...colunas.map(c => r.dados?.[c.id] ?? '')].map(esc).join(';'));
+      const blob = new Blob(['\ufeff' + [cab.map(esc).join(';'), ...linhas].join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = `${info.nome}.csv`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (e) { setErro(erroDe(e, 'Erro ao exportar.')); }
     finally { setOcupado(''); }
   }
   async function trazerPipefy() {
@@ -335,17 +321,13 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
         cursor = r.cursor; setOcupado(`${r.total} registro(s)…`);
       } while (!r.terminou);
       setAviso(`Pipefy: ${r.total} registro(s) em "${r.base.nome}".`);
-      await carregar(); onMudou(base.id);
+      await carregar(busca, limite); onMudou(base.id);
     } catch (e) { setErro(erroDe(e, 'Erro ao trazer do Pipefy.')); }
     finally { setOcupado(''); }
   }
 
-  const filtrados = useMemo(() => {
-    const t = semAcento(busca).trim();
-    if (!t) return registros || [];
-    return (registros || []).filter(r => semAcento(`${r.descricao} ${Object.values(r.dados || {}).join(' ')}`).includes(t));
-  }, [registros, busca]);
-  const visiveis = filtrados.slice(0, limite);
+  const filtrados = registros || [];
+  const visiveis = filtrados;
   const th = 'px-2 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-[var(--c-suave)] whitespace-nowrap';
 
   return (
@@ -365,7 +347,7 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
             {podeEditar && <button onClick={() => setEditNome(info.nome)} title="Renomear" className="p-1 text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><Pencil size={13} /></button>}
           </h2>
         )}
-        <span className="text-xs text-[var(--c-suave)]">{registros ? `${registros.length} registro(s)` : ''}</span>
+        <span className="text-xs text-[var(--c-suave)]">{registros ? `${total} registro(s)` : ''}</span>
         {podeEditar && (
           <label className="flex items-center gap-1.5 text-xs text-[var(--c-texto)] ml-2" title="Coluna Valor (R$) usada no campo Registro (descrição e valor)">
             <input type="checkbox" checked={info.com_valor} onChange={e => salvarBase({ com_valor: e.target.checked })} className="accent-[var(--c-destaque)]" /> Coluna Valor
@@ -462,8 +444,8 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
             </tbody>
           </table>
         )}
-        {filtrados.length > limite && (
-          <button onClick={() => setLimite(l => l + 300)} className="w-full py-2 text-xs text-[var(--c-destaque)] hover:underline">Mostrar mais ({filtrados.length - limite} restantes)</button>
+        {total > registros.length && (
+          <button onClick={() => setLimite(l => l + 300)} className="w-full py-2 text-xs text-[var(--c-destaque)] hover:underline">Mostrar mais ({total - registros.length} restantes)</button>
         )}
       </div>
       <p className="text-[11px] text-[var(--c-suave)]">Para usar em um campo: abra a engrenagem da coluna (Orçamento, Lojinha ou Logística CIF), crie o campo do tipo <b>Registro (descrição e valor)</b> ou <b>Lista do B-Requisições</b> e escolha esta database.</p>

@@ -114,6 +114,18 @@ export async function listarRegistros(req, res, next) {
     await garantir();
     const b = (await query(`SELECT id, nome, com_valor, colunas, pipefy_tabela FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!b) return res.status(404).json({ erro: 'Base não encontrada.' });
+    // Com ?limite= (tela Databases) lista por páginas e com busca no servidor; sem ele, devolve tudo (até 10000) como antes
+    const paginado = req.query.limite !== undefined;
+    if (paginado) {
+      const limite = Math.min(Math.max(parseInt(req.query.limite) || 300, 1), 3000);
+      const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+      const q = String(req.query.q || '').trim();
+      const filtro = q ? ` AND (descricao ILIKE $2 OR dados::text ILIKE $2)` : '';
+      const par = q ? [b.id, `%${q.replace(/[\\%_]/g, m => '\\' + m)}%`] : [b.id];
+      const total = (await query(`SELECT COUNT(*)::int AS n FROM bx_base_registros WHERE base_id = $1 AND ativo${filtro}`, par)).rows[0].n;
+      const r = await query(`SELECT * FROM bx_base_registros WHERE base_id = $1 AND ativo${filtro} ORDER BY descricao, id LIMIT ${limite} OFFSET ${offset}`, par);
+      return res.json({ base: b, total, registros: r.rows.map(x => registro(x, b.nome, b.colunas)) });
+    }
     const r = await query(`SELECT * FROM bx_base_registros WHERE base_id = $1 AND ativo ORDER BY descricao LIMIT 10000`, [b.id]);
     res.json({ base: b, registros: r.rows.map(x => registro(x, b.nome, b.colunas)) });
   } catch (err) { next(err); }
