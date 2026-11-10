@@ -38,6 +38,7 @@ const SISTEMA = [
   { chave: 'necessidade_pecas', rota: '/necessidade-pecas', nome: 'Necessidade de Peças', icon: Puzzle, cor: '#dc2626', desc: 'Peças a comprar' },
   { chave: 'databases', rota: '/databases', nome: 'Databases', icon: Database, cor: '#0369a1', desc: 'Bases de registros' },
   { chave: 'armazenamento', rota: '/armazenamento', nome: 'Armazenamento', icon: Video, cor: '#4b5563', desc: 'Vídeos e arquivos' },
+  { chave: 'integracoes', rota: '/integracoes', nome: 'Integrações (API)', icon: Puzzle, cor: '#0f766e', desc: 'Chaves para outros sistemas' },
   { chave: 'admin', rota: '/admin', nome: 'Admin', icon: Settings, cor: '#334155', desc: 'Usuários e permissões' },
 ];
 const CORES_QUADROS = ['#059669', '#0d9488', '#7c3aed', '#e11d48', '#2563eb', '#ca8a04', '#9333ea', '#0891b2'];

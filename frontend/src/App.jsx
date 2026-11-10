@@ -110,7 +110,7 @@ export default function App() {
               <RotaTela tela="recebimento_importacao"><RecebimentoImportacao /></RotaTela>
             } />
             <Route path="/integracoes" element={
-              <RotaTela tela="admin"><Integracoes /></RotaTela>
+              <RotaTela tela="integracoes"><Integracoes /></RotaTela>
             } />
             <Route path="/relatorios" element={
               <RotaTela tela="relatorios"><Relatorios /></RotaTela>

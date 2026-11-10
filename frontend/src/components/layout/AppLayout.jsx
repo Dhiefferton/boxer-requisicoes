@@ -56,7 +56,7 @@ export default function AppLayout({ children }) {
     { to: '/compras',   icon: FileText,        label: 'Compras',    tela: 'compras' },
     { to: '/necessidade-pecas', icon: Package, label: 'Nec. Peças', tela: 'necessidade_pecas' },
     { to: '/recebimento-importacao', icon: Camera, label: 'Recebimento/Importação', tela: 'recebimento_importacao' },
-    { to: '/integracoes', icon: Database, label: 'Integrações (API)', tela: 'admin' },
+    { to: '/integracoes', icon: Database, label: 'Integrações (API)', tela: 'integracoes' },
     { to: '/relatorios', icon: BarChart2, label: 'Relatórios', tela: 'relatorios' },
     { to: '/lojinha', icon: Store, label: 'Lojinha Boxer', tela: 'lojinha' },
     { to: '/logistica-cif', icon: ShieldPlus, label: 'Garantia - Boxer Soldas', tela: 'logistica_cif' },
