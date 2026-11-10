@@ -50,9 +50,16 @@ export async function pedidoOrcamentoCompleto(id) {
 
 // Colunas do Aprovado Parcial (migration 020) — cria se ainda não existirem
 let colunasOk = null;
+let nomeManualOk = null;
+function garantirNomeManual() {
+  if (!nomeManualOk) nomeManualOk = query(`ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS nome_manual BOOLEAN DEFAULT false`).catch(e => { nomeManualOk = null; throw e; });
+  return nomeManualOk;
+}
+
 function garantirColunas() {
   if (!colunasOk) {
     colunasOk = (async () => {
+      await garantirNomeManual();
       const r = await query(
         `SELECT COUNT(*)::int AS n FROM information_schema.columns
           WHERE table_name = 'pedidos_orcamento'
@@ -566,7 +573,7 @@ async function renovarClienteDoCard(pedido) {
     const campos = await renovarClienteDosCampos(pedido.pipefy_card_id, Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []);
     const d = extrairDadosOrcamento({ campos, titulo: null });
     await query(`UPDATE pedidos_orcamento SET pipefy_campos = $1::jsonb, cliente_cnpj = COALESCE($2, cliente_cnpj),
-                   cliente_nome = COALESCE($3, cliente_nome) WHERE id = $4`,
+                   cliente_nome = CASE WHEN COALESCE(nome_manual, false) THEN cliente_nome ELSE COALESCE($3, cliente_nome) END WHERE id = $4`,
       [JSON.stringify(campos), d.cliente_cnpj || null, d.cliente_nome ? d.cliente_nome.slice(0, 255) : null, pedido.id]);
     pedido.pipefy_campos = campos;
     if (d.cliente_cnpj) pedido.cliente_cnpj = d.cliente_cnpj;
@@ -753,7 +760,7 @@ async function salvarCamposNativos(pedido, novos) {
   await query(
     `UPDATE pedidos_orcamento
         SET pipefy_campos = $1::jsonb, referencia = COALESCE($2, referencia),
-            cliente_nome = CASE WHEN $10 THEN COALESCE($2, cliente_nome) ELSE $2 END,
+            cliente_nome = CASE WHEN COALESCE(nome_manual, false) THEN cliente_nome WHEN $10 THEN COALESCE($2, cliente_nome) ELSE $2 END,
             cliente_cnpj = CASE WHEN $10 THEN COALESCE($3, cliente_cnpj) ELSE $3 END,
             tecnico = CASE WHEN $10 THEN COALESCE($4, tecnico) ELSE $4 END,
             frete_por_conta = CASE WHEN $10 THEN COALESCE($5, frete_por_conta) ELSE $5 END,
@@ -1034,7 +1041,7 @@ async function executarSincronizacao(req, res, next) {
          DO UPDATE SET referencia      = EXCLUDED.referencia,
                        pipefy_campos   = EXCLUDED.pipefy_campos,
                        pipefy_url      = EXCLUDED.pipefy_url,
-                       cliente_nome    = EXCLUDED.cliente_nome,
+                       cliente_nome    = CASE WHEN COALESCE(pedidos_orcamento.nome_manual, false) THEN pedidos_orcamento.cliente_nome ELSE EXCLUDED.cliente_nome END,
                        cliente_cnpj    = EXCLUDED.cliente_cnpj,
                        tecnico         = EXCLUDED.tecnico,
                        frete_por_conta = EXCLUDED.frete_por_conta,
@@ -1186,7 +1193,7 @@ async function executarSincronizacao(req, res, next) {
             const d = extrairDadosOrcamento({ campos: novosCampos, titulo: null });
             await query(
               `UPDATE pedidos_orcamento
-                  SET cliente_nome    = COALESCE($1, cliente_nome),
+                  SET cliente_nome    = CASE WHEN COALESCE(nome_manual, false) THEN cliente_nome ELSE COALESCE($1, cliente_nome) END,
                       referencia      = COALESCE($9, referencia),
                       cliente_cnpj    = COALESCE($2, cliente_cnpj),
                       tecnico         = COALESCE($3, tecnico),
@@ -1672,5 +1679,24 @@ export async function criarModelo(req, res, next) {
     const r = await query(`INSERT INTO orc_modelos (nome, origem, criado_por_nome) VALUES ($1, 'b-req', $2) RETURNING id, nome`,
       [nome.slice(0, 200), req.usuario?.nome || null]);
     res.status(201).json({ modelo: r.rows[0] });
+  } catch (err) { next(err); }
+}
+
+
+// Renomeia o card (nome mostrado no topo do card aberto). Fica marcado como manual:
+// a sincronização com o Pipefy não sobrescreve mais.
+export async function renomearPedido(req, res, next) {
+  try {
+    await garantirColunas();
+    await garantirNomeManual();
+    const nome = String(req.body?.nome ?? '').trim().slice(0, 255);
+    if (!nome) return res.status(400).json({ erro: 'Informe o nome do card.' });
+    const atual = (await query(`SELECT id, cliente_nome FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`, [parseInt(req.params.id)])).rows[0];
+    if (!atual) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    await query(`UPDATE pedidos_orcamento SET cliente_nome = $1, nome_manual = true WHERE id = $2`, [nome, atual.id]);
+    await registrarMovimento(atual.id, 'campos_editados', {
+      usuario: req.usuario, descricao: `Nome do card alterado: "${atual.cliente_nome || ''}" → "${nome}"`, detalhes: { nome },
+    });
+    res.json({ sucesso: true, nome });
   } catch (err) { next(err); }
 }

@@ -84,6 +84,7 @@ export const pedidosOrcamentoService = {
   movimentos: (params)           => api.get('/pedidos-orcamento/movimentos', { params, timeout: 30000 }),
   estrutura: ()                  => api.get('/pedidos-orcamento/estrutura', { timeout: 30000 }),
   editarCampos: (id, campos)     => api.patch(`/pedidos-orcamento/${id}/campos`, { campos }),
+  renomear: (id, nome)           => api.patch(`/pedidos-orcamento/${id}/nome`, { nome }),
   novoCard: (campos)             => api.post('/pedidos-orcamento/novo-card', { campos }),
   clienteZen: (documento)        => api.get('/pedidos-orcamento/cliente-zen', { params: { documento }, timeout: 30000 }),
 };
@@ -169,6 +170,7 @@ export const cifService = {
   importarEntrada: ()         => api.post('/logistica-cif/importar-entrada', {}, { timeout: 120000 }), // "Trazer do Pipefy" (Garantia)
   mover:       (id, status)   => api.post(`/logistica-cif/pedidos/${id}/mover`, { status }),
   editarCampos: (id, campos)  => api.post(`/logistica-cif/pedidos/${id}/campos`, { campos }),
+  renomear:     (id, nome)    => api.post(`/logistica-cif/pedidos/${id}/nome`, { nome }),
   quadroConfig:       ()      => api.get('/logistica-cif/quadro-config', { timeout: 30000 }),
   lojinhaConfig:      ()      => api.get('/logistica-cif/lojinha-config', { timeout: 30000 }), // campos da Lojinha (só consulta)
   salvarQuadroConfig: (dados) => api.post('/logistica-cif/quadro-config', dados, { timeout: 60000 }),

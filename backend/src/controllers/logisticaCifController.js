@@ -224,3 +224,18 @@ export async function importarEntradaGarantia(req, res, next) {
   catch (err) { next(err); }
   finally { importandoGarantia = null; }
 }
+
+
+// Renomeia o card da Garantia (nome mostrado no topo do card aberto)
+export async function renomearCif(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const nome = String(req.body?.nome ?? '').trim().slice(0, 255);
+    if (!nome) return res.status(400).json({ erro: 'Informe o nome do card.' });
+    const p = (await query(`SELECT * FROM lojinha_boxer_pedidos WHERE id = $1 AND cif_status IS NOT NULL`, [parseInt(req.params.id)])).rows[0];
+    if (!p) return res.status(404).json({ erro: 'Pedido não encontrado na Logística CIF.' });
+    const r = await query(`UPDATE lojinha_boxer_pedidos SET cliente_nome = $2 WHERE id = $1 RETURNING *`, [p.id, nome]);
+    await registrarMovLoj(p, 'campos_editados', { usuario: req.usuario, descricao: `Logística CIF — nome do card alterado: "${p.cliente_nome}" → "${nome}"`, detalhes: { nome } });
+    res.json({ pedido: r.rows[0] });
+  } catch (err) { next(err); }
+}

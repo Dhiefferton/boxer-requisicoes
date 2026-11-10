@@ -8,6 +8,7 @@
 // Os campos ficam gravados só no B-Requisições (integração com o Pipefy desligada).
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
+import NomeCardEditavel from './NomeCardEditavel.jsx';
 import { X, Settings, ArrowRight, ArrowLeft, ExternalLink, History, Ban, PackageCheck, Scissors, RotateCcw, Pencil, Check } from 'lucide-react';
 import { pedidosOrcamentoService } from '../../services/api';
 import { Spinner } from '../ui';
@@ -207,7 +208,8 @@ export default function CardAbertoOrcamento({
           {/* ── Esquerda: Formulário inicial e fases anteriores ── */}
           <div className="lg:w-[38%] lg:min-w-[340px] lg:overflow-y-auto border-b lg:border-b-0 lg:border-r border-[var(--c-borda)] p-5 space-y-4">
             <div className="pb-3 border-b border-[var(--c-borda)]">
-              <p className="text-lg font-bold text-[var(--c-texto)] break-words">{pedido.cliente_nome || pedido.referencia}</p>
+              <NomeCardEditavel nome={pedido.cliente_nome || pedido.referencia} podeEditar={!!podeEditar}
+                onSalvar={async (n) => { await pedidosOrcamentoService.renomear(pedido.id, n); await onAtualizar?.(); }} />
               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                 <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-borda)] text-[var(--c-suave)]">Orçamento</span>
                 {pedido.pipefy_card_id

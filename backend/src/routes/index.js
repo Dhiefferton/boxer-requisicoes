@@ -38,7 +38,7 @@ import {
   gerarRelatorio, listarRelatorios, detalharRelatorio
 } from '../controllers/necessidadesPecasController.js';
 import {
-  listarPedidos, criarPedido, moverPedido, enviarFotoOrcamento, verFotoOrcamento, excluirFotoOrcamento, listarModelos, criarModelo, editarPedido, cancelarPedido, cancelarPedidoZen, listarPipesPipefy, sincronizarPipefy, importarEntradaPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, criarCardBoxer, clienteZen, listarMovimentos
+  listarPedidos, criarPedido, moverPedido, enviarFotoOrcamento, verFotoOrcamento, excluirFotoOrcamento, listarModelos, criarModelo, editarPedido, cancelarPedido, cancelarPedidoZen, listarPipesPipefy, sincronizarPipefy, importarEntradaPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, renomearPedido, criarCardBoxer, clienteZen, listarMovimentos
 } from '../controllers/pedidosOrcamentoController.js';
 import {
   listarInventarios, previaInventario, criarInventario, detalharInventario, meuInventario,
@@ -50,7 +50,7 @@ import {
   acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, moverPedidoLojinha, editarCamposLojinha, enviarFotoLojinha, verFotoLojinha, excluirFotoLojinha, listarMovimentosLojinha, verConfigLojinha, salvarConfigLojinha, adicionarOpcaoLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
   buscarPedidoZenLojinha, criarPedidoLojinhaFaturada,
 } from '../controllers/lojinhaController.js';
-import { acessoCif, listarPedidosCif, moverPedidoCif, editarCamposCif, verConfigCif, salvarConfigCif, adicionarOpcaoCif, importarEntradaGarantia } from '../controllers/logisticaCifController.js';
+import { acessoCif, listarPedidosCif, moverPedidoCif, editarCamposCif, renomearCif, verConfigCif, salvarConfigCif, adicionarOpcaoCif, importarEntradaGarantia } from '../controllers/logisticaCifController.js';
 import {
   listarNotas as listarNotasRecImp, detalharNota as detalharNotaRecImp, verFoto as verFotoRecImp,
   fotoCatalogo as fotoCatalogoRecImp, enviarFoto as enviarFotoRecImp, excluirFoto as excluirFotoRecImp,
@@ -193,6 +193,7 @@ router.get('/pedidos-orcamento/:id/nf/:tipo',  autenticar, exigirLeituraOrcament
 router.get('/pedidos-orcamento/:id/emails-faturamento', autenticar, exigirLeituraOrcamentos, verEmailsFaturamento);
 router.get('/pedidos-orcamento/:id/tratativa/anexo', autenticar, exigirLeituraOrcamentos, anexoTratativa);
 router.patch('/pedidos-orcamento/:id/campos',   autenticar, exigirPerfil('admin'), editarCampos);
+router.patch('/pedidos-orcamento/:id/nome',     autenticar, exigirPerfil('operador', 'admin'), renomearPedido);
 router.post('/pedidos-orcamento/novo-card',     autenticar, exigirPerfil('admin'), criarCardBoxer);
 router.get('/pedidos-orcamento/cliente-zen',    autenticar, exigirPerfil('admin'), clienteZen);
 router.post('/pedidos-orcamento',               autenticar, exigirPerfil('operador', 'admin'), criarPedido);
@@ -346,6 +347,7 @@ router.post('/logistica-cif/importar-entrada',      ...cif, exigirPerfil('admin'
 router.get('/logistica-cif/pedidos/:id/nf/:tipo', ...cif, arquivoNotaLojinha);
 router.post('/logistica-cif/pedidos/:id/mover',   ...cif, moverPedidoCif);
 router.post('/logistica-cif/pedidos/:id/campos',  ...cif, editarCamposCif);
+router.post('/logistica-cif/pedidos/:id/nome',    ...cif, renomearCif);
 router.post('/logistica-cif/pedidos/:id/fotos',   ...cif, enviarFotoLojinha);
 router.get('/logistica-cif/fotos/:fotoId',        ...cif, verFotoLojinha);
 router.delete('/logistica-cif/fotos/:fotoId',     ...cif, excluirFotoLojinha);

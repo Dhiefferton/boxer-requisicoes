@@ -8,6 +8,7 @@
 // (Lojinha + CIF). Os campos da Lojinha aparecem só para consulta.
 // ============================================================
 import { useEffect, useState } from 'react';
+import NomeCardEditavel from '../../components/operador/NomeCardEditavel.jsx';
 import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, ExternalLink, DownloadCloud, RefreshCw, FileText } from 'lucide-react';
 import { cifService } from '../../services/api';
 import { Spinner } from '../../components/ui';
@@ -435,7 +436,7 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
           <div className="lg:w-[38%] lg:min-w-[340px] lg:overflow-y-auto border-b lg:border-b-0 lg:border-r border-[var(--c-borda)] p-5 space-y-4">
             <div className="pb-3 border-b border-[var(--c-borda)]">
               {ehPipefy(p) ? <>
-                <p className="text-lg font-bold text-[var(--c-texto)]">{p.cliente_nome}</p>
+                <NomeCardEditavel nome={p.cliente_nome} onSalvar={async (n) => { await cifService.renomear(p.id, n); await carregar(); }} />
                 <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-sky-500/15 text-sky-400">Pipefy (Garantia) → Garantia</span>
                 {p.pipefy_garantia_url && (
                   <a href={p.pipefy_garantia_url} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 text-[11px] text-[var(--c-destaque-claro)] hover:underline">Abrir no Pipefy <ExternalLink size={10} /></a>
