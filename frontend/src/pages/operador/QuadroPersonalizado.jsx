@@ -185,7 +185,7 @@ function Quadro({ qid, nome: nomeMenu, podeEditar, admin }) {
         </div>
       )}
 
-      {novo && <NovoCard svc={svc} cfg={cfg} nome={nome} onFechar={() => setNovo(false)} onCriado={(c) => { setNovo(false); carregar(); setAbertoId(c.id); }} />}
+      {novo && <NovoCard svc={svc} cfg={cfg} nome={nome} onFechar={() => setNovo(false)} onConfigurar={admin ? () => { setNovo(false); setVerConfig('inicio'); } : null} onCriado={(c) => { setNovo(false); carregar(); setAbertoId(c.id); }} />}
       {aberto && (
         <CardAberto p={aberto} cfg={cfg} colunas={colunas} svc={svc} podeEditar={podeEditar} admin={admin} nomeQuadro={nome}
           carregar={carregar} onFechar={() => setAbertoId(null)}
@@ -400,7 +400,7 @@ function CardQuadro({ p, cfg, movendo, podeArrastar, onAbrir, onArrastar, onFimA
 }
 
 // Novo card: campos do Formulário inicial (anexos depois de criar). O título vem sozinho (cliente ou 1º campo preenchido)
-function NovoCard({ svc, cfg, nome, onFechar, onCriado }) {
+function NovoCard({ svc, cfg, nome, onFechar, onCriado, onConfigurar = null }) {
   const [valores, setValores] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
@@ -419,7 +419,15 @@ function NovoCard({ svc, cfg, nome, onFechar, onCriado }) {
       <div className="w-full max-w-lg max-h-[92dvh] overflow-y-auto bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <p className="text-base font-bold text-[var(--c-texto)]">Novo card — {nome}</p>
-          <button onClick={onFechar} className="p-1 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={18} /></button>
+          <div className="flex items-center gap-1">
+            {onConfigurar && (
+              <button onClick={onConfigurar} title="Adicionar, tirar ou renomear campos"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] text-[var(--c-suave)] hover:text-[var(--c-destaque)]">
+                <Settings size={12} /> Editar campos
+              </button>
+            )}
+            <button onClick={onFechar} className="p-1 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={18} /></button>
+          </div>
         </div>
         {!todos.length && <p className="text-xs text-[var(--c-suave)]">Sem campos no Formulário inicial. O admin cria em Configurar → Formulário inicial.</p>}
         <dl className="flex flex-col gap-4">

@@ -171,7 +171,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
   const [salvando, setSalvando] = useState(false);
   const [colunas, setColunas] = useState([]);   // { chave | chave_temp, nome, cor, so_admin, arquivada, sistema, zen, fase_pipefy }
   const [campos, setCampos] = useState([]);     // { id | uid, coluna, tipo, rotulo, descricao, obrigatorio, opcoes, lista }
-  const [aba, setAba] = useState('colunas');    // 'inicio' | 'colunas'
+  const [aba, setAba] = useState(colunaInicial === 'inicio' && !semInicio ? 'inicio' : 'colunas');    // 'inicio' | 'colunas'
   const [colSel, setColSel] = useState(null);
   const [campoSel, setCampoSel] = useState(null);
   const [novaOpcao, setNovaOpcao] = useState('');
