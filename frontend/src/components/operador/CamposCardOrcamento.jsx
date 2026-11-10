@@ -43,7 +43,17 @@ export const SO_LEITURA = ['attachment', 'id'];
 
 // Valores aceitos pela condição: texto (um) ou lista (vários, ex.: Aprovado / Aprovado parcialmente)
 export const valoresCondicao = (v) => (Array.isArray(v) ? v : [v]).map(x => String(x ?? '').trim()).filter(Boolean);
-const bate = (valores, cond) => { const ok = valoresCondicao(cond); return valores.some(v => ok.includes(String(v).trim())); };
+// Condições para qualquer campo (mesmo sem opções): "(preenchido)" = tem algum valor; "(vazio)" = sem valor
+export const COND_PREENCHIDO = '(preenchido)';
+export const COND_VAZIO = '(vazio)';
+export const rotuloCondicao = (v) => (v === COND_PREENCHIDO ? 'preenchido' : v === COND_VAZIO ? 'vazio' : v);
+const bate = (valores, cond) => {
+  const ok = valoresCondicao(cond);
+  const vs = (valores || []).map(v => String(v).trim()).filter(Boolean);
+  if (ok.includes(COND_PREENCHIDO) && vs.length) return true;
+  if (ok.includes(COND_VAZIO) && !vs.length) return true;
+  return vs.some(v => ok.includes(v));
+};
 
 // Obrigatório agora? (campo.quando = obrigatório só quando outro campo tiver o valor)
 /** Campo aparece agora? (Configurar → "Mostrar este campo: só quando …"), seguindo a cadeia de campos. */
@@ -69,7 +79,7 @@ export function regraBloqueiaMover(col, destino, campos, valorDe, idDe = (c) => 
     const atuais = valorLista(valorDe(idDe(c)));
     const ok = bate(atuais, r.valores);
     // modo "mostrar" (padrão): só aparece quando bate; "esconder" (regras antigas): some quando bate
-    if (r.modo === 'esconder' ? ok : !ok) return r.modo === 'esconder' ? `"${c.rotulo}" está "${atuais.join(', ')}"` : `só quando "${c.rotulo}" for "${valoresCondicao(r.valores).join('" ou "')}"`;
+    if (r.modo === 'esconder' ? ok : !ok) return r.modo === 'esconder' ? `"${c.rotulo}" está "${atuais.join(', ')}"` : `só quando "${c.rotulo}" for "${valoresCondicao(r.valores).map(rotuloCondicao).join('" ou "')}"`;
   }
   return null;
 }

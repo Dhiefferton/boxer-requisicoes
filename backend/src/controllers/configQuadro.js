@@ -17,7 +17,16 @@ const LISTAS = ['Modelos de máquina'];
  */
 /** Valores da condição: texto (um) ou lista (vários: "Aprovado" ou "Aprovado parcialmente"). */
 export const valoresCondicao = (v) => (Array.isArray(v) ? v : [v]).map(x => String(x ?? '').trim()).filter(Boolean);
-const bateCondicao = (lista, valor) => { const ok = valoresCondicao(valor); return lista.some(x => ok.includes(String(x).trim())); };
+// "(preenchido)" = o campo tem algum valor; "(vazio)" = sem valor (vale para qualquer campo, mesmo sem opções)
+const COND_PREENCHIDO = '(preenchido)', COND_VAZIO = '(vazio)';
+const rotuloCondicao = (v) => (v === COND_PREENCHIDO ? 'preenchido' : v === COND_VAZIO ? 'vazio' : v);
+const bateCondicao = (lista, valor) => {
+  const ok = valoresCondicao(valor);
+  const vs = lista.map(x => String(x).trim()).filter(Boolean);
+  if (ok.includes(COND_PREENCHIDO) && vs.length) return true;
+  if (ok.includes(COND_VAZIO) && !vs.length) return true;
+  return vs.some(x => ok.includes(x));
+};
 /** Limpa o valor da condição ao salvar (texto ou lista de até 30 opções) */
 /** Regras para mover ({ destino, campo: id do campo, valores: [...], modo: 'mostrar' | 'esconder' }): limpa ao salvar */
 export function limparRegras(regras, limpar) {
@@ -47,10 +56,10 @@ export function bloqueioRegra(col, destino, campos, valores, idCampo) {
     let lista = [v];
     if (v.startsWith('[')) { try { const a = JSON.parse(v); if (Array.isArray(a)) lista = a.map(String); } catch { /* texto */ } }
     const atuais = lista.map(x => x.trim()).filter(Boolean);
-    const bate = atuais.some(x => valoresCondicao(r.valores).includes(x));
+    const bate = bateCondicao(atuais, r.valores);
     if (r.modo === 'esconder' ? bate : !bate) {
       return r.modo === 'esconder' ? `"${c.rotulo}" está "${atuais.join(', ')}"`
-        : `só quando "${c.rotulo}" for "${valoresCondicao(r.valores).join('" ou "')}"${atuais.length ? ` (está "${atuais.join(', ')}")` : ' (está vazio)'}`;
+        : `só quando "${c.rotulo}" for "${valoresCondicao(r.valores).map(rotuloCondicao).join('" ou "')}"${atuais.length ? ` (está "${atuais.join(', ')}")` : ' (está vazio)'}`;
     }
   }
   return null;

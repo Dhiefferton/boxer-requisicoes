@@ -670,7 +670,9 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                   })}
                   {/* Regras para mover: esconde o botão de uma coluna conforme o valor de um campo */}
                   {(() => {
-                    const refs = campos.filter(c => c.id && COM_OPCOES.includes(c.tipo) && (c.opcoes || []).length);
+                    // Todo campo salvo entra na lista (os sem opções usam "preenchido" / "vazio"); os ainda não salvos aparecem avisando
+                    const refs = campos.filter(c => c.id);
+                    const naoSalvos = campos.filter(c => !c.id && String(c.rotulo || '').trim());
                     const regras = Array.isArray(colAtual.regras) ? colAtual.regras : [];
                     const outras = colunas.filter(o => keyCol(o) !== colSel);
                     const nomeDaColuna = (k) => (k === 'inicio' ? 'Formulário inicial' : colunas.find(o => keyCol(o) === k)?.nome || k);
@@ -695,12 +697,13 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                               </select>
                               <p className="text-[11px] text-[var(--c-suave)]">{r.modo === 'esconder' ? 'quando o campo' : 'só quando o campo'}</p>
                               <select value={r.campo || ''} className={inp}
-                                onChange={e => mudarRegra(i, x => ({ ...x, campo: Number(e.target.value) || null, valores: (refs.find(c => String(c.id) === e.target.value)?.opcoes || []).slice(0, 1) }))}>
+                                onChange={e => mudarRegra(i, x => ({ ...x, campo: Number(e.target.value) || null, valores: (() => { const f = refs.find(c => String(c.id) === e.target.value); const ops = f && COM_OPCOES.includes(f.tipo) ? (f.opcoes || []) : []; return ops.length ? ops.slice(0, 1) : ['(preenchido)']; })() }))}>
                                 <option value="">Escolha o campo…</option>
                                 {refs.map(c => <option key={c.id} value={c.id}>{nomeDaColuna(c.coluna)} › {c.rotulo}</option>)}
+                                {naoSalvos.map(c => <option key={c.uid} value="" disabled>{nomeDaColuna(c.coluna)} › {c.rotulo} (salve a configuração para usar)</option>)}
                               </select>
                               {ref && <><p className="text-[11px] text-[var(--c-suave)]">for</p>
-                                <OpcoesCondicao opcoes={opcoesDe(ref)} valor={r.valores} onChange={v => mudarRegra(i, x => ({ ...x, valores: v }))} /></>}
+                                <OpcoesCondicao opcoes={['(preenchido)', '(vazio)', ...(COM_OPCOES.includes(ref.tipo) || baseDoCampo(ref) ? opcoesDe(ref) : [])]} valor={r.valores} onChange={v => mudarRegra(i, x => ({ ...x, valores: v }))} /></>}
                             </div>
                           );
                         })}
@@ -752,10 +755,10 @@ function OpcoesCondicao({ opcoes, valor, onChange }) {
       {opcoes.map(o => (
         <label key={o} className="flex items-center gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
           <input type="checkbox" checked={sel.includes(o)} onChange={() => alternar(o)} />
-          <span className="truncate">{o}</span>
+          <span className="truncate">{o === '(preenchido)' ? 'Tem algum valor (preenchido)' : o === '(vazio)' ? 'Está sem valor (vazio)' : o}</span>
         </label>
       ))}
-      <p className="text-[10px] text-[var(--c-suave)]">{sel.length ? `Vale quando for ${sel.map(x => `"${x}"`).join(' ou ')}.` : 'Marque uma ou mais opções.'}</p>
+      <p className="text-[10px] text-[var(--c-suave)]">{sel.length ? `Vale quando for ${sel.map(x => `"${x === '(preenchido)' ? 'preenchido' : x === '(vazio)' ? 'vazio' : x}"`).join(' ou ')}.` : 'Marque uma ou mais opções.'}</p>
     </div>
   );
 }
