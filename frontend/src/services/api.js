@@ -295,6 +295,6 @@ export const relatoriosService = {
   pipes:       ()            => api.get('/relatorios/pipes'),
   executar:    (config, pagina = 1, todos = false) => api.post('/relatorios/executar', { config, pagina, todos }, { timeout: 120000 }),
   importacao:  ()            => api.get('/relatorios/importacao'),
-  lerPipes:    ()            => api.post('/relatorios/importacao/pipes', null, { timeout: 60000 }),
+  lerPipes:    ()            => api.post('/relatorios/importacao/pipes', {}, { timeout: 60000 }),
   importarLote: (pipe_id, recomecar = false) => api.post('/relatorios/importacao/lote', { pipe_id, recomecar }, { timeout: 120000 }),
 };
