@@ -419,9 +419,11 @@ function FormNovoRegistro({ base, comValor, colunas, inicial, salvando, erro, on
 }
 
 // ── Registro de uma database (ex.: Cliente do Cadastro Cliente): busca no servidor, cartões com os dados e "Criar registro" ──
-function SeletorRegistroCartoes({ campo, valor, onChange }) {
+// textoSimples: campo "Lista" ligado a uma database (base:<id>) — grava só a descrição, como antes
+function SeletorRegistroCartoes({ campo, valor, onChange, textoSimples = false }) {
   const baseId = Number(String(campo.lista || '').replace(/^base:/, '')) || 0;
-  const atual = lerRegistro(valor);
+  const textoAtual = textoSimples ? (valorLista(valor)[0] || '') : '';
+  const atual = textoSimples ? (textoAtual ? { id: null, descricao: textoAtual } : null) : lerRegistro(valor);
   const caixa = useRef(null);
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState('');
@@ -452,7 +454,7 @@ function SeletorRegistroCartoes({ campo, valor, onChange }) {
   const comValor = baseInfo ? baseInfo.com_valor !== false : true;
   const colunas = baseInfo?.colunas || [];
   const escolher = (r) => {
-    onChange(!r ? '' : JSON.stringify({ id: r.id, base_id: r.base_id, base: r.base, descricao: r.descricao, valor: r.valor, criado_em: r.criado_em, ...(comValor ? {} : { sem_valor: true }), ...(r.extras?.length ? { extras: r.extras } : {}) }));
+    onChange(!r ? '' : textoSimples ? r.descricao : JSON.stringify({ id: r.id, base_id: r.base_id, base: r.base, descricao: r.descricao, valor: r.valor, criado_em: r.criado_em, ...(comValor ? {} : { sem_valor: true }), ...(r.extras?.length ? { extras: r.extras } : {}) }));
     setAberto(false); setBusca(''); setNovo(null); setErro('');
   };
   async function criarComForm({ descricao, valor, dados }) {
@@ -468,7 +470,15 @@ function SeletorRegistroCartoes({ campo, valor, onChange }) {
   const inp = 'w-full py-1.5 rounded-lg text-xs bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] focus:outline-none focus:border-[var(--c-destaque)]';
   return (
     <div ref={caixa} className="relative space-y-1.5">
-      {atual
+      {atual && textoSimples
+        ? (
+          <div className="flex items-center gap-2 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] px-3 py-2">
+            <p className="flex-1 text-sm font-semibold text-[var(--c-texto)] break-words">{atual.descricao}</p>
+            <button type="button" onClick={() => setAberto(a => !a)} className="text-[11px] font-semibold text-[var(--c-destaque)] hover:underline">Trocar</button>
+            <button type="button" onClick={() => escolher(null)} title="Tirar" className="text-[var(--c-suave)] hover:text-red-400"><X size={13} /></button>
+          </div>
+        )
+        : atual
         ? <CartaoRegistro reg={atual} onTrocar={() => setAberto(a => !a)} onLimpar={() => escolher(null)} />
         : (
           <button type="button" onClick={() => setAberto(a => !a)}
@@ -498,7 +508,7 @@ function SeletorRegistroCartoes({ campo, valor, onChange }) {
             {!lista && !erro && <div className="flex justify-center py-4"><Spinner size={14} /></div>}
             {(lista || []).map(r => (
               <button key={r.id} type="button" onClick={() => escolher(r)}
-                className={`w-full text-left rounded-lg border-l-4 border-[var(--c-destaque)]/40 bg-[var(--c-fundo)] border-y border-r border-y-[var(--c-borda)] border-r-[var(--c-borda)] px-3 py-2.5 hover:shadow-md hover:border-l-[var(--c-destaque)] ${r.id === atual?.id ? 'ring-1 ring-[var(--c-destaque)]' : ''}`}>
+                className={`w-full text-left rounded-lg border-l-4 border-[var(--c-destaque)]/40 bg-[var(--c-fundo)] border-y border-r border-y-[var(--c-borda)] border-r-[var(--c-borda)] px-3 py-2.5 hover:shadow-md hover:border-l-[var(--c-destaque)] ${(textoSimples ? r.descricao === atual?.descricao : r.id === atual?.id) ? 'ring-1 ring-[var(--c-destaque)]' : ''}`}>
                 <p className="text-sm font-bold text-[var(--c-texto)] break-words">{r.descricao}</p>
                 {comValor && <p className="text-xs text-[var(--c-suave)] mt-0.5">{fmtMoeda(r.valor)}</p>}
                 {extrasPrincipais(r.extras, 3).map((x, i) => (
@@ -778,7 +788,7 @@ export function Editor({ campo, valor, onChange }) {
     );
   }
   if (campo.tipo === 'registro') return <SeletorRegistroCartoes campo={campo} valor={valor} onChange={onChange} />;
-  if (/^base:\d+$/.test(String(campo.lista || ''))) return <SeletorRegistro campo={campo} valor={valor} onChange={onChange} semValor />;
+  if (/^base:\d+$/.test(String(campo.lista || ''))) return <SeletorRegistroCartoes campo={campo} valor={valor} onChange={onChange} textoSimples />;
   if ((campo.tipo === 'radio_vertical' || campo.tipo === 'radio_horizontal') && campo.opcoes?.length) {
     const atual = valorLista(valor)[0] || '';
     return (
