@@ -399,9 +399,8 @@ function CardQuadro({ p, cfg, movendo, podeArrastar, onAbrir, onArrastar, onFimA
   );
 }
 
-// Novo card: título + campos do Formulário inicial (anexos depois de criar)
+// Novo card: campos do Formulário inicial (anexos depois de criar). O título vem sozinho (cliente ou 1º campo preenchido)
 function NovoCard({ svc, cfg, nome, onFechar, onCriado }) {
-  const [titulo, setTitulo] = useState('');
   const [valores, setValores] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
@@ -411,7 +410,7 @@ function NovoCard({ svc, cfg, nome, onFechar, onCriado }) {
   const temAnexo = campos.some(c => c.tipo === 'attachment');
   async function criar() {
     setSalvando(true); setErro('');
-    try { const { data } = await svc.criar({ titulo, campos: valores }); onCriado(data.card); }
+    try { const { data } = await svc.criar({ campos: valores }); onCriado(data.card); }
     catch (e) { setErro(e.response?.data?.erro || 'Erro ao criar o card.'); }
     finally { setSalvando(false); }
   }
@@ -421,11 +420,6 @@ function NovoCard({ svc, cfg, nome, onFechar, onCriado }) {
         <div className="flex items-center justify-between">
           <p className="text-base font-bold text-[var(--c-texto)]">Novo card — {nome}</p>
           <button onClick={onFechar} className="p-1 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={18} /></button>
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-[var(--c-texto)] mb-1">Título do card</p>
-          <input value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Se deixar vazio, usa o primeiro campo preenchido"
-            className="w-full bg-[var(--c-fundo)] border border-[var(--c-borda)] text-[var(--c-texto)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[var(--c-destaque)]" />
         </div>
         {!todos.length && <p className="text-xs text-[var(--c-suave)]">Sem campos no Formulário inicial. O admin cria em Configurar → Formulário inicial.</p>}
         <dl className="flex flex-col gap-4">

@@ -462,13 +462,17 @@ export async function criarCard(req, res, next) {
     const faltando = cfg.campos.filter(f => f.coluna === 'inicio' && f.tipo !== 'anexo' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
       && !String(valores[c.idCampoConfig(f)] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha: ${faltando.map(f => f.rotulo).join(', ')}.` });
-    // Título: o informado ou o primeiro campo de texto preenchido do formulário
-    let titulo = limpar(req.body?.titulo, 200);
-    if (!titulo) {
-      const primeiro = cfg.campos.filter(f => f.coluna === 'inicio' && ['texto', 'documento', 'email', 'telefone', 'numero'].includes(f.tipo))
-        .map(f => limpar(valores[c.idCampoConfig(f)], 200)).find(Boolean);
-      titulo = primeiro || '';
-    }
+    // Título automático (a tela não pede mais): o cliente, senão o 1º campo preenchido do formulário
+    const legivel = (v) => {
+      let t = String(v ?? '').trim();
+      if (/^[\[{]/.test(t)) { try { const j = JSON.parse(t); const x = Array.isArray(j) ? j[0] : j; t = typeof x === 'object' && x ? String(x.descricao || x.nome || x.titulo || '') : String(x ?? ''); } catch { /* texto */ } }
+      return limpar(t, 200);
+    };
+    const doInicio = cfg.campos.filter(f => f.coluna === 'inicio' && f.tipo !== 'anexo');
+    const campoCliente = doInicio.find(f => /^cliente/i.test(f.rotulo) && legivel(valores[c.idCampoConfig(f)]));
+    let titulo = limpar(req.body?.titulo, 200)
+      || (campoCliente ? legivel(valores[c.idCampoConfig(campoCliente)]) : '')
+      || doInicio.map(f => legivel(valores[c.idCampoConfig(f)])).find(Boolean) || '';
     const coluna = cfg.colunas.find(x => !x.arquivada) || cfg.colunas[0];
     const copiados = preencherCopias(cfg, c, ['inicio', coluna?.chave || 'entrada'], valores);
     if (copiados) Object.assign(valores, copiados);
