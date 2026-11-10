@@ -208,7 +208,6 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
   const [editNome, setEditNome] = useState(null);
   const [menuCol, setMenuCol] = useState(null); // id da coluna | 'nova'
   const [novo, setNovo] = useState(null); // { descricao, valor, dados }
-  const [colando, setColando] = useState(null); // texto colado da planilha
   const [ocupado, setOcupado] = useState('');
   const colunas = info.colunas;
 
@@ -276,31 +275,54 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
     a.href = URL.createObjectURL(blob); a.download = `${info.nome}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
-  // Colar da planilha: 1ª linha = cabeçalho (Descrição, Valor e nomes das colunas)
-  async function importarColado() {
-    const linhas = String(colando || '').split(/\r?\n/).filter(l => l.trim());
-    if (linhas.length < 2) { setErro('Cole o cabeçalho e pelo menos uma linha.'); return; }
-    const sep = linhas[0].includes('\t') ? '\t' : ';';
-    const cab = linhas[0].split(sep).map(c => semAcento(c.trim()));
-    const iDesc = cab.findIndex(c => /^(descricao|titulo|nome|produto)/.test(c));
-    if (iDesc < 0) { setErro('O cabeçalho precisa ter a coluna "Descrição".'); return; }
-    const iValor = cab.findIndex(c => /^(valor|preco)/.test(c));
-    const mapa = colunas.map(c => ({ id: c.id, i: cab.indexOf(semAcento(c.nome)) })).filter(x => x.i >= 0);
-    const dados = linhas.slice(1).map(l => {
-      const v = l.split(sep);
-      return { descricao: v[iDesc], valor: iValor >= 0 ? v[iValor] : 0, dados: Object.fromEntries(mapa.map(m => [m.id, (v[m.i] || '').trim()])) };
-    });
-    setOcupado('Importando…'); setErro('');
+  // Importar planilha (.xlsx, .xls, .csv): o sistema acha o cabeçalho, as colunas e os valores sozinho
+  async function importarArquivo(arquivo) {
+    if (!arquivo) return;
+    setErro(''); setAviso('');
+    setOcupado('Lendo a planilha…');
     try {
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(await arquivo.arrayBuffer(), { type: 'array', cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const m = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: false })
+        .map(l => l.map(c => (typeof c === 'string' ? c.trim() : c)))
+        .filter(l => l.some(c => c !== ''));
+      if (!m.length) throw new Error('A planilha está vazia.');
+      const ehDesc = c => /^(descricao|titulo|nome|produto|item|peca)/.test(semAcento(String(c).trim()));
+      let ih = m.slice(0, 20).findIndex(l => l.some(ehDesc));
+      let iDesc, iValor = -1, mapa = [];
+      let corpo;
+      if (ih >= 0) {
+        const cab = m[ih].map(c => semAcento(String(c).trim()));
+        iDesc = cab.findIndex(c => /^(descricao|titulo|nome|produto|item|peca)/.test(c));
+        iValor = info.com_valor ? cab.findIndex(c => /^(valor|preco|preço|vlr)/.test(c)) : -1;
+        mapa = colunas.map(c => ({ id: c.id, i: cab.indexOf(semAcento(c.nome)) })).filter(x => x.i >= 0);
+        corpo = m.slice(ih + 1);
+      } else { // sem cabeçalho: 1ª coluna = descrição; a 1ª coluna numérica depois dela = valor
+        iDesc = 0; corpo = m;
+        if (info.com_valor) {
+          const amostra = m.slice(0, 20);
+          const n = Math.max(...amostra.map(l => l.length));
+          for (let j = 1; j < n; j++) {
+            if (amostra.every(l => l[j] === '' || typeof l[j] === 'number' || /^[\sR$\d.,-]+$/.test(String(l[j])))) { iValor = j; break; }
+          }
+        }
+      }
+      const dados = corpo.filter(l => String(l[iDesc] ?? '').trim()).map(l => ({
+        descricao: String(l[iDesc]).trim(),
+        valor: iValor >= 0 && l[iValor] !== '' ? l[iValor] : 0,
+        dados: Object.fromEntries(mapa.map(x => [x.id, String(l[x.i] ?? '').trim()])),
+      }));
+      if (!dados.length) throw new Error('Não achei linhas com descrição na planilha.');
       let tot = { novos: 0, atualizados: 0, ignorados: 0 };
       for (let i = 0; i < dados.length; i += 1000) {
+        setOcupado(`Importando… ${Math.min(i + 1000, dados.length)} de ${dados.length}`);
         const { data } = await basesService.importar(base.id, dados.slice(i, i + 1000));
         tot = { novos: tot.novos + data.novos, atualizados: tot.atualizados + data.atualizados, ignorados: tot.ignorados + data.ignorados };
       }
-      setColando(null);
-      setAviso(`Planilha: ${tot.novos} novo(s), ${tot.atualizados} atualizado(s)${tot.ignorados ? `, ${tot.ignorados} ignorado(s)` : ''}.`);
+      setAviso(`Planilha "${arquivo.name}": ${tot.novos} novo(s), ${tot.atualizados} atualizado(s)${tot.ignorados ? `, ${tot.ignorados} ignorado(s)` : ''}.`);
       await carregar(); onMudou(base.id);
-    } catch (e) { setErro(erroDe(e, 'Erro ao importar.')); }
+    } catch (e) { setErro(erroDe(e, e?.message || 'Erro ao importar a planilha.')); }
     finally { setOcupado(''); }
   }
   async function trazerPipefy() {
@@ -355,7 +377,13 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
             <input value={busca} onChange={e => { setBusca(e.target.value); setLimite(300); }} placeholder="Buscar registro…" className={`${inp} pl-8 w-52`} />
           </div>
           {podeEditar && <button onClick={() => setNovo({ descricao: '', valor: '', dados: {} })} className={btn}><Plus size={13} /> Registro</button>}
-          {podeEditar && <button onClick={() => setColando('')} className={btn} title="Colar linhas copiadas do Excel"><Upload size={13} /> Colar planilha</button>}
+          {podeEditar && (
+            <label className={`${btn} cursor-pointer`} title="Importar planilha do Excel (.xlsx, .xls ou .csv)">
+              <Upload size={13} /> Importar planilha
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" disabled={!!ocupado}
+                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; importarArquivo(f); }} />
+            </label>
+          )}
           <button onClick={exportar} disabled={!registros?.length} className={btn}><Download size={13} /> Exportar</button>
           {podeEditar && (info.pipefy_tabela || /pe[cç]as em geral/i.test(info.nome)) && (
             <button onClick={trazerPipefy} disabled={!!ocupado} className={btn}><DownloadCloud size={13} /> Atualizar do Pipefy</button>
@@ -365,17 +393,6 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
       </div>
       {ocupado && <p className="flex items-center gap-2 text-xs text-[var(--c-suave)]"><Spinner size={12} /> {ocupado}</p>}
       {erro && <p className="text-xs text-red-400">{erro}</p>}
-
-      {colando !== null && (
-        <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-3 space-y-2">
-          <p className="text-xs text-[var(--c-texto)]">Copie do Excel (com o cabeçalho) e cole aqui. Colunas reconhecidas: <b>Descrição</b>{info.com_valor ? <>, <b>Valor</b></> : ''}{colunas.length ? `, ${colunas.map(c => c.nome).join(', ')}` : ''}. Descrição que já existe é atualizada.</p>
-          <textarea rows={6} value={colando} onChange={e => setColando(e.target.value)} className={inp} placeholder={'Descrição\tValor\n701738 - Placa principal\t616,00'} />
-          <div className="flex gap-2 justify-end">
-            <button onClick={() => setColando(null)} className="px-3 py-1.5 text-xs text-[var(--c-suave)]">Cancelar</button>
-            <button onClick={importarColado} disabled={!!ocupado} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--c-destaque)] text-white disabled:opacity-40">Importar</button>
-          </div>
-        </div>
-      )}
 
       {/* Tabela */}
       <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] overflow-auto xl:flex-1 xl:min-h-0">
