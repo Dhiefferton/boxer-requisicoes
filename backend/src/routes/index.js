@@ -5,7 +5,7 @@ import { verTratativa, anexoTratativa } from '../controllers/tratativaController
 import { acessoQuadro, verTelas, criarQuadro, editarQuadro, salvarNomesTelas, verConfigQuadro, salvarConfigQuadroDin, adicionarOpcaoQuadro,
   listarCards, criarCard, moverCard, editarCamposCard, excluirCard, listarMovimentosQuadro, enviarFotoQuadro, verFotoQuadro, excluirFotoQuadro, arquivoNotaCardQuadro } from '../controllers/quadrosController.js';
 import { autorizarUpload, registrarVisto, alertaBlob, verUsoBlob, salvarLimites, excluirArquivo, conferirNaVercel } from '../controllers/blobController.js';
-import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro, excluirBase, importarBasePipefy, editarBase, excluirRegistro, importarRegistros } from '../controllers/basesController.js';
+import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro, excluirBase, importarBasePipefy, editarBase, excluirRegistro, importarRegistros, listarLotes, desfazerImportacao } from '../controllers/basesController.js';
 import bcrypt from 'bcryptjs';
 import { login, me, trocarSenha, alterarSenha, esqueciSenha, validarTokenSenha, redefinirSenha } from '../controllers/authController.js';
 import rateLimit from 'express-rate-limit';
@@ -218,6 +218,8 @@ router.post('/blob/conferir',           autenticar, exigirPerfil('admin'), confe
 router.delete('/bases/registros/:id',   autenticar, exigirPerfil('admin'), excluirRegistro);
 router.patch('/bases/:id',              autenticar, exigirPerfil('admin'), editarBase);
 router.post('/bases/:id/importar',      autenticar, exigirPerfil('admin'), importarRegistros);
+router.get('/bases/:id/lotes',          autenticar, exigirPerfil('admin'), listarLotes);
+router.post('/bases/:id/desfazer',      autenticar, exigirPerfil('admin'), desfazerImportacao);
 router.get('/pedidos-orcamento/config',         autenticar, exigirLeituraOrcamentos, verConfigOrcamento);
 router.post('/pedidos-orcamento/config',        autenticar, exigirPerfil('admin'), salvarConfigOrcamento);
 router.post('/pedidos-orcamento/config/campos/:id/opcoes', autenticar, exigirLeituraOrcamentos, adicionarOpcaoOrcamento);

@@ -138,6 +138,8 @@ export const basesService = {
   editarBase:     (baseId, dados)  => api.patch(`/bases/${baseId}`, dados),
   excluirRegistro: (id)            => api.delete(`/bases/registros/${id}`),
   importar:       (baseId, linhas) => api.post(`/bases/${baseId}/importar`, { linhas }, { timeout: 120000 }),
+  lotes:          (baseId)         => api.get(`/bases/${baseId}/lotes`),
+  desfazer:       (baseId, corpo)  => api.post(`/bases/${baseId}/desfazer`, corpo, { timeout: 60000 }),
   importarPipefy: (cursor, baseId) => api.post('/bases/importar-pipefy', { cursor, base_id: baseId }, { timeout: 120000 }),
 };
 

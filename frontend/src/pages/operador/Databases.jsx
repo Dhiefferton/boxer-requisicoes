@@ -8,7 +8,7 @@
 // no Configurar (engrenagem) de cada campo.
 // ============================================================
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Database, Plus, Search, Trash2, Pencil, Check, X, Download, Upload, DownloadCloud, MoreVertical } from 'lucide-react';
+import { Database, Plus, Search, Trash2, Pencil, Check, X, Download, Upload, DownloadCloud, MoreVertical, Undo2 } from 'lucide-react';
 import { basesService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -230,6 +230,28 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
   const [novo, setNovo] = useState(null); // { descricao, valor, dados }
   const [ocupado, setOcupado] = useState('');
   const colunas = info.colunas;
+  const { usuario: usuarioLogado } = useAuth();
+  const [lotes, setLotes] = useState(null); // modal "Desfazer importação"
+  const [desfazColunas, setDesfazColunas] = useState(true);
+
+  async function abrirLotes() {
+    setErro(''); setLotes([]);
+    try { const { data } = await basesService.lotes(base.id); setLotes(data.lotes); }
+    catch (e) { setErro(erroDe(e, 'Não consegui listar as importações.')); setLotes(null); }
+  }
+  async function desfazerLote(l) {
+    const quando = new Date(l.hora).toLocaleString('pt-BR', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' });
+    if (!confirm(`Tirar da database os ${l.quantidade} registro(s) criados em ${quando}h${desfazColunas ? ' e as colunas criadas junto' : ''}? Os demais ficam como estão.`)) return;
+    setOcupado('Desfazendo…'); setErro('');
+    try {
+      const { data } = await basesService.desfazer(base.id, { de: l.de, ate: l.ate, colunas: desfazColunas });
+      const { data: b2 } = await basesService.registros(base.id, { limite: 1 });
+      if (b2.base?.colunas) setInfo(i => ({ ...i, colunas: b2.base.colunas }));
+      setAviso(`${data.removidos} registro(s) retirado(s)${data.colunasRemovidas ? ` e ${data.colunasRemovidas} coluna(s)` : ''}.`);
+      setLotes(null); await carregar(busca, limite); onMudou(base.id);
+    } catch (e) { setErro(erroDe(e, 'Erro ao desfazer.')); }
+    finally { setOcupado(''); }
+  }
 
   async function carregar(q = busca, lim = limite) {
     try {
@@ -367,6 +389,9 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
             </label>
           )}
           <button onClick={exportar} disabled={!registros?.length} className={btn}><Download size={13} /> Exportar</button>
+          {podeEditar && usuarioLogado?.perfil === 'admin' && (
+            <button onClick={abrirLotes} className={btn} title="Tirar os registros de uma importação"><Undo2 size={13} /> Desfazer importação</button>
+          )}
           {podeEditar && (info.pipefy_tabela || /pe[cç]as em geral/i.test(info.nome)) && (
             <button onClick={trazerPipefy} disabled={!!ocupado} className={btn}><DownloadCloud size={13} /> Atualizar do Pipefy</button>
           )}
@@ -375,6 +400,29 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
       </div>
       {ocupado && <p className="flex items-center gap-2 text-xs text-[var(--c-suave)]"><Spinner size={12} /> {ocupado}</p>}
       {erro && <p className="text-xs text-red-400">{erro}</p>}
+
+      {lotes !== null && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3" onClick={() => setLotes(null)}>
+          <div className="w-full max-w-lg max-h-[85dvh] overflow-y-auto bg-[var(--c-fundo)] border border-[var(--c-borda)] rounded-2xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <p className="text-base font-bold text-[var(--c-texto)]">Desfazer importação — {info.nome}</p>
+              <button onClick={() => setLotes(null)} className="p-1 text-[var(--c-suave)]"><X size={18} /></button>
+            </div>
+            <p className="text-xs text-[var(--c-suave)]">Registros agrupados por hora em que foram criados. Escolha o grupo da importação para tirá-lo da database (ficam inativos, não são apagados do banco).</p>
+            <label className="flex items-center gap-2 text-xs text-[var(--c-texto)]"><input type="checkbox" checked={desfazColunas} onChange={e => setDesfazColunas(e.target.checked)} /> Remover também as colunas criadas na importação</label>
+            {!lotes.length && <p className="text-xs text-[var(--c-suave)]">Nada para mostrar.</p>}
+            {lotes.map(l => (
+              <div key={l.hora} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--c-borda)] px-3 py-2">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--c-texto)]">{l.quantidade} registro(s)</p>
+                  <p className="text-[11px] text-[var(--c-suave)]">{new Date(l.hora).toLocaleString('pt-BR', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' })}h{l.por ? ` · ${l.por}` : ''}</p>
+                </div>
+                <button onClick={() => desfazerLote(l)} disabled={!!ocupado} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/15 text-red-400 hover:bg-red-500/25 disabled:opacity-40">Tirar este grupo</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tabela */}
       <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] overflow-auto xl:flex-1 xl:min-h-0">

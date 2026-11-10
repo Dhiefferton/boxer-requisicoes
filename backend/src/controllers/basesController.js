@@ -344,3 +344,41 @@ export async function importarRegistros(req, res, next) {
     res.json({ novos, atualizados, ignorados });
   } catch (err) { next(err); }
 }
+
+// GET /bases/:id/lotes (admin) — registros da database agrupados por hora de criação (para desfazer uma importação)
+export async function listarLotes(req, res, next) {
+  try {
+    await garantir();
+    const id = Number(req.params.id) || 0;
+    const r = await query(
+      `SELECT date_trunc('hour', criado_em AT TIME ZONE 'America/Sao_Paulo') AS hora, COUNT(*)::int AS quantidade,
+              MIN(criado_em) AS de, MAX(criado_em) AS ate, MAX(criado_por_nome) AS por
+         FROM bx_base_registros WHERE base_id = $1 AND ativo GROUP BY 1 ORDER BY 1 DESC LIMIT 60`, [id]);
+    res.json({ lotes: r.rows });
+  } catch (err) { next(err); }
+}
+
+// POST /bases/:id/desfazer { de, ate, colunas } (admin) — tira da database os registros criados no intervalo
+// (ficam inativos, não são apagados do banco) e, se pedido, as colunas criadas no mesmo período.
+export async function desfazerImportacao(req, res, next) {
+  try {
+    await garantir();
+    const b = (await query(`SELECT id, colunas FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
+    if (!b) return res.status(404).json({ erro: 'Database não encontrada.' });
+    const de = new Date(req.body?.de), ate = new Date(req.body?.ate);
+    if (Number.isNaN(de.getTime()) || Number.isNaN(ate.getTime()) || ate < de) return res.status(400).json({ erro: 'Intervalo inválido.' });
+    const r = await query(
+      `UPDATE bx_base_registros SET ativo = FALSE, atualizado_em = NOW() WHERE base_id = $1 AND ativo AND criado_em BETWEEN $2 AND $3`,
+      [b.id, de, ate]);
+    let colunasRemovidas = 0;
+    if (req.body?.colunas) {
+      // o id de uma coluna nova carrega o instante em que ela foi criada (c + Date.now() em base 36)
+      const criadaEm = (id) => { const ms = parseInt(String(id).slice(1, 9), 36); return Number.isFinite(ms) ? ms : null; };
+      const ini = de.getTime() - 15 * 60 * 1000, fim = ate.getTime() + 15 * 60 * 1000;
+      const mantidas = (b.colunas || []).filter(c => { const t = criadaEm(c.id); return !(t && t >= ini && t <= fim); });
+      colunasRemovidas = (b.colunas || []).length - mantidas.length;
+      if (colunasRemovidas) await query(`UPDATE bx_bases SET colunas = $2::jsonb WHERE id = $1`, [b.id, JSON.stringify(mantidas)]);
+    }
+    res.json({ removidos: r.rowCount, colunasRemovidas });
+  } catch (err) { next(err); }
+}
