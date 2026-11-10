@@ -444,7 +444,7 @@ function TabelaDatabase({ base, podeEditar, onMudou, setAviso }) {
             </tbody>
           </table>
         )}
-        {total > registros.length && (
+        {registros && total > registros.length && (
           <button onClick={() => setLimite(l => l + 300)} className="w-full py-2 text-xs text-[var(--c-destaque)] hover:underline">Mostrar mais ({total - registros.length} restantes)</button>
         )}
       </div>
