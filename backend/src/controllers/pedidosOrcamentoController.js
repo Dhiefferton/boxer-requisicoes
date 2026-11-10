@@ -11,7 +11,7 @@ import { query } from '../config/db.js';
 import {
   pipefyQuery, listarCardsDaFase, extrairDadosOrcamento, listarCardsNovosOrcamento,
   buscarSituacaoCards, ORCAMENTO_PHASE_APROVADO_RECUSADO, estruturaPipeOrcamento, CAMPO_DOC_CLIENTE,
-  atualizarCamposCardPipefy, TIPOS_EDITAVEIS_PIPEFY, PIPEFY_ATIVO, listarCardsEntradaPipefy,
+  atualizarCamposCardPipefy, renovarClienteDosCampos, TIPOS_EDITAVEIS_PIPEFY, PIPEFY_ATIVO, listarCardsEntradaPipefy,
 } from '../integrations/pipefyService.js';
 import {
   criarPedidoVendaZen, consultarOrdemSeparacao, finalizarRomaneioZen,
@@ -487,6 +487,7 @@ export async function moverPedido(req, res, next) {
     let zen = null;
     if (pedido.status === 'solicitacao' && status === 'separando' && (pedido.pipefy_card_id || (pedido.itens || []).length)) {
       try {
+        await renovarClienteDoCard(pedido);
         zen = await criarPedidoVendaZen(pedido);
         await query(
           `UPDATE pedidos_orcamento SET zen_pedido_id = $1, zen_ordem_separacao_id = $2, zen_erro = NULL, zen_enviado_em = NOW() WHERE id = $3`,
@@ -556,6 +557,22 @@ export async function moverPedido(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// Antes de criar o pedido no Zen: relê o cadastro do cliente no Pipefy. A sincronização mantém
+// o cadastro lido na 1ª vez; se o CNPJ foi corrigido depois, o card ficava com o CNPJ velho.
+async function renovarClienteDoCard(pedido) {
+  if (!PIPEFY_ATIVO || !pedido?.pipefy_card_id) return;
+  try {
+    const campos = await renovarClienteDosCampos(pedido.pipefy_card_id, Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []);
+    const d = extrairDadosOrcamento({ campos, titulo: null });
+    await query(`UPDATE pedidos_orcamento SET pipefy_campos = $1::jsonb, cliente_cnpj = COALESCE($2, cliente_cnpj),
+                   cliente_nome = COALESCE($3, cliente_nome) WHERE id = $4`,
+      [JSON.stringify(campos), d.cliente_cnpj || null, d.cliente_nome ? d.cliente_nome.slice(0, 255) : null, pedido.id]);
+    pedido.pipefy_campos = campos;
+    if (d.cliente_cnpj) pedido.cliente_cnpj = d.cliente_cnpj;
+    if (d.cliente_nome) pedido.cliente_nome = d.cliente_nome;
+  } catch (e) { console.error(`⚠️ Não consegui renovar o cliente do card ${pedido.id}:`, e.message); }
+}
+
 // POST /pedidos-orcamento/:id/voltar-separacao (admin)
 // Card que foi para "Concluído - Não Liberado" no Pipefy antes de ter o pedido
 // e a ordem de separação no Zen: cria o pedido de venda + ordem de separação
@@ -569,6 +586,7 @@ export async function voltarParaSeparacao(id, usuario) {
   let zen = null;
   if (!pedido.zen_pedido_id || !pedido.zen_ordem_separacao_id) {
     try {
+      await renovarClienteDoCard(pedido);
       zen = await criarPedidoVendaZen(pedido);
     } catch (err) {
       await query(`UPDATE pedidos_orcamento SET zen_pedido_id = COALESCE($1, zen_pedido_id), zen_erro = $2, atualizado_em = NOW() WHERE id = $3`,

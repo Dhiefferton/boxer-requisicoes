@@ -626,3 +626,10 @@ export async function atualizarCamposCardPipefy(cardId, campos) {
   }
   return { gravados, erros };
 }
+
+/** Relê do Pipefy o cadastro do cliente conectado ao card (CNPJ/nome) e devolve os campos com ele renovado. */
+export async function renovarClienteDosCampos(cardId, campos = []) {
+  const novos = await buscarConectados(cardId, 'cadastro_cliente', true);
+  if (!novos.length) return campos;
+  return campos.map(c => (c?.id === 'cadastro_cliente' ? { ...c, conectados: novos } : c));
+}
