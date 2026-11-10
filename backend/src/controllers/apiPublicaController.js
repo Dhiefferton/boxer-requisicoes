@@ -82,7 +82,10 @@ function fontesDaTela(tela) {
 
 /** Telas que podem receber liberação (inclui os quadros criados pelo admin) */
 export async function telasLiberaveis() {
-  const base = TELAS.filter(t => !BLOQUEADAS.has(t.chave) && FONTES[t.chave]).map(t => ({ chave: t.chave, nome: t.nome }));
+  // Usa o nome que o admin deu à tela (ex.: logistica_cif aparece como "Garantia - Boxer Soldas")
+  let nomes = {};
+  try { nomes = (await query(`SELECT valor FROM bx_config WHERE chave = 'telas_nomes'`)).rows[0]?.valor || {}; } catch { /* sem nomes */ }
+  const base = TELAS.filter(t => !BLOQUEADAS.has(t.chave) && FONTES[t.chave]).map(t => ({ chave: t.chave, nome: nomes[t.chave] || t.nome }));
   let quadros = [];
   try { quadros = (await query(`SELECT id, nome FROM bx_quadros WHERE ativo ORDER BY ordem, id`)).rows; } catch { /* sem quadros */ }
   return [...base, ...quadros.map(q => ({ chave: `quadro_${q.id}`, nome: `Quadro: ${q.nome}` }))];
