@@ -342,10 +342,20 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
     if (cl) return valorLista(valorLoj(cl.id)).join(', ');
     return '';
   })();
-  const linhaNS = nsGarantia ? (
-    <div className="pb-2 mb-1 border-b border-[var(--c-borda)]">
-      <p className="text-[11px] text-[var(--c-suave)]">NS de entrada</p>
-      <p className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{nsGarantia}</p>
+  const registroNS = (() => {
+    const f = camposPipefy(p).find(x => /registro.*\bns\b/i.test(String(x.nome || '')));
+    return f ? (Array.isArray(f.texto) ? f.texto.join(', ') : f.texto) : '';
+  })();
+  const linhaNS = nsGarantia || registroNS ? (
+    <div className="pb-2 mb-1 border-b border-[var(--c-borda)] space-y-1.5">
+      {nsGarantia && <div>
+        <p className="text-[11px] text-[var(--c-suave)]">NS de entrada</p>
+        <p className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{nsGarantia}</p>
+      </div>}
+      {registroNS && <div>
+        <p className="text-[11px] text-[var(--c-suave)]">Registro de NS</p>
+        <p className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{registroNS}</p>
+      </div>}
     </div>
   ) : null;
   const fasesLoj = colLoj

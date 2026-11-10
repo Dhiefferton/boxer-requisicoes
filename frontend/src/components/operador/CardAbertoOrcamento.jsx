@@ -103,11 +103,25 @@ export default function CardAbertoOrcamento({
   const campoNS = grupos.flatMap(g => g.campos).find(c => ehCampoNS(c) && temValor(c.id));
   const nsValor = campoNS ? valorLista(valorDe(campoNS.id)).join(', ') : String(pedido.ns_entrada || '').trim();
   const inicioJaTemNS = anteriores.some(g => g.chave === 'inicio' && g.campos.some(ehCampoNS));
-  const linhaNS = nsValor && !inicioJaTemNS ? (
-    <div>
-      <dt className="text-[11px] text-[var(--c-suave)]">NS de entrada</dt>
-      <dd className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{nsValor}</dd>
-    </div>
+  // "Registro de NS" (ex.: #1476521005) do Pipefy, quando vem nos campos do próprio card
+  const registroNS = (Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [])
+    .filter(c => /registro.*\bns\b/i.test(String(c?.nome || c?.rotulo || '')))
+    .map(c => valorLista(c.valor).join(', ')).filter(Boolean).join(', ');
+  const linhaNS = (nsValor && !inicioJaTemNS) || registroNS ? (
+    <>
+      {nsValor && !inicioJaTemNS && (
+        <div>
+          <dt className="text-[11px] text-[var(--c-suave)]">NS de entrada</dt>
+          <dd className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{nsValor}</dd>
+        </div>
+      )}
+      {registroNS && (
+        <div className="mt-2">
+          <dt className="text-[11px] text-[var(--c-suave)]">Registro de NS</dt>
+          <dd className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{registroNS}</dd>
+        </div>
+      )}
+    </>
   ) : null;
 
   // Grava sozinho (sem Salvar/Descartar)
@@ -216,7 +230,7 @@ export default function CardAbertoOrcamento({
             {fases && pedido.pipefy_card_id && !anteriores.some(g => g.chave === 'inicio') && (
               <CaixaFase titulo="Formulário inicial" aberta={!fechadas.has('inicio-sac')} onAlternar={() => alternarFase('inicio-sac', !fechadas.has('inicio-sac'))}>
                 {linhaNS && <dl className="mb-3">{linhaNS}</dl>}
-                <TratativaSAC pedido={pedido} />
+                <TratativaSAC pedido={pedido} semRegistroNS={!!registroNS} />
               </CaixaFase>
             )}
             {anteriores.map(g => {
@@ -229,7 +243,7 @@ export default function CardAbertoOrcamento({
                   podeEditar={botoes.editar_fase} editando={g.editando}
                   onEditar={() => setEditandoFase(s => { const n = new Set(s); n.has(g.faseId) ? n.delete(g.faseId) : n.add(g.faseId); return n; })}>
                   {g.chave === 'inicio' && linhaNS && <dl className="mb-3">{linhaNS}</dl>}
-                  {g.chave === 'inicio' && <TratativaSAC pedido={pedido} />}
+                  {g.chave === 'inicio' && <TratativaSAC pedido={pedido} semRegistroNS={!!registroNS} />}
                   {g.campos.length
                     ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
                     : g.chave !== 'inicio' && <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido.</p>}

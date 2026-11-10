@@ -41,7 +41,10 @@ function Registro({ r }) {
   );
 }
 
-export default function TratativaSAC({ pedido }) {
+const ehRegistroNS = (c) => /registro.*\bns\b/i.test(String(c?.nome || ''));
+const textoCampo = (c) => (c.conectados?.length ? c.conectados.map(r => r.titulo || r.id).join(', ') : c.valor);
+
+export default function TratativaSAC({ pedido, semRegistroNS = false }) {
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [abrindo, setAbrindo] = useState('');
@@ -85,6 +88,12 @@ export default function TratativaSAC({ pedido }) {
       </div>
       {dados.erro && <p className="text-[11px] text-amber-400">{dados.erro}</p>}
       {!t && !dados.erro && <p className="text-[11px] text-[var(--c-suave)]">Este card não veio de uma tratativa do SAC.</p>}
+      {t && !semRegistroNS && t.campos.filter(ehRegistroNS).map((c, i) => (
+        <div key={`rns-${i}`}>
+          <p className="text-[11px] text-[var(--c-suave)]">Registro de NS</p>
+          <p className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{textoCampo(c)}</p>
+        </div>
+      ))}
       {t && (
         <dl className="flex flex-col gap-3">
           {t.campos.map((c, i) => (
