@@ -8,7 +8,7 @@
 // (Lojinha + CIF). Os campos da Lojinha aparecem só para consulta.
 // ============================================================
 import { useEffect, useState } from 'react';
-import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, ExternalLink, DownloadCloud, RefreshCw } from 'lucide-react';
+import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, ExternalLink, DownloadCloud, RefreshCw, FileText } from 'lucide-react';
 import { cifService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -253,34 +253,53 @@ export default function LogisticaCif() {
 function CardCif({ p, campos, movendo, onAbrir, onArrastar, onFimArraste }) {
   const parar = (e) => e.stopPropagation();
   const valores = p.cif_valores || {};
+  const arrasto = {
+    onClick: onAbrir, title: 'Abrir pedido (segure e arraste para mudar de coluna)',
+    draggable: !movendo,
+    onDragStart: e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(p.id)); onArrastar?.(); },
+    onDragEnd: () => onFimArraste?.(),
+  };
+  // Card que veio do Pipefy (Garantia): mesmo modelo do card de Orçamento —
+  // nome do cliente com link do Pipefy, etiqueta, fotos, grade de informações e rodapé com data e autor
+  if (ehPipefy(p)) {
+    return (
+      <div {...arrasto}
+        className={`${movendo ? 'opacity-50 pointer-events-none ' : ''}p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-2 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors`}>
+        <div className="flex items-center gap-1.5">
+          <FileText size={13} className="text-[var(--c-destaque)] shrink-0" />
+          <p className="text-sm text-[var(--c-texto)] font-medium flex-1">{p.cliente_nome || `Garantia ${p.pipefy_garantia_id}`}</p>
+          {p.pipefy_garantia_url && (
+            <a href={p.pipefy_garantia_url} target="_blank" rel="noreferrer" title="Abrir no Pipefy" onClick={parar}
+              className="text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={13} /></a>
+          )}
+        </div>
+        <span className="inline-block mr-1 text-[10px] font-semibold text-[var(--c-destaque)] bg-[var(--c-destaque)]/10 rounded px-1.5 py-0.5">Pipefy #{p.pipefy_garantia_id}</span>
+        <EtiquetasDoCard campos={campos} valorDe={(id) => valores[pref(id)]} />
+        <div onClick={parar}><FaixaFotosCard pedido={p} onVerTodas={onAbrir} /></div>
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+          <InfoCard rotulo="NS de entrada" valor={valorPipefy(p, 'ns_entrada_1', 'ns_entrada')} />
+          <InfoCard rotulo="Modelo da máquina" valor={valorPipefy(p, 'modelo_m_quina')} />
+          <InfoCard rotulo="Situação p/" valor={valorPipefy(p, 'situa_o_p')} />
+          <InfoCard rotulo="Remessa de conserto Nº" valor={remessaPipefy(p)} />
+          <InfoCard rotulo="Frete por conta" valor={valorPipefy(p, 'frete_por_conta')} />
+          <InfoCard rotulo="Responsável" valor={valorPipefy(p, 'respons_vel_pelo_caso')} />
+        </dl>
+        <p className="text-[11px] text-[var(--c-suave)]" title="Entrou na Garantia">{fmtData(p.cif_entrou_em)} · por {p.criado_por_nome || '—'}</p>
+      </div>
+    );
+  }
+  // Pedido da Lojinha que veio para a Garantia: mantém o card de antes
   return (
-    <div onClick={onAbrir} title="Abrir pedido (segure e arraste para mudar de coluna)"
-      draggable={!movendo}
-      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(p.id)); onArrastar?.(); }}
-      onDragEnd={() => onFimArraste?.()}
+    <div {...arrasto}
       className={`${movendo ? 'opacity-50 pointer-events-none ' : ''}p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-1.5 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors`}>
       <div className="flex items-center justify-between gap-2">
-        {ehPipefy(p)
-          ? <span className="font-semibold text-sm text-[var(--c-texto)]">Garantia{valorPipefy(p, 'ns_entrada_1', 'ns_entrada') ? ` · NS ${valorPipefy(p, 'ns_entrada_1', 'ns_entrada')}` : ''}</span>
-          : <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>}
+        <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
         <span className="text-[11px] text-[var(--c-suave)]" title="Entrou na Garantia">{fmtData(p.cif_entrou_em)}</span>
       </div>
       {p.zen_ordem_separacao_id && <div onClick={parar}><InfoLiberacao p={p} itens={Array.isArray(p.itens) ? p.itens : []} baseNF={`/logistica-cif/pedidos/${p.id}`} /></div>}
       <EtiquetasDoCard campos={campos} valorDe={(id) => valores[pref(id)]} />
       <div onClick={parar}><FaixaFotosCard pedido={p} onVerTodas={onAbrir} /></div>
-      {ehPipefy(p) ? (
-        <>
-          <p className="text-[13px] font-semibold text-[var(--c-texto)] leading-snug">{p.cliente_nome}</p>
-          {valorPipefy(p, 'modelo_m_quina') && <p className="text-[11px] text-[var(--c-suave)]">{valorPipefy(p, 'modelo_m_quina')}</p>}
-          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-            <InfoCard rotulo="Remessa de conserto Nº" valor={remessaPipefy(p)} />
-          </dl>
-          <div className="flex flex-wrap gap-1.5 pt-0.5">
-            <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-sky-500/15 text-sky-400">Pipefy</span>
-            {valorPipefy(p, 'situa_o_p') && <span className="text-[11px] px-2 py-0.5 rounded-full bg-[var(--c-borda)] text-[var(--c-texto)]">{valorPipefy(p, 'situa_o_p')}</span>}
-          </div>
-        </>
-      ) : <DadosPedido p={p} />}
+      <DadosPedido p={p} />
     </div>
   );
 }
