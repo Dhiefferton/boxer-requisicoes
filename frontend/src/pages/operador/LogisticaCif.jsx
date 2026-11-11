@@ -342,9 +342,9 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
   const temFoto = (id) => (p.fotos_locais || []).some(f => f.campo === id);
   const sujo = Object.keys(rascunho).length > 0;
   const camposCif = cfg?.campos || [];
-  const camposCifDe = (k) => camposCif.filter(c => c.coluna === k).map(campoCif);
+  const camposCifDe = (k) => camposCif.filter(c => c.coluna === k).map(c => campoCif(c, 0, camposCif));
   const camposLoj = cfgLoj?.campos || [];
-  const camposLojDe = (k) => camposLoj.filter(c => c.coluna === k).map(campoDaConfig);
+  const camposLojDe = (k) => camposLoj.filter(c => c.coluna === k).map(c => campoDaConfig(c, 0, camposLoj));
   const camposAtuais = camposCifDe(atual).filter(c => visivelAgora(c, valorCif));
 
   // Lojinha: fases por onde passou (só consulta) — inclui Finalizado
@@ -353,9 +353,9 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
   const nsGarantia = (() => {
     const pf = camposPipefy(p).find(f => ehNS(f.nome));
     if (pf) return Array.isArray(pf.texto) ? pf.texto.join(', ') : pf.texto;
-    const cc = camposCif.map(campoCif).find(f => ehNS(f.rotulo) && valorLista(valorCif(f.id)).length);
+    const cc = camposCif.map(c => campoCif(c, 0, camposCif)).find(f => ehNS(f.rotulo) && valorLista(valorCif(f.id)).length);
     if (cc) return valorLista(valorCif(cc.id)).join(', ');
-    const cl = camposLoj.map(campoDaConfig).find(f => ehNS(f.rotulo) && valorLista(valorLoj(f.id)).length);
+    const cl = camposLoj.map(c => campoDaConfig(c, 0, camposLoj)).find(f => ehNS(f.rotulo) && valorLista(valorLoj(f.id)).length);
     if (cl) return valorLista(valorLoj(cl.id)).join(', ');
     return '';
   })();

@@ -516,7 +516,7 @@ function CardAbertoLojinha({ p, cfg, colunas, botoes = {}, carregar, onFechar, o
   const temFoto = (id) => (p.fotos_locais || []).some(f => f.campo === id);
   const sujo = Object.keys(rascunho).length > 0;
   const campos = cfg?.campos || [];
-  const camposDe = (k) => campos.filter(c => c.coluna === k).map(campoDaConfig);
+  const camposDe = (k) => campos.filter(c => c.coluna === k).map(c => campoDaConfig(c, 0, campos));
   const camposAtuais = camposDe(atual).filter(c => visivelAgora(c, valorDe));
   const idx = colunas.findIndex(c => c.status === atual);
   // Fases anteriores: mostram os campos preenchidos; o admin clica em "Editar" na fase e edita todos os campos dela

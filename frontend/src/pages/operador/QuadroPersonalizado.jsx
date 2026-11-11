@@ -386,7 +386,7 @@ function CardQuadro({ p, cfg, movendo, podeArrastar, onAbrir, onArrastar, onFimA
   const parar = (e) => e.stopPropagation();
   const valores = p.valores || {};
   const resumo = (cfg?.campos || []).filter(c => c.coluna === 'inicio' && !['anexo', 'etiquetas', 'longo'].includes(c.tipo))
-    .map(campoDaConfig).filter(c => valorLista(valores[c.id]).length).slice(0, 3);
+    .map(c => campoDaConfig(c, 0, cfg?.campos || [])).filter(c => valorLista(valores[c.id]).length).slice(0, 3);
   return (
     <div onClick={onAbrir} title={podeArrastar ? 'Abrir card (segure e arraste para mudar de coluna)' : 'Abrir card'}
       draggable={podeArrastar && !movendo}
@@ -412,7 +412,7 @@ function NovoCard({ svc, cfg, nome, onFechar, onCriado, onConfigurar = null }) {
   const [valores, setValores] = useState({});
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
-  const todos = (cfg?.campos || []).filter(c => c.coluna === 'inicio').map(campoDaConfig);
+  const todos = (cfg?.campos || []).filter(c => c.coluna === 'inicio').map(c => campoDaConfig(c, 0, cfg?.campos || []));
   const valorDe = (id) => valores[id];
   const campos = todos.filter(c => visivelAgora(c, valorDe));
   const temAnexo = campos.some(c => c.tipo === 'attachment');
@@ -479,7 +479,7 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
   const valorDe = (id) => (id in rascunho ? rascunho[id] : valores[id]);
   const temFoto = (id) => (p.fotos_locais || []).some(f => f.campo === id);
   const sujo = Object.keys(rascunho).length > 0 || (titulo !== null && titulo.trim() && titulo.trim() !== p.titulo);
-  const camposDe = (k) => (cfg?.campos || []).filter(c => c.coluna === k).map(campoDaConfig);
+  const camposDe = (k) => (cfg?.campos || []).filter(c => c.coluna === k).map(c => campoDaConfig(c, 0, cfg?.campos || []));
   const camposAtuais = camposDe(atual).filter(c => visivelAgora(c, valorDe));
   const preenchido = (f) => valorLista(valorDe(f.id)).length || (f.tipo === 'attachment' && temFoto(f.id));
 
