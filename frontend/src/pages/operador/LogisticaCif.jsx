@@ -251,6 +251,21 @@ export default function LogisticaCif() {
   );
 }
 
+// Técnico do card: campo "Técnico" da Garantia (lista/database) ou o "Técnico" do Pipefy
+const textoRegistro = (v) => {
+  if (v == null || v === '') return '';
+  if (Array.isArray(v)) return v.map(textoRegistro).filter(Boolean).join(', ');
+  if (typeof v === 'object') return v.descricao || v.titulo || '';
+  const t = String(v).trim();
+  if (t.startsWith('{') || t.startsWith('[')) { try { return textoRegistro(JSON.parse(t)); } catch { /* texto */ } }
+  return t;
+};
+function tecnicoDoCard(p, campos, valores) {
+  const c = (campos || []).find(x => /^t[ée]cnico\b/i.test(String(x.rotulo || '').trim()));
+  const v = c ? textoRegistro(valores[campoCif(c, 0, campos).id]) : '';
+  return v || valorPipefy(p, 't_cnico');
+}
+
 // Card do quadro
 function CardCif({ p, campos, movendo, onAbrir, onArrastar, onFimArraste }) {
   const parar = (e) => e.stopPropagation();
@@ -284,7 +299,7 @@ function CardCif({ p, campos, movendo, onAbrir, onArrastar, onFimArraste }) {
           <InfoCard rotulo="Situação p/" valor={valorPipefy(p, 'situa_o_p')} />
           <InfoCard rotulo="Remessa de conserto Nº" valor={remessaPipefy(p)} />
           <InfoCard rotulo="Frete por conta" valor={valorPipefy(p, 'frete_por_conta')} />
-          <InfoCard rotulo="Responsável" valor={valorPipefy(p, 'respons_vel_pelo_caso')} />
+          <InfoCard rotulo="Técnico" valor={tecnicoDoCard(p, campos, valores)} />
         </dl>
         <p className="text-[11px] text-[var(--c-suave)]" title="Entrou na Garantia">{fmtData(p.cif_entrou_em)} · por {p.criado_por_nome || '—'}</p>
       </div>
