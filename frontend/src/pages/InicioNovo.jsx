@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Wrench, ShoppingBag, ShieldCheck, Kanban, Boxes, ClipboardList, History, LayoutDashboard, PackageOpen, Warehouse,
-  Truck, BarChart3, ShoppingCart, Puzzle, Database, Video, Settings, Plus, Lock, Star,
+  Truck, BarChart3, ShoppingCart, Puzzle, Database, Video, Plus, Lock, Star,
   ArrowRightLeft, CheckCheck, ThumbsUp, FileCheck2, Timer,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -24,27 +24,30 @@ import { MODULOS, enderecoDe, abrirComLogin } from '../utils/modulos';
 const ICONES_MODULO = { painel: Gauge, pedidos: ListChecks, reposicao: RefreshCcw, historico: History, separacao: ScanLine, conferencia: PackageCheck, coletor: Smartphone, frotas: CarFront, agenda: CalendarDays, viagens: Route, checklist: ClipboardCheck, custo: Calculator };
 const AZUL = 'var(--c-destaque)';
 
-// Telas do sistema (ordem da tela inicial). As telas criadas entram depois da Garantia.
+// Telas do sistema, por grupo (ordem da tela inicial). As telas criadas entram depois da Garantia.
+// Admin e Integrações ficam na barra superior.
 const SISTEMA = [
-  { chave: 'orcamentos', rota: '/pedidos-orcamento', nome: 'Orçamentos', icon: Wrench, cor: '#4f46e5', conta: true },
-  { chave: 'lojinha', rota: '/lojinha', nome: 'Lojinha Boxer', icon: ShoppingBag, cor: '#9333ea', conta: true },
-  { chave: 'logistica_cif', rota: '/logistica-cif', nome: 'Garantia - Boxer Soldas', icon: ShieldCheck, cor: '#0284c7', conta: true },
-  { quadros: true },
-  { chave: 'inventario', rota: '/inventario', nome: 'Inventário', icon: Boxes, cor: '#d97706', desc: 'Contagens de estoque' },
-  { chave: 'catalogo', rota: '/catalogo', nome: 'Catálogo / Requisição', icon: ClipboardList, cor: '#475569', desc: 'Requisição de materiais' },
-  { chave: 'historico', rota: '/historico', nome: 'Histórico', icon: History, cor: '#64748b', desc: 'Requisições feitas' },
-  { chave: 'operador', rota: '/operador', nome: 'Operador', icon: LayoutDashboard, cor: '#2563eb', desc: 'Separação das requisições' },
-  { chave: 'entradas', rota: '/entradas', nome: 'Entradas', icon: PackageOpen, cor: '#0d9488', desc: 'Notas de entrada' },
-  { chave: 'estoque', rota: '/estoque', nome: 'Estoque', icon: Warehouse, cor: '#0891b2', desc: 'Saldo de estoque' },
-  { chave: 'recebimento_importacao', rota: '/recebimento-importacao', nome: 'Recebimento / Importação', icon: Truck, cor: '#7c3aed', desc: 'Conferência de importação' },
-  { chave: 'relatorios', rota: '/relatorios', nome: 'Relatórios', icon: BarChart3, cor: '#0ea5e9', desc: 'Histórico do Pipefy' },
-  { chave: 'mrp', rota: '/mrp', nome: 'MRP', icon: BarChart3, cor: '#be185d', desc: 'Planejamento' },
-  { chave: 'compras', rota: '/compras', nome: 'Compras', icon: ShoppingCart, cor: '#ca8a04', desc: 'Pedidos de compra' },
-  { chave: 'necessidade_pecas', rota: '/necessidade-pecas', nome: 'Necessidade de Peças', icon: Puzzle, cor: '#dc2626', desc: 'Peças a comprar' },
-  { chave: 'databases', rota: '/databases', nome: 'Databases', icon: Database, cor: '#0369a1', desc: 'Bases de registros' },
-  { chave: 'armazenamento', rota: '/armazenamento', nome: 'Armazenamento', icon: Video, cor: '#4b5563', desc: 'Vídeos e arquivos' },
-  { chave: 'integracoes', rota: '/integracoes', nome: 'Integrações (API)', icon: Puzzle, cor: '#0f766e', desc: 'Chaves para outros sistemas' },
-  { chave: 'admin', rota: '/admin', nome: 'Admin', icon: Settings, cor: '#334155', desc: 'Usuários e permissões' },
+  { chave: 'orcamentos', grupo: 'logistica', rota: '/pedidos-orcamento', nome: 'Orçamentos', icon: Wrench, cor: '#4f46e5', conta: true },
+  { chave: 'lojinha', grupo: 'logistica', rota: '/lojinha', nome: 'Lojinha Boxer', icon: ShoppingBag, cor: '#9333ea', conta: true },
+  { chave: 'logistica_cif', grupo: 'logistica', rota: '/logistica-cif', nome: 'Garantia - Boxer Soldas', icon: ShieldCheck, cor: '#0284c7', conta: true },
+  { quadros: true, grupo: 'logistica' },
+  { chave: 'databases', grupo: 'logistica', rota: '/databases', nome: 'Databases', icon: Database, cor: '#0369a1', desc: 'Bases de registros' },
+  { chave: 'armazenamento', grupo: 'logistica', rota: '/armazenamento', nome: 'Armazenamento', icon: Video, cor: '#4b5563', desc: 'Vídeos e arquivos' },
+  { chave: 'relatorios', grupo: 'logistica', rota: '/relatorios', nome: 'Relatórios', icon: BarChart3, cor: '#0ea5e9', desc: 'Histórico do Pipefy' },
+  { chave: 'inventario', grupo: 'almoxarifado', rota: '/inventario', nome: 'Inventário', icon: Boxes, cor: '#d97706', desc: 'Contagens de estoque' },
+  { chave: 'catalogo', grupo: 'almoxarifado', rota: '/catalogo', nome: 'Catálogo / Requisição', icon: ClipboardList, cor: '#475569', desc: 'Requisição de materiais' },
+  { chave: 'historico', grupo: 'almoxarifado', rota: '/historico', nome: 'Histórico', icon: History, cor: '#64748b', desc: 'Requisições feitas' },
+  { chave: 'operador', grupo: 'almoxarifado', rota: '/operador', nome: 'Operador', icon: LayoutDashboard, cor: '#2563eb', desc: 'Separação das requisições' },
+  { chave: 'entradas', grupo: 'almoxarifado', rota: '/entradas', nome: 'Entradas', icon: PackageOpen, cor: '#0d9488', desc: 'Notas de entrada' },
+  { chave: 'estoque', grupo: 'almoxarifado', rota: '/estoque', nome: 'Estoque', icon: Warehouse, cor: '#0891b2', desc: 'Saldo de estoque' },
+  { chave: 'recebimento_importacao', grupo: 'almoxarifado', rota: '/recebimento-importacao', nome: 'Recebimento / Importação', icon: Truck, cor: '#7c3aed', desc: 'Conferência de importação' },
+  { chave: 'necessidade_pecas', grupo: 'almoxarifado', rota: '/necessidade-pecas', nome: 'Necessidade de Peças', icon: Puzzle, cor: '#dc2626', desc: 'Peças a comprar' },
+  { chave: 'compras', grupo: 'almoxarifado', rota: '/compras', nome: 'Compras', icon: ShoppingCart, cor: '#ca8a04', desc: 'Pedidos de compra' },
+  { chave: 'mrp', grupo: 'almoxarifado', rota: '/mrp', nome: 'MRP', icon: BarChart3, cor: '#be185d', desc: 'Planejamento' },
+];
+const GRUPOS = [
+  { chave: 'logistica', nome: 'Logística / Manutenção', resumo: 'orçamentos, lojinha, garantia, notas de serviços, tratativa' },
+  { chave: 'almoxarifado', nome: 'Almoxarifado', resumo: 'inventário, requisições, estoque, compras' },
 ];
 const CORES_QUADROS = ['#059669', '#0d9488', '#7c3aed', '#e11d48', '#2563eb', '#ca8a04', '#9333ea', '#0891b2'];
 
@@ -104,7 +107,7 @@ export default function InicioNovo() {
   }, []);
 
   const blocos = useMemo(() => SISTEMA.flatMap(t => (t.quadros
-    ? (quadros || []).filter(q => q.ativo !== false).map((q, i) => ({ chave: `quadro_${q.id}`, rota: `/quadro/${q.id}`, nome: q.nome, icon: Kanban, cor: CORES_QUADROS[i % CORES_QUADROS.length], conta: true }))
+    ? (quadros || []).filter(q => q.ativo !== false).map((q, i) => ({ grupo: t.grupo, chave: `quadro_${q.id}`, rota: `/quadro/${q.id}`, nome: q.nome, icon: Kanban, cor: CORES_QUADROS[i % CORES_QUADROS.length], conta: true }))
     : [{ ...t, nome: nomes?.[t.chave] || t.nome }]))
     .map(t => ({ ...t, liberada: veTela(usuario, t.chave) })),
   [quadros, nomes, usuario]);
@@ -115,7 +118,7 @@ export default function InicioNovo() {
       ...i, externo: m.chave === 'frotas' ? null : enderecoDe(i), rota: m.chave === 'frotas' ? (i.caminho === '/' ? '/frotas' : `/frotas${i.caminho}`) : undefined, icon: ICONES_MODULO[i.icone] || LayoutDashboard, liberada: veTela(usuario, m.chave),
     })),
   })).filter(m => m.itens.length), [usuario]);
-  const grupos = [{ chave: 'operacoes', nome: 'Operações', resumo: 'orçamentos, garantia, lojinha, compras', itens: blocos }, ...modulos];
+  const grupos = [...GRUPOS.map(g => ({ ...g, itens: blocos.filter(b => b.grupo === g.chave) })), ...modulos];
   const todos = grupos.flatMap(g => g.itens);
   const abrir = (b) => { if (!b.liberada) return; if (b.externo) abrirComLogin(b, b.externo); else navigate(b.rota); };
 
