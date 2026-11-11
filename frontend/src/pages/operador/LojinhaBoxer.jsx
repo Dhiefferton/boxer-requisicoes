@@ -158,7 +158,7 @@ export default function LojinhaBoxer() {
     const atual = colunas.find(c => c.status === colunaDo(p));
     if (col.status === colunaDo(p) || col.status === 'entrada') return false;
     if (Array.isArray(atual?.destinos) && !atual.destinos.includes(col.status)) return false;
-    if (!botoes.mover_admin && (col.admin || atual?.admin)) return false;
+    if (!botoes.mover_admin && atual?.admin) return false; // restrita: só admin/operador tiram cards dela
     return true;
   }
   async function soltar(col) {
@@ -557,7 +557,7 @@ function CardAbertoLojinha({ p, cfg, colunas, botoes = {}, carregar, onFechar, o
   const podeMover = !!p.zen_ordem_separacao_id;
   const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
     && !regraBloqueiaMover(colAtual, c.status, campos, valorDe);
-  const destinos = colunas.filter(c => c.status !== atual && c.status !== 'entrada' && permitido(c) && !(c.admin && !botoes.mover_admin) && !(colAtual?.admin && !botoes.mover_admin));
+  const destinos = colunas.filter(c => c.status !== atual && c.status !== 'entrada' && permitido(c) && !(colAtual?.admin && !botoes.mover_admin));
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
 

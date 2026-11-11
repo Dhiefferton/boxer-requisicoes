@@ -112,7 +112,7 @@ function Quadro({ qid, nome: nomeMenu, podeEditar, admin }) {
     if (!podeEditar || !p || col.status === p.status) return false;
     const atual = colunas.find(c => c.status === p.status);
     if (Array.isArray(atual?.destinos) && !atual.destinos.includes(col.status)) return false;
-    if (!moveRestrita && (col.admin || atual?.admin)) return false;
+    if (!moveRestrita && atual?.admin) return false; // restrita: só admin/operador tiram cards dela
     return true;
   }
   async function soltar(col) {
@@ -301,7 +301,7 @@ function useFaseQuadro({ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, 
   }
   const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
     && !regraBloqueiaMover(colAtual, c.status, cfg?.campos, valorDe);
-  const destinos = podeEditar ? colunas.filter(c => c.status !== atual && permitido(c) && !(c.admin && !moveRestrita) && !(colAtual?.admin && !moveRestrita)) : [];
+  const destinos = podeEditar ? colunas.filter(c => c.status !== atual && permitido(c) && !(colAtual?.admin && !moveRestrita)) : [];
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
 
@@ -529,7 +529,7 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
 
   const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
     && !regraBloqueiaMover(colAtual, c.status, cfg?.campos, valorDe);
-  const destinos = podeEditar ? colunas.filter(c => c.status !== atual && permitido(c) && !(c.admin && !moveRestrita) && !(colAtual?.admin && !moveRestrita)) : [];
+  const destinos = podeEditar ? colunas.filter(c => c.status !== atual && permitido(c) && !(colAtual?.admin && !moveRestrita)) : [];
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
 

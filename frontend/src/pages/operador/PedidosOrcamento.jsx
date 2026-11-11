@@ -270,7 +270,7 @@ function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = f
             {pilula}
           </button>
         ) : (
-          <div className="flex items-center gap-2" title={soAdmin ? 'Coluna do Pipefy — só o admin move cards aqui' : undefined}>{pilula}</div>
+          <div className="flex items-center gap-2" title={soAdmin ? 'Coluna restrita — só admin e operador tiram cards daqui' : undefined}>{pilula}</div>
         )}
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-bold text-[var(--c-suave)]">{total}</span>

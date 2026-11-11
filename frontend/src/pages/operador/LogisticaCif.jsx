@@ -158,7 +158,7 @@ export default function LogisticaCif() {
     if (!p || col.status === p.cif_status) return false;
     const atual = colunas.find(c => c.status === p.cif_status);
     if (Array.isArray(atual?.destinos) && !atual.destinos.includes(col.status)) return false;
-    if (!botoes.mover_admin && (col.admin || atual?.admin)) return false;
+    if (!botoes.mover_admin && atual?.admin) return false; // restrita: só admin/operador tiram cards dela
     return true;
   }
   async function soltar(col) {
@@ -397,7 +397,7 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
 
   const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
     && !regraBloqueiaMover(colAtual, c.status, camposCif, valorCif, (x) => `cif_${x.pipefy_campo || `bx_${x.id}`}`);
-  const destinos = colunas.filter(c => c.status !== atual && permitido(c) && !(c.admin && !botoes.mover_admin) && !(colAtual?.admin && !botoes.mover_admin));
+  const destinos = colunas.filter(c => c.status !== atual && permitido(c) && !(colAtual?.admin && !botoes.mover_admin));
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
 
