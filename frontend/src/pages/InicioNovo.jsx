@@ -16,12 +16,12 @@ import { useAuth } from '../context/AuthContext';
 import { useTelas } from '../utils/nomesTelas';
 import { veTela } from '../utils/telas';
 import api from '../services/api';
-import { LayoutTemplate } from 'lucide-react';
+import { LayoutTemplate, Radar, Users, Fuel, FileText, UserCog, Settings } from 'lucide-react';
 import { construtorService } from '../services/api';
 import { ExternalLink, Gauge, ListChecks, RefreshCcw, PackageCheck, ScanLine, Smartphone, CarFront, CalendarDays, Route, ClipboardCheck, Calculator } from 'lucide-react';
 import { MODULOS, enderecoDe, abrirComLogin } from '../utils/modulos';
 
-const ICONES_MODULO = { painel: Gauge, pedidos: ListChecks, reposicao: RefreshCcw, historico: History, separacao: ScanLine, conferencia: PackageCheck, coletor: Smartphone, frotas: CarFront, agenda: CalendarDays, viagens: Route, checklist: ClipboardCheck, custo: Calculator };
+const ICONES_MODULO = { painel: Gauge, pedidos: ListChecks, reposicao: RefreshCcw, historico: History, separacao: ScanLine, conferencia: PackageCheck, coletor: Smartphone, frotas: CarFront, agenda: CalendarDays, viagens: Route, checklist: ClipboardCheck, custo: Calculator, operacoes: Radar, motoristas: Users, combustivel: Fuel, manutencao: Wrench, documentos: FileText, relatorios: BarChart3, usuarios: UserCog, configuracoes: Settings };
 const AZUL = 'var(--c-destaque)';
 
 // Telas do sistema, por grupo (ordem da tela inicial). As telas criadas entram depois da Garantia.
