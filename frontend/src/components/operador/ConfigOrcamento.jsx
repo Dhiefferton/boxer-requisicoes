@@ -402,9 +402,9 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                         {colunas.map((c, i) => <option key={keyCol(c)} value={String(i)}>Depois de “{c.nome}”</option>)}
                       </select>
                     </label>
-                    <label className="text-[11px] text-[var(--c-suave)] space-y-1">Quem move cards para ela
+                    <label className="text-[11px] text-[var(--c-suave)] space-y-1">Quem tira cards dela
                       <select value={nova.quem} onChange={e => setNova(n => ({ ...n, quem: e.target.value }))} className={inp}>
-                        <option value="admin">Só administrador e operador</option>
+                        <option value="admin">Só administrador e operador tiram cards dela</option>
                         <option value="todos">Todos que mexem na tela</option>
                       </select>
                     </label>
@@ -623,7 +623,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                   </div>
                   <label className="flex items-center gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
                     <input type="checkbox" checked={!!colAtual.so_admin} onChange={() => mudarColuna(colSel, c => ({ ...c, so_admin: !c.so_admin }))} />
-                    Só administrador e operador movem cards para esta coluna
+                    Só administrador e operador movem os cards desta coluna para outra
                   </label>
                   <label className="flex items-center gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
                     <input type="checkbox" checked={!!colAtual.arquivada} onChange={() => mudarColuna(colSel, c => ({ ...c, arquivada: !c.arquivada }))} />
