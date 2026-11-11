@@ -279,7 +279,7 @@ function CardCif({ p, campos, movendo, onAbrir, onArrastar, onFimArraste }) {
         <EtiquetasDoCard campos={campos} valorDe={(id) => valores[pref(id)]} />
         <div onClick={parar}><FaixaFotosCard pedido={p} onVerTodas={onAbrir} /></div>
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-          <InfoCard rotulo="NS de entrada" valor={valorPipefy(p, 'ns_entrada_1', 'ns_entrada')} />
+          <InfoCard rotulo="NS de entrada" valor={valorPipefy(p, 'ns_entrada_1', 'ns_entrada') || (p.tratativa_card_id ? `#${p.tratativa_card_id}` : '')} />
           <InfoCard rotulo="Modelo da máquina" valor={valorPipefy(p, 'modelo_m_quina')} />
           <InfoCard rotulo="Situação p/" valor={valorPipefy(p, 'situa_o_p')} />
           <InfoCard rotulo="Remessa de conserto Nº" valor={remessaPipefy(p)} />

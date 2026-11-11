@@ -620,7 +620,7 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
       {(pedido.pipefy_card_id || pedido.cliente_cnpj || pedido.ns_entrada || pedido.tecnico) && (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <Info rotulo="CNPJ" valor={formatarDoc(pedido.cliente_cnpj)} />
-          <Info rotulo="NS de entrada" valor={pedido.ns_entrada} />
+          <Info rotulo="NS de entrada" valor={pedido.ns_entrada || (pedido.tratativa_card_id ? `#${pedido.tratativa_card_id}` : '')} />
           <Info rotulo="Técnico" valor={pedido.tecnico} />
           <Info rotulo="Frete por conta" valor={pedido.frete_por_conta} />
           <Info rotulo="Entregue por" valor={pedido.entregue_por} />
