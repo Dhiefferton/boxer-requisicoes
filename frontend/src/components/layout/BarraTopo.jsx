@@ -7,11 +7,11 @@
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Search, X, Lock, LogOut, Sun, Moon, ShoppingCart } from 'lucide-react';
+import { Search, X, Lock, LogOut, Sun, Moon, ShoppingCart, Plus, LayoutTemplate } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTema } from '../../context/TemaContext';
 import { veTela } from '../../utils/telas';
-import api from '../../services/api';
+import api, { construtorService } from '../../services/api';
 import logoBoxer from '../../assets/logo-boxer.svg';
 
 const iniciais = (n) => String(n || '?').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toUpperCase();
@@ -24,6 +24,8 @@ export default function BarraTopo({ onSair, carrinho = null }) {
   const [res, setRes] = useState(null);
   const [aberto, setAberto] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [construtor, setConstrutor] = useState(false);
+  useEffect(() => { construtorService.status().then(r => setConstrutor(!!r.data?.pode)).catch(() => {}); }, []);
   const caixa = useRef(null);
   const avatar = useRef(null);
 
@@ -70,6 +72,16 @@ export default function BarraTopo({ onSair, carrinho = null }) {
               {l.label}
             </NavLink>
           ))}
+          {veTela(usuario, 'telas') && (
+            <NavLink to="/telas" className="ml-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border border-dashed border-[var(--c-borda-forte,var(--c-borda))] text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:border-[var(--c-destaque)]">
+              <Plus size={14} /> Criar tela
+            </NavLink>
+          )}
+          {construtor && (
+            <NavLink to="/construtor" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border border-dashed border-[var(--c-destaque)] text-[var(--c-texto)] hover:bg-[var(--c-destaque)]/10">
+              <LayoutTemplate size={14} /> Construtor de telas <span className="text-[10px] text-[var(--c-destaque-claro)]">beta</span>
+            </NavLink>
+          )}
         </nav>
         <div className="flex-1" />
 

@@ -166,8 +166,7 @@ export default function InicioNovo() {
         <div className="space-y-6">
           {grupos.map((g, gi) => {
             const itens = aba === 'favoritas' ? g.itens.filter(b => favoritas.includes(b.chave)) : g.itens;
-            const extras = gi === 0 && aba === 'telas' && (admin || construtor);
-            if (!itens.length && !extras) return null;
+            if (!itens.length) return null;
             return (
               <section key={g.chave}>
                 {grupos.length > 1 && (
@@ -178,23 +177,6 @@ export default function InicioNovo() {
                   </div>
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {extras && admin && (
-                    <button onClick={() => navigate('/telas')}
-                      className="rounded-2xl border-2 border-dashed border-[var(--c-borda-forte,var(--c-borda))] p-3.5 flex items-center gap-3 text-left hover:border-[var(--c-destaque)] transition-colors">
-                      <span className="w-10 h-10 rounded-xl border border-[var(--c-borda)] flex items-center justify-center shrink-0"><Plus size={20} className="text-[var(--c-texto)]" /></span>
-                      <span className="text-sm font-semibold text-[var(--c-texto)]">Criar tela</span>
-                    </button>
-                  )}
-                  {extras && construtor && (
-                    <button onClick={() => navigate('/construtor')}
-                      className="rounded-2xl border-2 border-dashed border-[var(--c-destaque)] p-3.5 flex items-center gap-3 text-left hover:bg-[var(--c-destaque)]/10 transition-colors">
-                      <span className="w-10 h-10 rounded-xl border border-[var(--c-borda)] flex items-center justify-center shrink-0"><LayoutTemplate size={20} className="text-[var(--c-texto)]" /></span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-[var(--c-texto)]">Construtor de telas</span>
-                        <span className="block text-[10px] text-[var(--c-destaque-claro)]">beta</span>
-                      </span>
-                    </button>
-                  )}
                   {itens.map(b => {
                     const Icon = b.icon;
                     const fav = favoritas.includes(b.chave);
