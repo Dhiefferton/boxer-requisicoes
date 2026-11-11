@@ -226,6 +226,46 @@ export async function importarEntradaGarantia(req, res, next) {
 }
 
 
+// ── Tratativa do SAC no card da Garantia (igual ao card do Orçamento) ──────────
+// Lê (só leitura) o card pai da tratativa no Pipefy: Registro de NS, Cliente, Responsável, Modelo… e guarda aqui.
+// GET /logistica-cif/pedidos/:id/tratativa[?atualizar=1]  e  GET .../tratativa/anexo?caminho=
+let colunasTratativa = null;
+const garantirTratativa = () => (colunasTratativa ||= garantirPipefyGarantia().then(() => query(`
+  ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS tratativa JSONB;
+  ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS tratativa_em TIMESTAMPTZ;`)).catch(e => { colunasTratativa = null; throw e; }));
+
+export async function verTratativaCif(req, res, next) {
+  try {
+    await garantirTratativa();
+    const p = (await query(`SELECT id, pipefy_garantia_id, tratativa, tratativa_em FROM lojinha_boxer_pedidos WHERE id = $1 AND cif_status IS NOT NULL`, [parseInt(req.params.id) || 0])).rows[0];
+    if (!p) return res.status(404).json({ erro: 'Pedido não encontrado na Logística CIF.' });
+    if (!p.pipefy_garantia_id) return res.json({ tratativa: null, motivo: 'Card sem origem no Pipefy.' });
+    if (p.tratativa_em && req.query.atualizar !== '1') return res.json({ tratativa: p.tratativa, lido_em: p.tratativa_em });
+    const { buscarTratativa } = await import('../integrations/pipefyTratativa.js');
+    try {
+      const t = await buscarTratativa(p.pipefy_garantia_id);
+      const r = await query(`UPDATE lojinha_boxer_pedidos SET tratativa = $1::jsonb, tratativa_em = NOW() WHERE id = $2 RETURNING tratativa_em`, [JSON.stringify(t), p.id]);
+      res.json({ tratativa: t, lido_em: r.rows[0].tratativa_em });
+    } catch (e) {
+      res.json({ tratativa: p.tratativa, lido_em: p.tratativa_em, erro: `Não consegui ler a tratativa no Pipefy agora: ${e.message}` });
+    }
+  } catch (err) { next(err); }
+}
+
+export async function anexoTratativaCif(req, res, next) {
+  try {
+    await garantirTratativa();
+    const p = (await query(`SELECT tratativa FROM lojinha_boxer_pedidos WHERE id = $1 AND cif_status IS NOT NULL`, [parseInt(req.params.id) || 0])).rows[0];
+    const caminho = String(req.query.caminho || '');
+    const tem = (p?.tratativa?.campos || []).some(c => (c.anexos || []).some(a => a.caminho === caminho));
+    if (!p?.tratativa?.card_id || !tem) return res.status(404).json({ erro: 'Anexo não encontrado.' });
+    const { linkAnexoTratativa } = await import('../integrations/pipefyTratativa.js');
+    const url = await linkAnexoTratativa(p.tratativa.card_id, caminho);
+    if (!url) return res.status(404).json({ erro: 'O anexo não está mais na tratativa.' });
+    res.json({ url });
+  } catch (err) { next(err); }
+}
+
 // Renomeia o card da Garantia (nome mostrado no topo do card aberto)
 export async function renomearCif(req, res, next) {
   try {

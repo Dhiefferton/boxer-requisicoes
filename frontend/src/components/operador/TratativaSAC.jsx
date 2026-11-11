@@ -44,30 +44,33 @@ function Registro({ r }) {
 const ehRegistroNS = (c) => /registro.*\bns\b/i.test(String(c?.nome || ''));
 const textoCampo = (c) => (c.conectados?.length ? c.conectados.map(r => r.titulo || r.id).join(', ') : c.valor);
 
-export default function TratativaSAC({ pedido, semRegistroNS = false }) {
+export default function TratativaSAC({ pedido, semRegistroNS = false, cif = false }) {
+  const cardPipefy = cif ? pedido.pipefy_garantia_id : pedido.pipefy_card_id;
+  const svcVer = cif ? tratativaService.verCif : tratativaService.ver;
+  const svcAnexo = cif ? tratativaService.anexoCif : tratativaService.anexo;
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [abrindo, setAbrindo] = useState('');
 
   async function carregar(atualizar = false) {
     setCarregando(true);
-    try { const { data } = await tratativaService.ver(pedido.id, atualizar); setDados(data); }
+    try { const { data } = await svcVer(pedido.id, atualizar); setDados(data); }
     catch (e) { setDados(d => ({ ...(d || {}), erro: e.response?.data?.erro || 'Não consegui ler a tratativa.' })); }
     finally { setCarregando(false); }
   }
-  useEffect(() => { if (pedido.pipefy_card_id) carregar(); }, [pedido.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (cardPipefy) carregar(); }, [pedido.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function abrirAnexo(a) {
     const janela = window.open('', '_blank');
     setAbrindo(a.caminho);
     try {
-      const { data } = await tratativaService.anexo(pedido.id, a.caminho);
+      const { data } = await svcAnexo(pedido.id, a.caminho);
       if (janela) janela.location.href = data.url; else window.open(data.url, '_blank', 'noopener');
     } catch (e) { janela?.close(); alert(e.response?.data?.erro || 'Não consegui abrir o anexo.'); }
     finally { setAbrindo(''); }
   }
 
-  if (!pedido.pipefy_card_id) return null;
+  if (!cardPipefy) return null;
   if (!dados) return <div className="flex items-center gap-2 text-[11px] text-[var(--c-suave)] py-2"><Spinner size={12} /> Lendo a tratativa do SAC…</div>;
   const t = dados.tratativa;
 

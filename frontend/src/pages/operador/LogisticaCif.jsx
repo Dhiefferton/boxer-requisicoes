@@ -18,6 +18,7 @@ import ConfigOrcamento, { campoDaConfig } from '../../components/operador/Config
 import PainelMovimentacao from '../../components/operador/PainelMovimentacao';
 import { FotosProvider, FaixaFotosCard, FotosCampo } from '../../components/operador/FotosOrcamento';
 import { useFasesPassadas, CaixaFase } from '../../components/operador/FaseAnterior';
+import TratativaSAC from '../../components/operador/TratativaSAC';
 import { Editor, Valor, SO_LEITURA, valorLista, obrigatorioAgora, visivelAgora, EtiquetasDoCard, lerRegistro, regraBloqueiaMover } from '../../components/operador/CamposCardOrcamento';
 import { combinaBusca, montarColunas as colunasLojinha, Pilula, Coluna, InfoLiberacao, DadosPedido } from './LojinhaBoxer';
 import { NomeTela } from '../../utils/nomesTelas';
@@ -447,9 +448,10 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
               </>}
             </div>
             {ehPipefy(p) && (
-              <CaixaFase titulo={`Formulário do Pipefy${p.pipefy_garantia_campos?.fase ? ` · ${p.pipefy_garantia_campos.fase}` : ''}`}
+              <CaixaFase titulo="Formulário inicial"
                 aberta={!abertas.has('pipefy-fechado')} onAlternar={() => alternar('pipefy-fechado', abertas.has('pipefy-fechado'))}>
                 {linhaNS}
+                <TratativaSAC pedido={p} cif semRegistroNS={!!registroNS} />
                 <CamposPipefy p={p} />
               </CaixaFase>
             )}

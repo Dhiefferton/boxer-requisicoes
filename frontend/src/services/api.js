@@ -252,6 +252,9 @@ export default api;
 export const tratativaService = {
   ver:   (id, atualizar = false) => api.get(`/pedidos-orcamento/${id}/tratativa`, { params: atualizar ? { atualizar: 1 } : {}, timeout: 60000 }),
   anexo: (id, caminho)           => api.get(`/pedidos-orcamento/${id}/tratativa/anexo`, { params: { caminho }, timeout: 30000 }),
+  // Garantia (Logística CIF): mesma tratativa do SAC
+  verCif:   (id, atualizar = false) => api.get(`/logistica-cif/pedidos/${id}/tratativa`, { params: atualizar ? { atualizar: 1 } : {}, timeout: 60000 }),
+  anexoCif: (id, caminho)           => api.get(`/logistica-cif/pedidos/${id}/tratativa/anexo`, { params: { caminho }, timeout: 30000 }),
 };
 
 // Telas criadas pelo admin (quadros de cards) e nomes das telas renomeadas
