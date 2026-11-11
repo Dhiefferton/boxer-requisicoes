@@ -53,8 +53,6 @@ export default function BarraTopo({ onSair, carrinho = null }) {
 
   const links = [
     { to: '/inicio', label: 'Início', ok: true },
-    { to: '/telas', label: 'Telas', ok: veTela(usuario, 'telas') },
-    { to: '/databases', label: 'Bases', ok: veTela(usuario, 'databases') },
     { to: '/admin', label: 'Admin', ok: veTela(usuario, 'admin') },
     { to: '/integracoes', label: 'Integrações', ok: veTela(usuario, 'integracoes') },
   ].filter(l => l.ok);
