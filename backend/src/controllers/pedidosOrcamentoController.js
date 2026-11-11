@@ -447,7 +447,8 @@ export async function moverPedido(req, res, next) {
     );
     const pedido = atual.rows[0];
     if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    if (!temBotao(req.usuario, 'orc_mover') && (soAdmin(status) || soAdmin(pedido.status))) {
+    // Coluna restrita: só admin e operador tiram cards dela (entrar nela é livre)
+    if (!temBotao(req.usuario, 'orc_mover') && soAdmin(pedido.status)) {
       return res.status(403).json({ erro: 'Mover cards nessa coluna não está liberado para você (Admin > Usuários).' });
     }
     // Para onde a coluna atual pode mover (Configurar → "Pode mover cards desta coluna para")

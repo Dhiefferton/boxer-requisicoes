@@ -501,7 +501,8 @@ export async function moverPedidoLojinha(req, res, next) {
     if (!p.zen_ordem_separacao_id) return res.status(409).json({ erro: 'O pedido ainda não tem ordem de separação no Zen.' });
     const atual = ['entrada', 'liberacao'].includes(p.status) ? 'entrada' : p.status;
     if (status === atual) return res.json({ pedido: p });
-    if (!temBotao(req.usuario, 'loj_mover_admin') && (col.get(status)?.so_admin || col.get(atual)?.so_admin)) {
+    // Coluna restrita: só admin e operador tiram cards dela (entrar nela é livre)
+    if (!temBotao(req.usuario, 'loj_mover_admin') && col.get(atual)?.so_admin) {
       return res.status(403).json({ erro: 'Mover pedidos nessa coluna não está liberado para você (Admin > Usuários).' });
     }
     // Para onde a coluna atual pode mover (Configurar → "Pode mover cards desta coluna para")

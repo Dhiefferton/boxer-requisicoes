@@ -88,7 +88,8 @@ export async function moverPedidoCif(req, res, next) {
     if (!p) return res.status(404).json({ erro: 'Pedido não encontrado na Logística CIF.' });
     const atual = p.cif_status;
     if (status === atual) return res.json({ pedido: p });
-    if (!temBotao(req.usuario, 'cif_mover_admin') && (col.get(status)?.so_admin || col.get(atual)?.so_admin)) {
+    // Coluna restrita: só admin e operador tiram cards dela (entrar nela é livre)
+    if (!temBotao(req.usuario, 'cif_mover_admin') && col.get(atual)?.so_admin) {
       return res.status(403).json({ erro: 'Mover pedidos nessa coluna não está liberado para você (Admin > Usuários).' });
     }
     const destinosCol = destinosPara(col.get(atual), req.usuario);
