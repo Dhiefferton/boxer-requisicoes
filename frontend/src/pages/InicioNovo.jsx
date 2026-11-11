@@ -111,8 +111,8 @@ export default function InicioNovo() {
   // Armazém (WMS) e Frotas: abrem o outro sistema em outra aba; só aparecem com endereço configurado
   const modulos = useMemo(() => MODULOS.map(m => ({
     ...m,
-    itens: m.itens.filter(i => enderecoDe(i)).map(i => ({
-      ...i, externo: enderecoDe(i), icon: ICONES_MODULO[i.icone] || LayoutDashboard, liberada: veTela(usuario, m.chave),
+    itens: m.itens.filter(i => m.chave === 'frotas' || enderecoDe(i)).map(i => ({
+      ...i, externo: m.chave === 'frotas' ? null : enderecoDe(i), rota: m.chave === 'frotas' ? (i.caminho === '/' ? '/frotas' : `/frotas${i.caminho}`) : undefined, icon: ICONES_MODULO[i.icone] || LayoutDashboard, liberada: veTela(usuario, m.chave),
     })),
   })).filter(m => m.itens.length), [usuario]);
   const grupos = [{ chave: 'operacoes', nome: 'Operações', resumo: 'orçamentos, garantia, lojinha, compras', itens: blocos }, ...modulos];

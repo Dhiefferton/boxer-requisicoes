@@ -121,3 +121,38 @@ textarea:autofill {
 }
 /* Campos de busca: o X de limpar é o do sistema; esconde o X nativo do navegador */
 input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+
+/* ── Frotas dentro do Operações ─────────────────────────────────────────────
+   As telas do Frotas usam navy/brand/status e dark:. Aqui elas passam a usar as cores do Operações
+   (escuro = padrão, claro = data-tema="claro"), então o Frotas fica igual às outras telas. */
+@theme {
+  --color-navy-950: var(--c-fundo);
+  --color-navy-900: var(--c-superficie);
+  --color-navy-850: var(--c-cartao);
+  --color-navy-800: var(--c-cartao);
+  --color-navy-700: var(--c-borda);
+  --color-navy-600: var(--c-borda-forte);
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dbe7fe;
+  --color-brand-200: #bdd4fd;
+  --color-brand-300: #8fb8fc;
+  --color-brand-400: var(--c-destaque-claro);
+  --color-brand-500: var(--c-destaque);
+  --color-brand-600: var(--c-destaque);
+  --color-brand-700: var(--c-destaque-h);
+  --color-brand-800: #1c389d;
+  --color-brand-900: #1c347d;
+  --color-status-available: #16a34a;
+  --color-status-trip: #2563eb;
+  --color-status-reserved: #7c3aed;
+  --color-status-maintenance: #ea580c;
+  --color-status-blocked: #dc2626;
+  --color-status-idle: #64748b;
+  --shadow-card: 0 1px 2px 0 rgba(15, 23, 42, 0.04), 0 1px 3px 0 rgba(15, 23, 42, 0.06);
+  --shadow-popover: 0 10px 30px -5px rgba(15, 23, 42, 0.25);
+}
+@custom-variant dark (&:where(:root:not([data-tema="claro"]) *));
+.frotas-escopo { color: var(--c-texto); }
+.frotas-escopo select, .frotas-escopo textarea,
+.frotas-escopo input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']) { background-color: #fff; color: #0f172a; }
+.frotas-escopo select option { background-color: #fff; color: #0f172a; }

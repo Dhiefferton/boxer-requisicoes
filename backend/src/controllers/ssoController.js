@@ -73,3 +73,18 @@ export async function trocarCodigoSso(req, res, next) {
     res.json({ email: r.rows[0].email, nome: r.rows[0].nome });
   } catch (err) { next(err); }
 }
+
+// GET /frotas/nota?numero= — busca a nota no ZenERP para o Custo de Viagem do Frotas.
+// Repassa ao boxer-wms-api (que tem a integração com o Zen) com o segredo combinado.
+// Variáveis: BOXER_WMS_API_URL e FROTAS_API_SECRET (as mesmas que o Frotas usava).
+export async function notaFrotas(req, res) {
+  const numero = String(req.query?.numero || '').trim();
+  if (!numero) return res.status(400).json({ erro: 'Informe o parâmetro "numero"' });
+  const base = process.env.BOXER_WMS_API_URL, segredo = process.env.FROTAS_API_SECRET;
+  if (!base || !segredo) return res.status(500).json({ erro: 'BOXER_WMS_API_URL / FROTAS_API_SECRET não configurados neste servidor' });
+  try {
+    const r = await fetch(`${base.replace(/\/$/, '')}/frotas/nota?numero=${encodeURIComponent(numero)}`, { headers: { Authorization: `Bearer ${segredo}` } });
+    const corpo = await r.json().catch(() => null);
+    res.status(r.ok ? 200 : r.status).json(corpo || { erro: `boxer-wms-api respondeu ${r.status}` });
+  } catch (e) { console.error('Nota Frotas:', e.message); res.status(502).json({ erro: 'Erro ao consultar o boxer-wms-api. Tente novamente em instantes.' }); }
+}

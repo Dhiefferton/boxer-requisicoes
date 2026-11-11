@@ -67,7 +67,7 @@ import {
   excluirChave as excluirChaveApi, acessosDaChave,
 } from '../controllers/apiPublicaController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
-import { gerarCodigoSso, trocarCodigoSso } from '../controllers/ssoController.js';
+import { gerarCodigoSso, trocarCodigoSso, notaFrotas } from '../controllers/ssoController.js';
 import { acessoConstrutor, statusConstrutor, ligarConstrutor, listarRascunhos, verRascunho, criarRascunho, salvarRascunho, excluirRascunho, aprovarRascunho, telasParaCopiar, copiarTela } from '../controllers/construtorController.js';
 import { relatorioUsoPipefy, chamadasPipefy } from '../integrations/usoPipefy.js';
 import { verConfig as verConfigOrcamento, salvarConfig as salvarConfigOrcamento, adicionarOpcao as adicionarOpcaoOrcamento } from '../controllers/configOrcamentoController.js';
@@ -91,6 +91,7 @@ router.patch('/auth/alterar-senha', autenticar, alterarSenha);
 const limiteSso = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false, message: { erro: 'Muitas tentativas.' } });
 router.post('/sso/codigo', autenticar, gerarCodigoSso);
 router.post('/sso/trocar', limiteSso, trocarCodigoSso);
+router.get('/frotas/nota', autenticar, notaFrotas);
 
 // ── Recuperação de senha por e-mail (público)
 const limiteRecuperacao = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,

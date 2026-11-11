@@ -1,6 +1,7 @@
 // ============================================================
 // App.jsx — Roteamento com proteção por perfil
 // ============================================================
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
@@ -23,6 +24,7 @@ import LojinhaBoxer from './pages/operador/LojinhaBoxer';
 import LogisticaCif from './pages/operador/LogisticaCif';
 import QuadroPersonalizado from './pages/operador/QuadroPersonalizado';
 import Telas from './pages/operador/Telas';
+const FrotasApp = lazy(() => import('./frotas/FrotasApp'));
 import Construtor from './pages/operador/Construtor';
 import Inicio from './pages/Inicio';
 import Databases from './pages/operador/Databases';
@@ -129,6 +131,9 @@ export default function App() {
             } />
             <Route path="/construtor" element={
               <RotaProtegida><Construtor /></RotaProtegida>
+            } />
+            <Route path="/frotas/*" element={
+              <RotaTela tela="frotas"><Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center"><Spinner size={32} className="text-[var(--c-destaque)]" /></div>}><FrotasApp /></Suspense></RotaTela>
             } />
             <Route path="/telas" element={
               <RotaTela tela="telas"><Telas /></RotaTela>
