@@ -47,3 +47,20 @@ export const MODULOS = [
     ],
   },
 ];
+
+// Abre o WMS / coletor / Frotas em outra aba JÁ LOGADO (login único): pede um código de uso único ao servidor
+// e manda junto no endereço (?sso= para o WMS, ?sso_th= para o Frotas). Se não der, abre normal (tela de login deles).
+export async function abrirComLogin(item, url) {
+  const janela = window.open('', '_blank');
+  if (!janela) { window.location.href = url; return; }
+  let destino = url;
+  try {
+    const { default: api } = await import('../services/api');
+    const { data } = await api.post('/sso/codigo', { destino: item.base }, { timeout: 15000 });
+    const u = new URL(url);
+    if (data?.codigo) u.searchParams.set('sso', data.codigo);
+    if (data?.token_hash) u.searchParams.set('sso_th', data.token_hash);
+    destino = u.toString();
+  } catch { /* abre sem login único */ }
+  janela.location.href = destino;
+}

@@ -19,7 +19,7 @@ import api from '../services/api';
 import { LayoutTemplate } from 'lucide-react';
 import { construtorService } from '../services/api';
 import { ExternalLink, Gauge, ListChecks, RefreshCcw, PackageCheck, ScanLine, Smartphone, CarFront, CalendarDays, Route, ClipboardCheck, Calculator } from 'lucide-react';
-import { MODULOS, enderecoDe } from '../utils/modulos';
+import { MODULOS, enderecoDe, abrirComLogin } from '../utils/modulos';
 
 const ICONES_MODULO = { painel: Gauge, pedidos: ListChecks, reposicao: RefreshCcw, historico: History, separacao: ScanLine, conferencia: PackageCheck, coletor: Smartphone, frotas: CarFront, agenda: CalendarDays, viagens: Route, checklist: ClipboardCheck, custo: Calculator };
 const AZUL = 'var(--c-destaque)';
@@ -117,7 +117,7 @@ export default function InicioNovo() {
   })).filter(m => m.itens.length), [usuario]);
   const grupos = [{ chave: 'operacoes', nome: 'Operações', resumo: 'orçamentos, garantia, lojinha, compras', itens: blocos }, ...modulos];
   const todos = grupos.flatMap(g => g.itens);
-  const abrir = (b) => { if (!b.liberada) return; if (b.externo) window.open(b.externo, '_blank', 'noopener'); else navigate(b.rota); };
+  const abrir = (b) => { if (!b.liberada) return; if (b.externo) abrirComLogin(b, b.externo); else navigate(b.rota); };
 
   const p = dados?.produtividade || {};
   const aprovPct = p.aprovados_mes != null && (p.aprovados_mes + (p.recusados_mes || 0)) > 0
