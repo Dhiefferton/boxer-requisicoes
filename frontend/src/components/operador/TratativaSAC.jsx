@@ -91,12 +91,19 @@ export default function TratativaSAC({ pedido, semRegistroNS = false, cif = fals
       </div>
       {dados.erro && <p className="text-[11px] text-amber-400">{dados.erro}</p>}
       {!t && !dados.erro && <p className="text-[11px] text-[var(--c-suave)]">Este card não veio de uma tratativa do SAC.</p>}
-      {t && !semRegistroNS && t.campos.filter(ehRegistroNS).map((c, i) => (
+      {/* Registro de NS: no Pipefy é o campo do tipo "ID" da fase Direcionar cliente, que mostra o nº do próprio card
+          da tratativa (#<id>). O Pipefy não devolve esse campo na leitura, então ele é montado a partir do id do card. */}
+      {t && !semRegistroNS && (t.campos.some(ehRegistroNS) ? t.campos.filter(ehRegistroNS).map((c, i) => (
         <div key={`rns-${i}`}>
           <p className="text-[11px] text-[var(--c-suave)]">Registro de NS</p>
           <p className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{textoCampo(c)}</p>
         </div>
-      ))}
+      )) : t.card_id ? (
+        <div>
+          <p className="text-[11px] text-[var(--c-suave)]">Registro de NS</p>
+          <p className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">#{t.card_id}</p>
+        </div>
+      ) : null)}
       {t && (
         <dl className="flex flex-col gap-3">
           {t.campos.map((c, i) => (
