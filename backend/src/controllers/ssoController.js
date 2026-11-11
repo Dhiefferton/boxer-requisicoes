@@ -58,14 +58,22 @@ export async function gerarCodigoSso(req, res, next) {
       if (!url || !chave) return res.json({ indisponivel: true, motivo: 'Login único do Frotas ainda não configurado no servidor.' });
       const h = { apikey: chave, Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json' };
       // Só gera link para quem já existe no Frotas (o link mágico criaria um usuário novo)
-      const ex = await fetch(`${url}/rest/v1/usuarios_perfil?select=id&email=ilike.${encodeURIComponent(emailFrotas)}&limit=1`, { headers: h });
+      const ex = await fetch(`${url}/rest/v1/usuarios_perfil?select=id,email&email=ilike.${encodeURIComponent(emailFrotas)}&limit=1`, { headers: h });
       if (!ex.ok) return res.json({ indisponivel: true, motivo: 'Não consegui conferir seu cadastro no Frotas.' });
-      if (!(await ex.json())?.length) return res.json({ indisponivel: true, motivo: `Não há usuário ${emailFrotas} no Frotas.` });
-      const r = await fetch(`${url}/auth/v1/admin/generate_link`, { method: 'POST', headers: h, body: JSON.stringify({ type: 'magiclink', email: emailFrotas }) });
+      const ficha = (await ex.json())?.[0];
+      if (!ficha) return res.json({ indisponivel: true, motivo: `Não há usuário ${emailFrotas} no Frotas.` });
+      // O login (Supabase Auth) é achado pelo id da ficha: o e-mail do login pode ser diferente do e-mail da ficha.
+      const au = await fetch(`${url}/auth/v1/admin/users/${ficha.id}`, { headers: h });
+      const authUser = au.ok ? await au.json().catch(() => null) : null;
+      const emailLogin = String(authUser?.email || '').trim().toLowerCase();
+      if (!emailLogin) return res.json({ indisponivel: true, motivo: 'O usuário do Frotas não tem login ativo (sem e-mail no Supabase Auth).' });
+      const r = await fetch(`${url}/auth/v1/admin/generate_link`, { method: 'POST', headers: h, body: JSON.stringify({ type: 'magiclink', email: emailLogin }) });
       const j = await r.json().catch(() => ({}));
       const token = j?.hashed_token || j?.properties?.hashed_token;
       if (!r.ok || !token) return res.json({ indisponivel: true, motivo: 'O Frotas não liberou o acesso agora.' });
-      return res.json({ token_hash: token, email: emailFrotas });
+      // garante que o link abriu o MESMO usuário da ficha
+      if (j?.id && j.id !== ficha.id) return res.json({ indisponivel: true, motivo: 'O login do Frotas não corresponde à ficha do usuário.' });
+      return res.json({ token_hash: token, email: emailLogin });
     }
 
     await garantir();
