@@ -63,25 +63,18 @@ export default function BarraTopo({ onSair, carrinho = null }) {
       <div className="max-w-[1500px] mx-auto px-3 sm:px-4 md:px-6 h-14 flex items-center gap-3 sm:gap-5">
         <NavLink to="/inicio" className="flex items-center gap-2.5 shrink-0">
           <img src={logoBoxer} alt="Boxer" className="w-7 h-7" />
-          <span className="font-extrabold text-[15px] text-[var(--c-texto)] hidden sm:block">Boxer Operações</span>
+          <span className="font-semibold text-sm text-[var(--c-texto)] hidden sm:block whitespace-nowrap">Boxer Operações</span>
         </NavLink>
         <nav className="hidden md:flex items-center gap-1">
-          {links.map(l => (
-            <NavLink key={l.to} to={l.to}
-              className={({ isActive }) => `px-3 py-1.5 rounded-full text-sm transition-colors ${isActive ? 'bg-[var(--c-borda)] text-[var(--c-texto)]' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
-              {l.label}
+          {[...links.map(l => ({ ...l, icon: null })),
+            ...(veTela(usuario, 'telas') ? [{ to: '/telas', label: 'Criar tela', icon: Plus, chave: 'criar' }] : []),
+            ...(construtor ? [{ to: '/construtor', label: 'Construtor de telas', icon: LayoutTemplate }] : []),
+          ].map(l => (
+            <NavLink key={l.chave || l.to} to={l.to} end={l.chave === 'criar' ? false : undefined}
+              className={({ isActive }) => `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${isActive && l.chave !== 'criar' ? 'bg-[var(--c-borda)] text-[var(--c-texto)]' : 'text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>
+              {l.icon && <l.icon size={14} />}{l.label}
             </NavLink>
           ))}
-          {veTela(usuario, 'telas') && (
-            <NavLink to="/telas" className="ml-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border border-dashed border-[var(--c-borda-forte,var(--c-borda))] text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:border-[var(--c-destaque)]">
-              <Plus size={14} /> Criar tela
-            </NavLink>
-          )}
-          {construtor && (
-            <NavLink to="/construtor" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border border-dashed border-[var(--c-destaque)] text-[var(--c-texto)] hover:bg-[var(--c-destaque)]/10">
-              <LayoutTemplate size={14} /> Construtor de telas <span className="text-[10px] text-[var(--c-destaque-claro)]">beta</span>
-            </NavLink>
-          )}
         </nav>
         <div className="flex-1" />
 
