@@ -84,8 +84,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelado) setPerfil(p ? { ...p, precisaTrocarSenha: false } : p)
         if (!p) { try { localStorage.removeItem('frotas_email_v2_' + emailOperacoes) } catch { /* sem armazenamento */ } }
       })
-      .catch(() => {
-        if (!cancelado) setPerfil(null)
+      .catch((e) => {
+        if (!cancelado) {
+          setPerfil(null)
+          const err = e as { message?: string; code?: string; status?: number }
+          setErroSso(`Não consegui ler seu perfil no Frotas (${err.code || err.status || 'erro'}: ${err.message || 'sem detalhe'}).`)
+        }
       })
       .finally(() => {
         if (!cancelado) setPerfilLoading(false)

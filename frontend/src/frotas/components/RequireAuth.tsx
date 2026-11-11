@@ -19,7 +19,7 @@ export function RequireAuth() {
     return <Centro><p className="max-w-md rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-5 text-sm text-[var(--c-texto)]">{erroSso || 'Não consegui abrir o Frotas com o seu login.'}</p></Centro>
   }
   if (!perfil) {
-    return <Centro><p className="max-w-md rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-5 text-sm text-[var(--c-texto)]">Seu usuário não tem perfil no Frotas.</p></Centro>
+    return <Centro><p className="max-w-md rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-5 text-sm text-[var(--c-texto)]">{erroSso || 'Seu usuário não tem perfil no Frotas.'}</p></Centro>
   }
   if (perfil.perfil === 'motorista') {
     return <Centro><p className="max-w-md rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-5 text-sm text-[var(--c-texto)]">Motoristas usam o aplicativo do motorista do Frotas.</p></Centro>
