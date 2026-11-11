@@ -25,6 +25,24 @@ const garantir = () => (estrutura ||= query(`
     usado_em  TIMESTAMPTZ
   )`).catch(e => { estrutura = null; throw e; }));
 
+// Quando a pessoa usa e-mails diferentes nos sistemas, o vínculo diz qual e-mail dela vale em cada destino.
+let estVinculos = null;
+const garantirVinculos = () => (estVinculos ||= query(`
+  CREATE TABLE IF NOT EXISTS bx_sso_vinculos (
+    email_operacoes VARCHAR(255) NOT NULL,
+    destino         VARCHAR(20)  NOT NULL,
+    email_destino   VARCHAR(255) NOT NULL,
+    PRIMARY KEY (email_operacoes, destino)
+  );
+  INSERT INTO bx_sso_vinculos (email_operacoes, destino, email_destino)
+  VALUES ('admin@boxer.com.br', 'frotas', 'compras@boxersoldas.com.br')
+  ON CONFLICT DO NOTHING;`).catch(e => { estVinculos = null; throw e; }));
+async function emailNoDestino(email, destino) {
+  await garantirVinculos();
+  const r = await query(`SELECT email_destino FROM bx_sso_vinculos WHERE email_operacoes = $1 AND destino = $2`, [email, destino === 'coletor' ? 'wms' : destino]);
+  return String(r.rows[0]?.email_destino || email).trim().toLowerCase();
+}
+
 // POST /sso/codigo { destino }  (logado)
 export async function gerarCodigoSso(req, res, next) {
   try {
@@ -34,26 +52,27 @@ export async function gerarCodigoSso(req, res, next) {
     if (!email) return res.status(400).json({ erro: 'Seu usuário não tem e-mail cadastrado.' });
 
     if (destino === 'frotas') {
+      const emailFrotas = await emailNoDestino(email, 'frotas');
       const url = String(process.env.FROTAS_SUPABASE_URL || '').replace(/\/+$/, '');
       const chave = process.env.FROTAS_SUPABASE_SERVICE_KEY;
       if (!url || !chave) return res.json({ indisponivel: true, motivo: 'Login único do Frotas ainda não configurado no servidor.' });
       const h = { apikey: chave, Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json' };
       // Só gera link para quem já existe no Frotas (o link mágico criaria um usuário novo)
-      const ex = await fetch(`${url}/rest/v1/usuarios_perfil?select=id&email=ilike.${encodeURIComponent(email)}&limit=1`, { headers: h });
+      const ex = await fetch(`${url}/rest/v1/usuarios_perfil?select=id&email=ilike.${encodeURIComponent(emailFrotas)}&limit=1`, { headers: h });
       if (!ex.ok) return res.json({ indisponivel: true, motivo: 'Não consegui conferir seu cadastro no Frotas.' });
-      if (!(await ex.json())?.length) return res.json({ indisponivel: true, motivo: `Não há usuário ${email} no Frotas.` });
-      const r = await fetch(`${url}/auth/v1/admin/generate_link`, { method: 'POST', headers: h, body: JSON.stringify({ type: 'magiclink', email }) });
+      if (!(await ex.json())?.length) return res.json({ indisponivel: true, motivo: `Não há usuário ${emailFrotas} no Frotas.` });
+      const r = await fetch(`${url}/auth/v1/admin/generate_link`, { method: 'POST', headers: h, body: JSON.stringify({ type: 'magiclink', email: emailFrotas }) });
       const j = await r.json().catch(() => ({}));
       const token = j?.hashed_token || j?.properties?.hashed_token;
       if (!r.ok || !token) return res.json({ indisponivel: true, motivo: 'O Frotas não liberou o acesso agora.' });
-      return res.json({ token_hash: token });
+      return res.json({ token_hash: token, email: emailFrotas });
     }
 
     await garantir();
     const codigo = crypto.randomBytes(32).toString('hex');
     await query(`DELETE FROM bx_sso_codigos WHERE expira_em < NOW() - INTERVAL '1 hour'`).catch(() => {});
     await query(`INSERT INTO bx_sso_codigos (hash, email, nome, destino, expira_em) VALUES ($1, $2, $3, $4, NOW() + INTERVAL '90 seconds')`,
-      [sha(codigo), email, req.usuario?.nome || null, destino === 'coletor' ? 'wms' : destino]);
+      [sha(codigo), await emailNoDestino(email, destino), req.usuario?.nome || null, destino === 'coletor' ? 'wms' : destino]);
     res.json({ codigo });
   } catch (err) { next(err); }
 }

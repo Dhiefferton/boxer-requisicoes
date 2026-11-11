@@ -43,7 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ;(async () => {
       try {
         const { data } = await supabase.auth.getSession()
-        if (data.session?.user?.email?.toLowerCase() === emailOperacoes) {
+        // e-mail que a pessoa usa no Frotas (pode ser diferente do e-mail do Operações)
+        const emailSalvo = localStorage.getItem('frotas_email_' + emailOperacoes)
+        if (data.session?.user?.email && data.session.user.email.toLowerCase() === (emailSalvo || emailOperacoes)) {
           if (!cancelado) { setSession(data.session); setErroSso(null) }
           return
         }
@@ -51,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (r.data?.token_hash) {
           const { data: v, error } = await supabase.auth.verifyOtp({ token_hash: r.data.token_hash, type: 'magiclink' })
           if (error || !v.session) throw new Error('O Frotas não aceitou o login. Tente de novo.')
+          try { localStorage.setItem('frotas_email_' + emailOperacoes, String(r.data?.email || emailOperacoes).toLowerCase()) } catch { /* sem armazenamento */ }
           if (!cancelado) { setSession(v.session); setErroSso(null) }
         } else if (!cancelado) {
           setSession(null)
