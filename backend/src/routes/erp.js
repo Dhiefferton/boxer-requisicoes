@@ -109,6 +109,19 @@ router.get('/debug-garantia', async (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// DIAGNÓSTICO (só leitura) — Garantia: campos com "Mostrar este campo" e os valores dos cards de uma coluna
+// Ex: GET /api/erp/debug-cif-visivel?secret=...&coluna=col_x
+router.get('/debug-cif-visivel', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const cfg = await lerConfigCif();
+    const campos = cfg.campos.map(c => ({ id: c.id, coluna: c.coluna, tipo: c.tipo, rotulo: c.rotulo, opcoes: c.opcoes, visivel: c.visivel || null, condicao: c.condicao || null }));
+    const coluna = String(req.query.coluna || '');
+    const cards = coluna ? (await query(`SELECT id, cif_status, cif_valores, pipefy_garantia_id FROM lojinha_boxer_pedidos WHERE cif_status = $1 ORDER BY id DESC LIMIT 15`, [coluna])).rows : [];
+    res.json({ colunas: cfg.colunas.map(c => `${c.chave}: ${c.nome}`), campos, cards: cards.map(c => ({ id: c.id, status: c.cif_status, pipefy: c.pipefy_garantia_id, valores: c.cif_valores })) });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // DIAGNÓSTICO (só leitura) — chamadas que o B-Operações fez ao Pipefy (registro pipefy_chamadas)
 // Ex: GET /api/erp/debug-pipefy-chamadas?secret=...&dias=7
 router.get('/debug-pipefy-chamadas', async (req, res) => {
