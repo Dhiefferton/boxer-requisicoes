@@ -7,7 +7,7 @@
 // ============================================================
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Search, X, Lock, LogOut, Sun, Moon, ShoppingCart, Plus, LayoutTemplate } from 'lucide-react';
+import { Search, X, Lock, LogOut, Sun, Moon, ShoppingCart, Plus, LayoutTemplate, Settings } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTema } from '../../context/TemaContext';
 import { veTela } from '../../utils/telas';
@@ -55,6 +55,8 @@ export default function BarraTopo({ onSair, carrinho = null }) {
     { to: '/inicio', label: 'Início', ok: true },
     { to: '/telas', label: 'Telas', ok: veTela(usuario, 'telas') },
     { to: '/databases', label: 'Bases', ok: veTela(usuario, 'databases') },
+    { to: '/admin', label: 'Admin', ok: veTela(usuario, 'admin') },
+    { to: '/integracoes', label: 'Integrações', ok: veTela(usuario, 'integracoes') },
   ].filter(l => l.ok);
   const abrir = (r) => { setAberto(false); setQ(''); navigate(`${r.rota}?busca=${encodeURIComponent(r.busca)}`); };
 
@@ -120,6 +122,11 @@ export default function BarraTopo({ onSair, carrinho = null }) {
                 <p className="text-sm font-medium text-[var(--c-texto)] truncate">{usuario?.nome}</p>
                 <p className="text-[11px] text-[var(--c-suave)] capitalize truncate">{usuario?.perfil}{usuario?.departamento_nome ? ` · ${usuario.departamento_nome}` : ''}</p>
               </div>
+              {veTela(usuario, 'admin') && (
+                <button onClick={() => { setMenu(false); navigate('/admin'); }} className="md:hidden w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-[var(--c-texto)] hover:bg-[var(--c-borda)]">
+                  <Settings size={15} /> Admin
+                </button>
+              )}
               <button onClick={alternarTema} className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-[var(--c-texto)] hover:bg-[var(--c-borda)]">
                 {tema === 'claro' ? <Moon size={15} /> : <Sun size={15} />} {tema === 'claro' ? 'Modo escuro' : 'Modo claro'}
               </button>
