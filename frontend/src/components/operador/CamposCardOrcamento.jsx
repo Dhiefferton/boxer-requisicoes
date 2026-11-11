@@ -857,7 +857,7 @@ export function montarGrupos(fases, pedido, statusAtual, faseAtualId) {
   const nomeCol = (k) => (k === 'inicio' ? 'Abertura do card' : COLUNAS_ORCAMENTO.find(c => c.status === k)?.titulo || k);
   const gruposCfg = [...new Set(cfgCampos.map(c => c.coluna))]
     .sort((a, b) => (a === statusAtual ? -1 : b === statusAtual ? 1 : ordemCols.indexOf(a) - ordemCols.indexOf(b)))
-    .map(k => ({ faseId: `bx-${k}`, nome: COLUNAS_ORCAMENTO.find(c => c.status === k)?.importados ? nomeCol(k) : `${nomeCol(k)} · B-Requisições`, chave: k, atual: k === statusAtual, campos: cfgCampos.filter(c => c.coluna === k).map(campoDaConfig) }));
+    .map(k => ({ faseId: `bx-${k}`, nome: COLUNAS_ORCAMENTO.find(c => c.status === k)?.importados ? nomeCol(k) : `${nomeCol(k)} · B-Requisições`, chave: k, atual: k === statusAtual, campos: cfgCampos.filter(c => c.coluna === k).map(c => campoDaConfig(c, 0, cfgCampos)) }));
   return [...gruposCfg, ...ordenadas, ...(outros.length ? [{ faseId: 'outros', nome: 'Outros campos', campos: outros }] : [])];
 }
 
