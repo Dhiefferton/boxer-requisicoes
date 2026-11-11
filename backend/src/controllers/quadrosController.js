@@ -537,8 +537,8 @@ export async function moverCard(req, res, next) {
     if (!p) return res.status(404).json({ erro: 'Card não encontrado.' });
     const atual = p.status;
     if (status === atual) return res.json({ card: p });
-    if (req.usuario?.perfil !== 'admin' && (col.get(status)?.so_admin || col.get(atual)?.so_admin)) {
-      return res.status(403).json({ erro: 'Mover cards nessa coluna é só do administrador.' });
+    if (!['admin', 'operador'].includes(req.usuario?.perfil) && (col.get(status)?.so_admin || col.get(atual)?.so_admin)) {
+      return res.status(403).json({ erro: 'Mover cards nessa coluna é só do administrador e do operador.' });
     }
     const destinos = destinosPara(col.get(atual), req.usuario);
     if (Array.isArray(destinos) && !destinos.includes(status)) {
