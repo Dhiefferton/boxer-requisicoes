@@ -54,7 +54,14 @@ export default function QuadroPersonalizado() {
   return <Quadro key={qid} qid={qid} nome={nome} podeEditar={nivel === 'editar'} admin={usuario?.perfil === 'admin'} />;
 }
 
+// Colunas marcadas como restritas: admin e operador movem cards para/delas
+function useMoveRestrita() {
+  const { usuario } = useAuth();
+  return ['admin', 'operador'].includes(usuario?.perfil);
+}
+
 function Quadro({ qid, nome: nomeMenu, podeEditar, admin }) {
+  const moveRestrita = useMoveRestrita(); // colunas "só admin": admin e operador movem
   const svc = useMemo(() => quadroService(qid), [qid]);
   const servicoFotos = useMemo(() => ({
     base: `/quadros/${qid}/fotos`, imagem: svc.imagem, enviarFoto: svc.enviarFoto, excluirFoto: svc.excluirFoto, criarOpcao: svc.criarOpcao,
@@ -105,7 +112,7 @@ function Quadro({ qid, nome: nomeMenu, podeEditar, admin }) {
     if (!podeEditar || !p || col.status === p.status) return false;
     const atual = colunas.find(c => c.status === p.status);
     if (Array.isArray(atual?.destinos) && !atual.destinos.includes(col.status)) return false;
-    if (!admin && (col.admin || atual?.admin)) return false;
+    if (!moveRestrita && (col.admin || atual?.admin)) return false;
     return true;
   }
   async function soltar(col) {
@@ -264,6 +271,7 @@ function CardEspelhoOrcamento({ p, qid, nomeQuadro, movendo, podeArrastar, onAbr
 // botões de mover entre as colunas desta tela (direita) e as fases já passadas aqui (esquerda, histórico)
 function FaseQuadro({ children, ...props }) { return children(useFaseQuadro(props)); }
 function useFaseQuadro({ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, nomeQuadro, carregar, onHistorico }) {
+  const moveRestrita = useMoveRestrita(); // colunas "só admin": admin e operador movem
   const [rascunho, setRascunho] = useState({});
   const [movendo, setMovendo] = useState(false);
   const [erro, setErro] = useState('');
@@ -293,7 +301,7 @@ function useFaseQuadro({ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, 
   }
   const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
     && !regraBloqueiaMover(colAtual, c.status, cfg?.campos, valorDe);
-  const destinos = podeEditar ? colunas.filter(c => c.status !== atual && permitido(c) && !(c.admin && !admin) && !(colAtual?.admin && !admin)) : [];
+  const destinos = podeEditar ? colunas.filter(c => c.status !== atual && permitido(c) && !(c.admin && !moveRestrita) && !(colAtual?.admin && !moveRestrita)) : [];
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
 
@@ -454,6 +462,7 @@ function NovoCard({ svc, cfg, nome, onFechar, onCriado, onConfigurar = null }) {
 
 // Card aberto: formulário inicial e fases anteriores | fase atual | mover
 function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carregar, onFechar, onHistorico, onConfigurar = null }) {
+  const moveRestrita = useMoveRestrita(); // colunas "só admin": admin e operador movem
   const [editandoFase, setEditandoFase] = useState(() => new Set());
   const [abertas, setAbertas] = useState(() => new Set(['inicio']));
   const [rascunho, setRascunho] = useState({});
@@ -520,7 +529,7 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
 
   const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
     && !regraBloqueiaMover(colAtual, c.status, cfg?.campos, valorDe);
-  const destinos = podeEditar ? colunas.filter(c => c.status !== atual && permitido(c) && !(c.admin && !admin) && !(colAtual?.admin && !admin)) : [];
+  const destinos = podeEditar ? colunas.filter(c => c.status !== atual && permitido(c) && !(c.admin && !moveRestrita) && !(colAtual?.admin && !moveRestrita)) : [];
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
 
