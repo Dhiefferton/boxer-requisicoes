@@ -23,6 +23,7 @@ import { exigidoAgora, bloqueioRegra, destinosPara } from './configQuadro.js';
 import { temBotao } from '../middlewares/telas.js';
 import { registrarArquivoBlob, excluirArquivoBlob, lerEnvioBlob } from './blobController.js';
 import { guardarTratativa } from './tratativaController.js';
+import { garantirRegistroNS, preencherRegistroNS } from '../integrations/registroNS.js';
 
 const BASE_SELECT = `
   SELECT
@@ -33,7 +34,7 @@ const BASE_SELECT = `
     p.zen_pedido_id, p.zen_ordem_separacao_id, p.zen_erro, p.zen_enviado_em, p.aprovacao,
     p.zen_romaneio_id, p.zen_nota_id, p.zen_cancelado_id, p.zen_cancelado_em, p.zen_venda_numero, p.zen_nf_numero, p.zen_nf_status,
     p.pecas_recusadas, p.recusadas_retiradas_em, p.itens_recusados, p.itens_alterados_em,
-    p.campos_editados, p.pipefy_fase,
+    p.campos_editados, p.pipefy_fase, p.tratativa_card_id,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome,
     (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome, 'blob_url', f.blob_url, 'tamanho', f.tamanho) ORDER BY f.id), '[]'::json)
@@ -60,6 +61,7 @@ function garantirColunas() {
   if (!colunasOk) {
     colunasOk = (async () => {
       await garantirNomeManual();
+      await garantirRegistroNS(); // Registro de NS (nº da tratativa do SAC)
       const r = await query(
         `SELECT COUNT(*)::int AS n FROM information_schema.columns
           WHERE table_name = 'pedidos_orcamento'
@@ -392,6 +394,7 @@ export async function listarPedidos(req, res, next) {
     await garantirColunas();
     await atualizarDocumentosOrcamento(); // Nº do pedido de venda e da NF
     await avisarFaturamentoOrcamento(); // e-mails ao faturamento que falharam (tenta de novo)
+    await preencherRegistroNS('orcamento'); // Registro de NS dos cards que ainda não têm (lê o Pipefy, em lote)
     // ?ids=1,2,3 — só esses cards (ex.: cópias mostradas na tela Notas de Serviços), inclusive cancelados
     const ids = String(req.query.ids || '').split(',').map(Number).filter(n => Number.isInteger(n) && n > 0).slice(0, 500);
     const result = ids.length

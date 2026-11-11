@@ -13,6 +13,7 @@ import { criarConfigQuadro, exigidoAgora, bloqueioRegra, destinosPara } from './
 import { garantirEstrutura, registrarMovLoj, atualizarDocumentosZen } from './lojinhaController.js';
 import { temBotao } from '../middlewares/telas.js';
 import { liberarFaturamento, ehLiberacaoFaturamento } from './faturamentoLojinha.js';
+import { preencherRegistroNS } from '../integrations/registroNS.js';
 
 const COLUNAS_CIF = [
   { chave: 'aguardando_envio', nome: 'Aguardando envio', cor: '#3b82f6', so_admin: false },
@@ -63,6 +64,7 @@ export async function listarPedidosCif(req, res, next) {
   try {
     // Entrada automática (Finalizado → Aguardando envio) desligada (04/11/2026); entrarNoCif() fica sem uso
     await atualizarDocumentosZen(); // Nº do pedido de venda e da NF
+    await preencherRegistroNS('garantia'); // Registro de NS dos cards que ainda não têm (lê o Pipefy, em lote)
     const cfg = await cfgCif.ler();
     const arquivadas = cfg.colunas.filter(c => c.arquivada).map(c => c.chave);
     const r = await query(
