@@ -617,11 +617,11 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
       {caixaZen}
       {alertas}
       <div onClick={parar}><FaixaFotosCard pedido={pedido} onVerTodas={() => setAberto(true)} /></div>
-      {(pedido.pipefy_card_id || pedido.cliente_cnpj || pedido.ns_entrada || pedido.tecnico) && (
+      {(pedido.pipefy_card_id || pedido.cliente_cnpj || pedido.ns_entrada || tecnicoDoPedido(pedido)) && (
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <Info rotulo="CNPJ" valor={formatarDoc(pedido.cliente_cnpj)} />
           <Info rotulo="NS de entrada" valor={pedido.ns_entrada || (pedido.tratativa_card_id ? `#${pedido.tratativa_card_id}` : '')} />
-          <Info rotulo="Técnico" valor={pedido.tecnico} />
+          <Info rotulo="Técnico" valor={tecnicoDoPedido(pedido)} />
           <Info rotulo="Frete por conta" valor={pedido.frete_por_conta} />
           <Info rotulo="Entregue por" valor={pedido.entregue_por} />
         </dl>
@@ -676,6 +676,26 @@ const SemFaseExterna = ({ children }) => children(null);
 function separarCodigos(texto) {
   // "Peças Recusadas" é campo numérico no Pipefy: os códigos vêm separados por ponto (402086.701894)
   return [...new Set(String(texto || '').split(/[\s,;|/.]+/).map(c => c.trim().toUpperCase()).filter(Boolean))];
+}
+
+// Técnico do card: campo "Técnico" do Orçamento (preenchido aqui ou vindo do Pipefy); sem ele, o técnico importado
+const textoRegistro = (v) => {
+  if (v == null || v === '') return '';
+  if (Array.isArray(v)) return v.map(textoRegistro).filter(Boolean).join(', ');
+  if (typeof v === 'object') return v.descricao || v.titulo || '';
+  const t = String(v).trim();
+  if (t.startsWith('{') || t.startsWith('[')) { try { return textoRegistro(JSON.parse(t)); } catch { /* texto */ } }
+  return t;
+};
+function tecnicoDoPedido(pedido) {
+  const ed = pedido.campos_editados || {};
+  const pf = Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [];
+  for (const c of (CONFIG_ORCAMENTO.campos || []).filter(x => /^t[ée]cnico\b/i.test(String(x.rotulo || '').trim()))) {
+    const id = c.pipefy_campo || `bx_${c.id}`;
+    const v = textoRegistro(id in ed ? ed[id] : pf.find(x => x?.id === id)?.valor);
+    if (v) return v;
+  }
+  return pedido.tecnico || '';
 }
 
 function Info({ rotulo, valor }) {
