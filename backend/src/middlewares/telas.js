@@ -90,6 +90,7 @@ export function telasDaRota(metodo, caminho) {
 const RECONTAGEM_EMAILS = ['alexsander.lucas@boxer.com.br'];
 const emailDe = (u) => String(u?.email || '').trim().toLowerCase();
 const soAdminLeg = () => false; // não-admin: sem o botão por padrão
+const adminOuOperador = (u) => ['admin', 'operador'].includes(u?.perfil); // colunas "só admin": admin e operador movem
 export const BOTOES = [
   // Orçamentos
   { chave: 'orc_novo_card',     tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/novo-card$/], ['GET', /^\/pedidos-orcamento\/cliente-zen$/]] },
@@ -98,21 +99,21 @@ export const BOTOES = [
   { chave: 'orc_historico',     tela: 'orcamentos', rotas: [['GET', /^\/pedidos-orcamento\/movimentos$/]] },
   { chave: 'orc_campos',        tela: 'orcamentos', rotas: [['PATCH', /^\/pedidos-orcamento\/\d+\/campos$/]] },
   { chave: 'orc_editar_fase',   tela: 'orcamentos', rotas: [['PATCH', /^\/pedidos-orcamento\/\d+\/campos$/]] },
-  { chave: 'orc_mover',         tela: 'orcamentos', rotas: [] }, // checado no moverPedido
+  { chave: 'orc_mover',         tela: 'orcamentos', rotas: [], legado: adminOuOperador }, // checado no moverPedido
   { chave: 'orc_pecas_zen',     tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/\d+\/(atualizar-itens-zen|voltar-separacao)$/]] },
   { chave: 'orc_configurar',    tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/config$/], ['GET', /^\/pedidos-orcamento\/pipefy-pipes$/],
     ['POST', /^\/bases(\/importar-pipefy)?$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
   // Lojinha
   { chave: 'loj_movimentacao',  tela: 'lojinha', rotas: [] },
   { chave: 'loj_editar_fase',   tela: 'lojinha', rotas: [] },
-  { chave: 'loj_mover_admin',   tela: 'lojinha', rotas: [] }, // checado no moverPedidoLojinha
+  { chave: 'loj_mover_admin',   tela: 'lojinha', rotas: [], legado: adminOuOperador }, // checado no moverPedidoLojinha
   { chave: 'loj_configurar',    tela: 'lojinha', rotas: [['POST', /^\/lojinha\/quadro-config$/],
     ['POST', /^\/bases(\/importar-pipefy)?$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
   // Logística CIF (Enviar)
   { chave: 'cif_trazer_pipefy', tela: 'logistica_cif', rotas: [['POST', /^\/logistica-cif\/importar-entrada$/]] },
   { chave: 'cif_movimentacao',  tela: 'logistica_cif', rotas: [] },
   { chave: 'cif_editar_fase',   tela: 'logistica_cif', rotas: [] },
-  { chave: 'cif_mover_admin',   tela: 'logistica_cif', rotas: [] }, // checado no moverPedidoCif
+  { chave: 'cif_mover_admin',   tela: 'logistica_cif', rotas: [], legado: adminOuOperador }, // checado no moverPedidoCif
   { chave: 'cif_configurar',    tela: 'logistica_cif', rotas: [['POST', /^\/logistica-cif\/quadro-config$/],
     ['POST', /^\/bases(\/importar-pipefy)?$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },
   // Inventário
