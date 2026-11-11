@@ -404,8 +404,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                     </label>
                     <label className="text-[11px] text-[var(--c-suave)] space-y-1">Quem move cards para ela
                       <select value={nova.quem} onChange={e => setNova(n => ({ ...n, quem: e.target.value }))} className={inp}>
-                        <option value="admin">Só o administrador</option>
-                        <option value="todos">Admin e operadores</option>
+                        <option value="admin">Só administrador e operador</option>
+                        <option value="todos">Todos que mexem na tela</option>
                       </select>
                     </label>
                   </div>
@@ -623,7 +623,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
                   </div>
                   <label className="flex items-center gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
                     <input type="checkbox" checked={!!colAtual.so_admin} onChange={() => mudarColuna(colSel, c => ({ ...c, so_admin: !c.so_admin }))} />
-                    Só o administrador move cards para esta coluna
+                    Só administrador e operador movem cards para esta coluna
                   </label>
                   <label className="flex items-center gap-2 text-xs text-[var(--c-texto)] cursor-pointer">
                     <input type="checkbox" checked={!!colAtual.arquivada} onChange={() => mudarColuna(colSel, c => ({ ...c, arquivada: !c.arquivada }))} />
