@@ -85,6 +85,7 @@ export function telaDaRota(caminho) {
 // Sem escolha = padrão (só o admin; recontagem/finalizar: o Alexsander). Admin sempre tem todos.
 // Manter igual a BOTOES em backend/src/middlewares/telas.js
 const recontador = (u) => RECONTAGEM_EMAILS.includes(email(u));
+const adminOuOperador = (u) => perfilEm(u, 'admin', 'operador'); // colunas "só admin": admin e operador movem
 export const BOTOES = [
   { chave: 'orc_novo_card',     tela: 'orcamentos', nome: 'Novo card' },
   { chave: 'orc_trazer_pipefy', tela: 'orcamentos', nome: 'Trazer do Pipefy' },
@@ -92,17 +93,17 @@ export const BOTOES = [
   { chave: 'orc_historico',     tela: 'orcamentos', nome: 'Histórico do card' },
   { chave: 'orc_campos',        tela: 'orcamentos', nome: 'Preencher os campos da fase atual' },
   { chave: 'orc_editar_fase',   tela: 'orcamentos', nome: 'Editar fases anteriores' },
-  { chave: 'orc_mover',         tela: 'orcamentos', nome: 'Mover para qualquer coluna (arrastar e colunas só do admin)' },
+  { chave: 'orc_mover',         tela: 'orcamentos', nome: 'Mover para qualquer coluna (arrastar e colunas restritas)', legado: adminOuOperador },
   { chave: 'orc_pecas_zen',     tela: 'orcamentos', nome: 'Atualizar peças no Zen' },
   { chave: 'orc_configurar',    tela: 'orcamentos', nome: 'Configurar colunas e campos (engrenagem)' },
   { chave: 'loj_movimentacao',  tela: 'lojinha',    nome: 'Movimentação (relatório)' },
   { chave: 'loj_editar_fase',   tela: 'lojinha',    nome: 'Editar fases anteriores' },
-  { chave: 'loj_mover_admin',   tela: 'lojinha',    nome: 'Mover para colunas só do admin' },
+  { chave: 'loj_mover_admin',   tela: 'lojinha',    nome: 'Mover para colunas restritas (admin e operador)', legado: adminOuOperador },
   { chave: 'loj_configurar',    tela: 'lojinha',    nome: 'Configurar colunas e campos (engrenagem)' },
   { chave: 'cif_trazer_pipefy', tela: 'logistica_cif', nome: 'Trazer do Pipefy' },
   { chave: 'cif_movimentacao',  tela: 'logistica_cif', nome: 'Movimentação (relatório)' },
   { chave: 'cif_editar_fase',   tela: 'logistica_cif', nome: 'Editar fases anteriores' },
-  { chave: 'cif_mover_admin',   tela: 'logistica_cif', nome: 'Mover para colunas só do admin' },
+  { chave: 'cif_mover_admin',   tela: 'logistica_cif', nome: 'Mover para colunas restritas (admin e operador)', legado: adminOuOperador },
   { chave: 'cif_configurar',    tela: 'logistica_cif', nome: 'Configurar colunas e campos (engrenagem)' },
   { chave: 'inv_recontagem',    tela: 'inventario', nome: 'Fazer a recontagem', legado: recontador },
   { chave: 'inv_finalizar',     tela: 'inventario', nome: 'Finalizar inventário e marcar ajuste no Zen', legado: recontador },
