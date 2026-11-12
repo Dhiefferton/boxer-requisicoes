@@ -17,7 +17,6 @@ import { Manutencao } from './pages/Manutencao'
 import { Documentos } from './pages/Documentos'
 import { Checklist } from './pages/Checklist'
 import { Relatorios } from './pages/Relatorios'
-import { Usuarios } from './pages/Usuarios'
 
 export default function FrotasApp() {
   return (
@@ -39,7 +38,8 @@ export default function FrotasApp() {
                 <Route path="documentos" element={<Documentos />} />
                 <Route path="checklist" element={<Checklist />} />
                 <Route path="relatorios" element={<Relatorios />} />
-                <Route path="usuarios" element={<Usuarios />} />
+                {/* Usuários do Frotas saíram: o perfil no Frotas é escolhido em Admin › Usuários do Boxer Operações */}
+                <Route path="usuarios" element={<Navigate to="/admin" replace />} />
                 {/* Configurações do Frotas saíram: perfil, senha e tema são os do Boxer Operações (menu do avatar) */}
                 <Route path="configuracoes" element={<Navigate to="/minha-senha" replace />} />
               </Route>
