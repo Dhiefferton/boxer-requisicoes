@@ -75,6 +75,7 @@ import { exigirLeituraOrcamentos } from '../middlewares/acessoOrcamentos.js';
 import { arquivoNotaLojinha, arquivoNotaOrcamento } from '../controllers/notaArquivoController.js';
 import { verEmailsFaturamento } from '../controllers/faturamentoOrcamento.js';
 import { saidasMarketplace, reposicaoMarketplace, relatoriosMarketplace, relatorioMarketplace, gerarRelatorioMarketplace, sincronizarMarketplace } from '../controllers/marketplaceController.js';
+import { verAcessoFrotas, salvarAcessoFrotas } from '../controllers/frotasUsuariosController.js';
 
 const router = Router();
 
@@ -139,6 +140,8 @@ router.post('/admin/senha-pedidos/:id/resolver', autenticar, exigirPerfil('admin
 router.post('/admin/usuarios',       autenticar, exigirPerfil('admin'), criarUsuario);
 router.patch('/admin/usuarios/:id',  autenticar, exigirPerfil('admin'), atualizarUsuario);
 router.delete('/admin/usuarios/:id', autenticar, exigirPerfil('admin'), excluirUsuario);
+router.get('/admin/usuarios/:id/frotas', autenticar, exigirPerfil('admin'), verAcessoFrotas);
+router.put('/admin/usuarios/:id/frotas', autenticar, exigirPerfil('admin'), salvarAcessoFrotas);
 
 // ── Admin — Departamentos
 router.get('/admin/departamentos',       autenticar, listarDepartamentos);
