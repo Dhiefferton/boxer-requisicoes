@@ -154,6 +154,7 @@ function AbaUsuarios() {
     setSalvandoEdit(true);
     try {
       const payload = {};
+      if (formEdit.nome !== undefined) payload.nome = formEdit.nome;
       if (formEdit.email)  payload.email  = formEdit.email;
       payload.email_recuperacao = formEdit.email_recuperacao || '';
       if (formEdit.senha)  payload.senha  = formEdit.senha;
@@ -163,7 +164,7 @@ function AbaUsuarios() {
       await adminService.atualizarUsuario(editando.id, payload);
       // Acesso ao Frotas (perfil e cargo): grava na ficha do Frotas só se mudou
       const fr = frotasEdit;
-      if (fr?.carregado && fr.configurado && (fr.perfil !== fr.perfilOriginal || (fr.perfil !== 'nenhum' && fr.cargo !== fr.cargoOriginal))) {
+      if (fr?.carregado && fr.configurado && (fr.perfil !== fr.perfilOriginal || (fr.perfil !== 'nenhum' && (fr.cargo !== fr.cargoOriginal || (formEdit.nome || '').trim() !== (editando.nome || '').trim())))) {
         try { await adminService.salvarAcessoFrotas(editando.id, { perfil: fr.perfil, cargo: fr.cargo }); }
         catch (err) { setErroEdit(`Usuário salvo, mas o Frotas não: ${err.response?.data?.erro || err.message}`); carregar(); return; }
       }
@@ -187,7 +188,7 @@ function AbaUsuarios() {
 
   function abrirEdicao(u) {
     setEditando(u);
-    setFormEdit({ email: u.email, email_recuperacao: u.email_recuperacao || '', senha: '', perfil: u.perfil, departamento_id: u.departamento_id || '', telas: { ...(u.telas || {}) } });
+    setFormEdit({ nome: u.nome || '', email: u.email, email_recuperacao: u.email_recuperacao || '', senha: '', perfil: u.perfil, departamento_id: u.departamento_id || '', telas: { ...(u.telas || {}) } });
     setErroEdit('');
     setFrotasEdit({ carregado: false });
     adminService.acessoFrotas(u.id).then(({ data }) => {
@@ -298,6 +299,10 @@ function AbaUsuarios() {
               <p className="text-xs text-[var(--c-suave)] mt-0.5">{editando.nome}</p>
             </div>
             <form onSubmit={handleEditar} className="space-y-3">
+              <div>
+                <label className="text-xs text-[var(--c-suave)] mb-1 block">Nome</label>
+                <input value={formEdit.nome ?? ''} onChange={e => setFormEdit(f => ({...f, nome: e.target.value}))} placeholder="Nome do usuário" className={inputClass} required minLength={2} maxLength={150} />
+              </div>
               <div>
                 <label className="text-xs text-[var(--c-suave)] mb-1 block">E-mail</label>
                 <input value={formEdit.email} onChange={e => setFormEdit(f => ({...f, email: e.target.value}))} placeholder="novo@email.com" className={inputClass} type="email" />
