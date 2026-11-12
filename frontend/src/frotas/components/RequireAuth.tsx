@@ -21,8 +21,9 @@ export function RequireAuth() {
   if (!perfil) {
     return <Centro><p className="max-w-md rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-5 text-sm text-[var(--c-texto)]">{erroSso || 'Seu usuário não tem perfil no Frotas.'}</p></Centro>
   }
+  // Motorista só usa a tela dele (Minha viagem); qualquer outra tela do Frotas leva para ela.
   if (perfil.perfil === 'motorista') {
-    return <Centro><p className="max-w-md rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-5 text-sm text-[var(--c-texto)]">Motoristas usam o aplicativo do motorista do Frotas.</p></Centro>
+    return caminho === '/motorista' ? <Outlet /> : <Navigate to="/frotas/motorista" replace />
   }
   if (!rotaPermitida(perfil.perfil, caminho, perfil.email)) {
     return <Navigate to={`/frotas${primeiraRotaPermitida(perfil.perfil, perfil.email) === '/' ? '' : primeiraRotaPermitida(perfil.perfil, perfil.email)}`} replace />
