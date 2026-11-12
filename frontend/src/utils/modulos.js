@@ -49,6 +49,7 @@ export const MODULOS = [
       { chave: 'frotas_documentos', base: 'frotas', caminho: '/documentos', nome: 'Documentos', desc: 'Licenciamento e seguros', icone: 'documentos' },
       { chave: 'frotas_checklist', base: 'frotas', caminho: '/checklist', nome: 'Checklist', desc: 'Conferência do veículo', icone: 'checklist' },
       { chave: 'frotas_relatorios', base: 'frotas', caminho: '/relatorios', nome: 'Relatórios', desc: 'Relatórios da frota', icone: 'relatorios' },
+      { chave: 'frotas_motorista', base: 'frotas', caminho: '/motorista', nome: 'Minha viagem', desc: 'Tela do motorista', icone: 'motorista' },
     ],
   },
 ];
