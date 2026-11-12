@@ -80,7 +80,7 @@ export async function salvarAcessoFrotas(req, res, next) {
         ficha = (await ins.json())?.[0];
       }
     }
-    ficha = await patch(ficha.id, { perfil, cargo, ativo: true, precisa_trocar_senha: false });
+    ficha = await patch(ficha.id, { nome: u.nome, perfil, cargo, ativo: true, precisa_trocar_senha: false });
     res.json({ ficha });
   } catch (err) { next(err); }
 }

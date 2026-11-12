@@ -66,6 +66,13 @@ export async function atualizarUsuario(req, res, next) {
       limparCacheTelas(id);
     }
 
+    // Nome do usuário (Admin › Usuários › Editar)
+    if (req.body?.nome !== undefined) {
+      const nome = String(req.body.nome || '').replace(/\s+/g, ' ').trim();
+      if (nome.length < 2) return res.status(400).json({ erro: 'Informe o nome do usuário.' });
+      await query(`UPDATE usuarios SET nome = $1, updated_at = NOW() WHERE id = $2`, [nome.slice(0, 150), parseInt(id)]);
+    }
+
     // E-mail para recuperação de senha (vazio = apaga)
     if (req.body?.email_recuperacao !== undefined) {
       const er = String(req.body.email_recuperacao || '').trim().toLowerCase();
