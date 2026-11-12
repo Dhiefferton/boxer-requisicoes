@@ -71,6 +71,90 @@ function Modal({ titulo, onFechar, children, largo }) {
   );
 }
 
+// ── Período (dia, semana, mês, ano ou entre datas) ───────────
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const p2 = (n) => String(n).padStart(2, '0');
+const isoDia = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+const deIso = (v) => { const [a, m, d] = String(v || '').split('-').map(Number); return a && m && d ? new Date(a, m - 1, d) : new Date(); };
+const segunda = (d) => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const fmtCurto = (d) => `${p2(d.getDate())}/${p2(d.getMonth() + 1)}`;
+function valorPadrao(tipo) {
+  const h = new Date();
+  if (tipo === 'dia') return { valor: isoDia(h), valor2: '' };
+  if (tipo === 'semana') return { valor: isoDia(segunda(h)), valor2: '' };
+  if (tipo === 'mes') return { valor: `${h.getFullYear()}-${p2(h.getMonth() + 1)}`, valor2: '' };
+  if (tipo === 'ano') return { valor: String(h.getFullYear()), valor2: '' };
+  if (tipo === 'periodo') return { valor: isoDia(new Date(h.getFullYear(), h.getMonth(), 1)), valor2: isoDia(h) };
+  return { valor: '', valor2: '' };
+}
+function andar(per, passo) {
+  if (per.tipo === 'dia') { const d = deIso(per.valor); d.setDate(d.getDate() + passo); return isoDia(d); }
+  if (per.tipo === 'semana') { const d = deIso(per.valor); d.setDate(d.getDate() + 7 * passo); return isoDia(d); }
+  if (per.tipo === 'mes') { const [a, m] = per.valor.split('-').map(Number); const d = new Date(a, m - 1 + passo, 1); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}`; }
+  if (per.tipo === 'ano') return String(Number(per.valor) + passo);
+  return per.valor;
+}
+
+function FiltroPeriodo({ periodo, colunasData, onMudar }) {
+  const per = periodo || { chave: colunasData[0] || '@criado_em', tipo: '', valor: '', valor2: '' };
+  const tipos = [['', 'Tudo'], ['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês'], ['ano', 'Ano'], ['periodo', 'Período']];
+  const escolher = (tipo) => onMudar(tipo ? { ...per, tipo, ...valorPadrao(tipo) } : null);
+  const seta = 'shrink-0 rounded-lg border border-[var(--c-borda)] bg-[var(--c-superficie)] p-1 text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:border-[var(--c-destaque)]';
+  const anoAtual = new Date().getFullYear();
+  return (
+    <div className="rounded-lg border border-[var(--c-borda)] bg-[var(--c-fundo)] p-2 space-y-1.5">
+      <p className="text-[11px] font-semibold text-[var(--c-suave)]">Período</p>
+      <select className={`${campo} w-full`} value={per.chave} onChange={e => onMudar(per.tipo ? { ...per, chave: e.target.value } : { ...per, chave: e.target.value, tipo: 'mes', ...valorPadrao('mes') })}>
+        {colunasData.map(k => <option key={k} value={k}>{rotuloDe(k)}</option>)}
+      </select>
+      <div className="grid grid-cols-3 gap-1">
+        {tipos.map(([k, t]) => (
+          <button key={k || 'tudo'} onClick={() => escolher(k)}
+            className={`text-[11px] font-semibold rounded-md py-1 ${(per.tipo || '') === k ? 'bg-[var(--c-destaque)] text-white' : 'bg-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>{t}</button>
+        ))}
+      </div>
+      {['dia', 'semana', 'mes', 'ano'].includes(per.tipo) && (
+        <div className="flex items-center gap-1">
+          <button className={seta} title="Anterior" onClick={() => onMudar({ ...per, valor: andar(per, -1) })}><ChevronLeft size={13} /></button>
+          {per.tipo === 'dia' && (
+            <input className={`${campo} flex-1 min-w-0`} type="date" value={per.valor} onChange={e => e.target.value && onMudar({ ...per, valor: e.target.value })} />
+          )}
+          {per.tipo === 'semana' && (
+            <label className="flex-1 min-w-0 relative">
+              <span className={`${campo} block text-center truncate`}>{fmtCurto(deIso(per.valor))} a {fmtCurto(new Date(deIso(per.valor).getTime() + 6 * 86400000))}</span>
+              <input className="absolute inset-0 opacity-0 cursor-pointer" type="date" value={per.valor} title="Escolha um dia da semana"
+                onChange={e => e.target.value && onMudar({ ...per, valor: isoDia(segunda(deIso(e.target.value))) })} />
+            </label>
+          )}
+          {per.tipo === 'mes' && (() => {
+            const [a, m] = per.valor.split('-').map(Number);
+            return (
+              <div className="flex-1 min-w-0 flex gap-1">
+                <select className={`${campo} flex-1 min-w-0`} value={m} onChange={e => onMudar({ ...per, valor: `${a}-${p2(e.target.value)}` })}>
+                  {MESES.map((nm, i) => <option key={nm} value={i + 1}>{nm}</option>)}
+                </select>
+                <input className={`${campo} w-16`} type="number" value={a} onChange={e => /^\d{4}$/.test(e.target.value) && onMudar({ ...per, valor: `${e.target.value}-${p2(m)}` })} />
+              </div>
+            );
+          })()}
+          {per.tipo === 'ano' && (
+            <select className={`${campo} flex-1 min-w-0`} value={per.valor} onChange={e => onMudar({ ...per, valor: e.target.value })}>
+              {Array.from({ length: 12 }, (_, i) => String(anoAtual - 10 + i)).concat(per.valor).filter((x, i, l) => l.indexOf(x) === i).sort().map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          )}
+          <button className={seta} title="Próximo" onClick={() => onMudar({ ...per, valor: andar(per, 1) })}><ChevronRight size={13} /></button>
+        </div>
+      )}
+      {per.tipo === 'periodo' && (
+        <div className="flex gap-1">
+          <input className={`${campo} flex-1 min-w-0`} type="date" value={per.valor} onChange={e => onMudar({ ...per, valor: e.target.value })} />
+          <input className={`${campo} flex-1 min-w-0`} type="date" value={per.valor2} onChange={e => onMudar({ ...per, valor2: e.target.value })} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Importação do Pipefy (admin) ─────────────────────────────
 function PainelImportacao({ onFechar, onMudou }) {
   const [pipes, setPipes] = useState([]);
@@ -283,6 +367,8 @@ function Relatorio({ id, pipes, onVoltar, onMudou }) {
         {/* Filtros */}
         <aside className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-3 space-y-2">
           <p className="text-xs font-bold text-[var(--c-texto)]">Filtros</p>
+          <FiltroPeriodo periodo={cfg.periodo} colunasData={todasColunas.filter(k => tipoDe(k) === 'data')}
+            onMudar={(per) => { const novo = { ...cfg, periodo: per }; setCfg(novo); setSujo(true); setPagina(1); setAplicada(novo); }} />
           {cfg.filtros.map((f, i) => {
             const tipo = tipoDe(f.chave);
             const emHoras = tipo === 'numero';
