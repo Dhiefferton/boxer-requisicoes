@@ -11,7 +11,6 @@ import {
   FileText,
   ClipboardCheck,
   BarChart3,
-  Users,
   type LucideIcon,
 } from 'lucide-react'
 import type { Usuario } from '../types'
@@ -47,7 +46,6 @@ export const navItems: NavItem[] = [
   { label: 'Documentos', path: '/documentos', icon: FileText, perfis: ['gestor'] },
   { label: 'Checklist', path: '/checklist', icon: ClipboardCheck, perfis: ['gestor'] },
   { label: 'Relatórios', path: '/relatorios', icon: BarChart3, perfis: ['gestor', 'operador'] },
-  { label: 'Usuários', path: '/usuarios', icon: Users, perfis: ['gestor'] },
 ]
 
 function itemLiberado(item: NavItem, perfil: PerfilPainel, email?: string) {
