@@ -110,6 +110,34 @@ router.get('/debug-garantia', async (req, res) => {
 });
 
 // DIAGNÓSTICO (só leitura) — Garantia: campos com "Mostrar este campo" e os valores dos cards de uma coluna
+// Diagnóstico (só leitura) do Frotas: viagens e agenda de um veículo (placa) num período.
+// Ex: GET /api/erp/debug-frotas-viagens?secret=...&placa=SWG5H37&de=2026-11-10&ate=2026-11-13
+router.get('/debug-frotas-viagens', async (req, res) => {
+  if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
+  try {
+    const url = String(process.env.FROTAS_SUPABASE_URL || '').replace(/\/+$/, '');
+    const chave = process.env.FROTAS_SUPABASE_SERVICE_KEY;
+    if (!url || !chave) return res.status(400).json({ erro: 'Frotas não configurado' });
+    const get = async (caminho) => {
+      const r = await fetch(`${url}/rest/v1/${caminho}`, { headers: { apikey: chave, Authorization: `Bearer ${chave}` } });
+      const t = await r.text();
+      try { return JSON.parse(t); } catch { return t; }
+    };
+    const placa = String(req.query.placa || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const de = /^\d{4}-\d{2}-\d{2}$/.test(req.query.de || '') ? req.query.de : '2026-11-10';
+    const ate = /^\d{4}-\d{2}-\d{2}$/.test(req.query.ate || '') ? req.query.ate : '2026-11-13';
+    const veiculos = await get(`veiculos?select=id,placa,modelo,status,km&placa=ilike.*${placa}*`);
+    const ids = Array.isArray(veiculos) ? veiculos.map(v => v.id) : [];
+    const filtroV = ids.length ? `&veiculo_id=in.(${ids.join(',')})` : '';
+    const viagens = await get(`viagens?select=id,status,data,saida_prevista,saida_real,chegada_real,km_saida,km_chegada,destino,motorista_id,veiculo_id,created_at${filtroV}&data=gte.${de}&data=lte.${ate}&order=data.asc`);
+    const viagensAbertas = await get(`viagens?select=id,status,data,saida_prevista,destino,motorista_id,veiculo_id${filtroV}&status=in.(programada,em_viagem)&order=saida_prevista.asc&limit=20`);
+    const agenda = await get(`agenda_itens?select=id,tipo,titulo,inicio,fim,motorista_id,motorista_nome,veiculo_id,created_at${filtroV}&inicio=gte.${de}&inicio=lte.${ate}T23:59:59&order=inicio.asc`);
+    const motIds = [...new Set([...(Array.isArray(viagens) ? viagens : []), ...(Array.isArray(agenda) ? agenda : [])].map(x => x.motorista_id).filter(Boolean))];
+    const motoristas = motIds.length ? await get(`motoristas?select=id,nome,user_id&id=in.(${motIds.join(',')})`) : [];
+    res.json({ veiculos, viagens, viagensAbertas, agenda, motoristas });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // Ex: GET /api/erp/debug-cif-visivel?secret=...&coluna=col_x
 router.get('/debug-cif-visivel', async (req, res) => {
   if (req.query.secret !== process.env.CRON_SECRET) return res.status(401).json({ erro: 'Acesso negado' });
