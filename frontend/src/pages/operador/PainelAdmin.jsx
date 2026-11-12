@@ -98,6 +98,7 @@ function AbaUsuarios() {
   const [loading,       setLoading]       = useState(true);
   const [criando,       setCriando]       = useState(false);
   const [editando,      setEditando]      = useState(null);
+  const [frotasEdit,    setFrotasEdit]    = useState({ carregado: false }); // acesso ao Frotas do usuário em edição
   const [busca,         setBusca]         = useState('');
   const [form,          setForm]          = useState({ nome: '', email: '', senha: '', perfil: 'colaborador', departamento_id: '' });
   const [formEdit,      setFormEdit]      = useState({ email: '', email_recuperacao: '', senha: '', perfil: 'colaborador', departamento_id: '', telas: {} });
@@ -160,6 +161,12 @@ function AbaUsuarios() {
       if (formEdit.departamento_id !== undefined) payload.departamento_id = formEdit.departamento_id ? parseInt(formEdit.departamento_id) : null;
       payload.telas = formEdit.telas || {}; // telas escolhidas (vazio = padrão do perfil)
       await adminService.atualizarUsuario(editando.id, payload);
+      // Acesso ao Frotas (perfil e cargo): grava na ficha do Frotas só se mudou
+      const fr = frotasEdit;
+      if (fr?.carregado && fr.configurado && (fr.perfil !== fr.perfilOriginal || (fr.perfil !== 'nenhum' && fr.cargo !== fr.cargoOriginal))) {
+        try { await adminService.salvarAcessoFrotas(editando.id, { perfil: fr.perfil, cargo: fr.cargo }); }
+        catch (err) { setErroEdit(`Usuário salvo, mas o Frotas não: ${err.response?.data?.erro || err.message}`); carregar(); return; }
+      }
       setEditando(null);
       carregar();
     } catch (err) {
@@ -182,6 +189,13 @@ function AbaUsuarios() {
     setEditando(u);
     setFormEdit({ email: u.email, email_recuperacao: u.email_recuperacao || '', senha: '', perfil: u.perfil, departamento_id: u.departamento_id || '', telas: { ...(u.telas || {}) } });
     setErroEdit('');
+    setFrotasEdit({ carregado: false });
+    adminService.acessoFrotas(u.id).then(({ data }) => {
+      const f = data?.ficha;
+      const perfil = f && f.ativo !== false ? f.perfil : 'nenhum';
+      setFrotasEdit({ carregado: true, configurado: !!data?.configurado, email: data?.email || null,
+        perfil, perfilOriginal: perfil, cargo: f?.cargo || '', cargoOriginal: f?.cargo || '' });
+    }).catch(err => setFrotasEdit({ carregado: true, configurado: false, erro: err.response?.data?.erro || 'Não consegui ler o Frotas.' }));
   }
 
   async function toggleAtivo(usuario) {
@@ -313,6 +327,30 @@ function AbaUsuarios() {
                 </select>
               </div>
               <TelasDoColaborador formEdit={formEdit} setFormEdit={setFormEdit} editando={editando} departamentos={departamentos} />
+              {/* Acesso ao Frotas (antes era a tela Usuários do Frotas) */}
+              <div className="rounded-xl border border-[var(--c-borda)] p-3 space-y-2">
+                <p className="text-xs font-semibold text-[var(--c-texto)]">Frotas</p>
+                {!frotasEdit.carregado ? <p className="text-[11px] text-[var(--c-suave)]">Lendo o acesso ao Frotas…</p>
+                  : !frotasEdit.configurado ? <p className="text-[11px] text-[var(--c-suave)]">{frotasEdit.erro || 'O Frotas ainda não está ligado neste servidor.'}</p>
+                  : <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label className="text-[11px] text-[var(--c-suave)] space-y-1">Perfil no Frotas
+                        <select value={frotasEdit.perfil} onChange={e => setFrotasEdit(f => ({ ...f, perfil: e.target.value }))} className={inputClass}>
+                          <option value="nenhum">Sem acesso</option>
+                          <option value="gestor">Gestor</option>
+                          <option value="operador">Operador Logística</option>
+                          <option value="operador_comex">Operador Comex</option>
+                          <option value="motorista">Motorista</option>
+                        </select>
+                      </label>
+                      <label className="text-[11px] text-[var(--c-suave)] space-y-1">Cargo
+                        <input value={frotasEdit.cargo} disabled={frotasEdit.perfil === 'nenhum'} onChange={e => setFrotasEdit(f => ({ ...f, cargo: e.target.value }))}
+                          placeholder="Ex.: Motorista" className={`${inputClass} disabled:opacity-50`} />
+                      </label>
+                    </div>
+                    <p className="text-[10px] text-[var(--c-suave)]">Conta no Frotas: {frotasEdit.email || '—'}. Entra pelo login do Boxer Operações (sem senha própria).</p>
+                  </>}
+              </div>
               {erroEdit && <p className="text-xs text-red-400">{erroEdit}</p>}
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setEditando(null)} className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-[var(--c-borda)] text-[var(--c-suave)] hover:text-[var(--c-texto)]">Cancelar</button>
