@@ -21,7 +21,7 @@ import { construtorService } from '../services/api';
 import { ExternalLink, Gauge, ListChecks, RefreshCcw, PackageCheck, ScanLine, Smartphone, CarFront, CalendarDays, Route, ClipboardCheck, Calculator } from 'lucide-react';
 import { MODULOS, enderecoDe, abrirComLogin } from '../utils/modulos';
 
-const ICONES_MODULO = { painel: Gauge, pedidos: ListChecks, reposicao: RefreshCcw, historico: History, separacao: ScanLine, conferencia: PackageCheck, coletor: Smartphone, frotas: CarFront, agenda: CalendarDays, viagens: Route, checklist: ClipboardCheck, custo: Calculator, operacoes: Radar, motoristas: Users, combustivel: Fuel, manutencao: Wrench, documentos: FileText, relatorios: BarChart3, usuarios: UserCog, configuracoes: Settings };
+const ICONES_MODULO = { painel: Gauge, pedidos: ListChecks, reposicao: RefreshCcw, historico: History, separacao: ScanLine, conferencia: PackageCheck, coletor: Smartphone, frotas: CarFront, agenda: CalendarDays, viagens: Route, checklist: ClipboardCheck, custo: Calculator, operacoes: Radar, motoristas: Users, combustivel: Fuel, manutencao: Wrench, documentos: FileText, relatorios: BarChart3, usuarios: UserCog, configuracoes: Settings, motorista: Truck };
 const AZUL = 'var(--c-destaque)';
 // Busca de telas: ignora maiúsculas e acentos
 const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
