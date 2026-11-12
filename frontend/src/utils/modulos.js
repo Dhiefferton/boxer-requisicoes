@@ -50,7 +50,6 @@ export const MODULOS = [
       { chave: 'frotas_checklist', base: 'frotas', caminho: '/checklist', nome: 'Checklist', desc: 'Conferência do veículo', icone: 'checklist' },
       { chave: 'frotas_relatorios', base: 'frotas', caminho: '/relatorios', nome: 'Relatórios', desc: 'Relatórios da frota', icone: 'relatorios' },
       { chave: 'frotas_usuarios', base: 'frotas', caminho: '/usuarios', nome: 'Usuários da frota', desc: 'Acessos do Frotas', icone: 'usuarios' },
-      { chave: 'frotas_configuracoes', base: 'frotas', caminho: '/configuracoes', nome: 'Configurações', desc: 'Ajustes do Frotas', icone: 'configuracoes' },
     ],
   },
 ];
