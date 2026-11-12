@@ -223,7 +223,7 @@ const FIXAS = {
 };
 const OPS_TEXTO = ['contem', 'nao_contem', 'igual', 'diferente', 'comeca', 'vazio', 'preenchido'];
 const OPS_NUM = ['igual', 'diferente', 'maior', 'menor', 'maior_igual', 'menor_igual', 'vazio', 'preenchido'];
-const OPS_DATA = ['periodo', 'antes', 'depois', 'mes_atual', 'mes_anterior', 'ultimos_dias', 'vazio', 'preenchido'];
+const OPS_DATA = ['periodo', 'antes', 'depois', 'mes_atual', 'mes_anterior', 'ultimos_dias', 'vazio', 'preenchido', 'dia', 'semana', 'mes', 'ano'];
 const FNS = { soma: 'SUM', media: 'AVG', minimo: 'MIN', maximo: 'MAX', contagem: 'COUNT' };
 
 // Interpreta uma coluna: devolve { sql, tipo } e empilha parâmetros
@@ -260,9 +260,20 @@ function condicao(f, params) {
     if (op === 'mes_atual') return `(date_trunc('month', ${dia}) = date_trunc('month', ${hoje}))`;
     if (op === 'mes_anterior') return `(date_trunc('month', ${dia}) = date_trunc('month', ${hoje}) - interval '1 month')`;
     if (op === 'ultimos_dias') return `(${dia} >= ${hoje} - ${push(Math.max(0, parseInt(v) || 0))}::int)`;
+    // Período rápido (dia, semana, mês, ano)
+    if (op === 'mes') {
+      if (!/^\d{4}-\d{2}$/.test(v)) throw Object.assign(new Error('Informe o mês (AAAA-MM).'), { status: 400 });
+      return `(date_trunc('month', ${dia}) = to_date(${push(v)}, 'YYYY-MM'))`;
+    }
+    if (op === 'ano') {
+      if (!/^\d{4}$/.test(v)) throw Object.assign(new Error('Informe o ano.'), { status: 400 });
+      return `(EXTRACT(YEAR FROM ${dia}) = ${push(Number(v))}::int)`;
+    }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) throw Object.assign(new Error('Informe a data (AAAA-MM-DD).'), { status: 400 });
     if (op === 'antes') return `(${dia} < ${push(v)}::date)`;
     if (op === 'depois') return `(${dia} > ${push(v)}::date)`;
+    if (op === 'dia') return `(${dia} = ${push(v)}::date)`;
+    if (op === 'semana') { const p1 = push(v); return `(${dia} BETWEEN ${p1}::date AND ${p1}::date + 6)`; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v2)) throw Object.assign(new Error('Informe a data final.'), { status: 400 });
     return `(${dia} BETWEEN ${push(v)}::date AND ${push(v2)}::date)`;
   }
@@ -282,7 +293,7 @@ function condicao(f, params) {
   return `(COALESCE(lower(${col.sql}), '') <> lower(${lit(v)}))`; // diferente
 }
 
-function montarWhere(pipeId, filtros, params) {
+function montarWhere(pipeId, filtros, params, periodo) {
   params.push(String(pipeId));
   let where = `pipe_id = $${params.length}`;
   let expr = null;
@@ -292,6 +303,10 @@ function montarWhere(pipeId, filtros, params) {
     expr = expr === null ? c : `(${expr}) ${String(f.junta) === 'ou' ? 'OR' : 'AND'} ${c}`;
   }
   if (expr) where += ` AND (${expr})`;
+  // Período (dia, semana, mês, ano ou entre datas) sobre um campo de data
+  if (periodo?.chave && ['dia', 'semana', 'mes', 'ano', 'periodo'].includes(periodo.tipo)) {
+    where += ` AND ${condicao({ chave: periodo.chave, op: periodo.tipo, valor: periodo.valor, valor2: periodo.valor2 }, params)}`;
+  }
   return where;
 }
 
@@ -302,7 +317,7 @@ async function executar(cfg, { pagina = 1, todos = false } = {}) {
   if (!/^\d+$/.test(pipeId)) throw Object.assign(new Error('Escolha o pipe do relatório.'), { status: 400 });
   const colunas = (Array.isArray(cfg.colunas) && cfg.colunas.length ? cfg.colunas : ['@id', '@titulo', '@fase', '@criado_em']).slice(0, 60);
   const params = [];
-  const where = montarWhere(pipeId, cfg.filtros, params);
+  const where = montarWhere(pipeId, cfg.filtros, params, cfg.periodo);
   const nParams = params.length;
   const sel = colunas.map(c => coluna(c, params));
   const selSql = sel.map((c, i) => `${c.sql} AS c${i}`).join(', ');
@@ -350,6 +365,8 @@ const limparConfig = (c) => ({
   filtros: (Array.isArray(c?.filtros) ? c.filtros : []).slice(0, 40).map(f => ({
     chave: String(f?.chave || ''), op: String(f?.op || ''), valor: f?.valor ?? '', valor2: f?.valor2 ?? '',
     junta: f?.junta === 'ou' ? 'ou' : 'e', numerico: !!f?.numerico })),
+  periodo: c?.periodo?.chave && ['dia', 'semana', 'mes', 'ano', 'periodo'].includes(c.periodo.tipo)
+    ? { chave: String(c.periodo.chave), tipo: c.periodo.tipo, valor: String(c.periodo.valor ?? ''), valor2: String(c.periodo.valor2 ?? '') } : null,
   ordem: c?.ordem?.chave ? { chave: String(c.ordem.chave), dir: c.ordem.dir === 'asc' ? 'asc' : 'desc' } : null,
   formulas: (Array.isArray(c?.formulas) ? c.formulas : []).filter(f => FNS[f?.fn] && f?.chave).slice(0, 20).map(f => ({ chave: String(f.chave), fn: f.fn })),
 });
@@ -366,7 +383,7 @@ export async function listarRelatorios(req, res, next) {
       let total = null;
       try {
         const params = [];
-        const where = montarWhere(rel.pipe_id, rel.config?.filtros, params);
+        const where = montarWhere(rel.pipe_id, rel.config?.filtros, params, rel.config?.periodo);
         total = (await query(`SELECT COUNT(*)::int AS n FROM rel_cards WHERE ${where}`, params)).rows[0].n;
       } catch { /* filtro antigo inválido */ }
       lista.push({ ...rel, total });
