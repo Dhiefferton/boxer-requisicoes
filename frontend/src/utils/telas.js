@@ -42,8 +42,9 @@ export const TELAS = [
   { chave: 'databases',  nome: 'Databases',             rotas: ['/databases'],            legado: u => perfilEm(u, 'admin') ? 'editar' : 'nenhum' },
   { chave: 'telas',      nome: 'Telas (criar e renomear)', rotas: ['/telas'],             legado: u => perfilEm(u, 'admin') ? 'editar' : 'nenhum' },
   // Outros sistemas abertos pela tela inicial (cada um continua com o próprio acesso lá dentro)
-  { chave: 'wms',        nome: 'Armazém (WMS)',         rotas: [],                        legado: () => 'editar' },
-  { chave: 'frotas',     nome: 'Frotas',                rotas: [],                        legado: () => 'editar' },
+  // Sem acesso por padrão: libera por pessoa em Admin › Usuários (admin sempre tem)
+  { chave: 'wms',        nome: 'Armazém (WMS)',         rotas: [],                        legado: () => 'nenhum' },
+  { chave: 'frotas',     nome: 'Frotas',                rotas: ['/frotas'],               legado: () => 'nenhum' },
   { chave: 'orcamentos', nome: 'Orçamentos',            rotas: ['/pedidos-orcamento'],
     legado: u => perfilEm(u, 'operador', 'admin') ? 'editar' : ORCAMENTOS_SOMENTE_LEITURA.includes(email(u)) ? 'ver' : 'nenhum' },
 ];
