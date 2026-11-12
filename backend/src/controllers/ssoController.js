@@ -37,7 +37,7 @@ const garantirVinculos = () => (estVinculos ||= query(`
   INSERT INTO bx_sso_vinculos (email_operacoes, destino, email_destino)
   VALUES ('admin@boxer.com.br', 'frotas', 'compras@boxersoldas.com.br')
   ON CONFLICT DO NOTHING;`).catch(e => { estVinculos = null; throw e; }));
-async function emailNoDestino(email, destino) {
+export async function emailNoDestino(email, destino) {
   await garantirVinculos();
   const r = await query(`SELECT email_destino FROM bx_sso_vinculos WHERE email_operacoes = $1 AND destino = $2`, [email, destino === 'coletor' ? 'wms' : destino]);
   return String(r.rows[0]?.email_destino || email).trim().toLowerCase();
