@@ -206,6 +206,8 @@ export const adminService = {
   criarUsuario:     (dados)  => api.post('/admin/usuarios', dados),
   atualizarUsuario: (id, d)  => api.patch(`/admin/usuarios/${id}`, d),
   excluirUsuario:   (id)     => api.delete(`/admin/usuarios/${id}`),
+  acessoFrotas:     (id)     => api.get(`/admin/usuarios/${id}/frotas`, { timeout: 30000 }),
+  salvarAcessoFrotas: (id, d) => api.put(`/admin/usuarios/${id}/frotas`, d, { timeout: 30000 }),
   departamentos:    ()       => api.get('/admin/departamentos'),
   pedidosSenha:     ()       => api.get('/admin/senha-pedidos'),
   resolverPedidoSenha: (id, descartar = false) => api.post(`/admin/senha-pedidos/${id}/resolver`, { descartar }),
