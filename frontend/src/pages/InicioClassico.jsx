@@ -11,6 +11,7 @@ import {
   Wrench, ShoppingBag, ShieldCheck, Kanban, Boxes, ClipboardList, History, LayoutDashboard, PackageOpen, Warehouse,
   Truck, BarChart3, ShoppingCart, Puzzle, Database, Video, Settings, Plus, Lock, Star,
   ArrowRightLeft, CheckCheck, ThumbsUp, FileCheck2, Timer,
+  Search, X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTelas } from '../utils/nomesTelas';
@@ -41,6 +42,8 @@ const SISTEMA = [
   { chave: 'integracoes', rota: '/integracoes', nome: 'Integrações (API)', icon: Puzzle, cor: '#0f766e', desc: 'Chaves para outros sistemas' },
   { chave: 'admin', rota: '/admin', nome: 'Admin', icon: Settings, cor: '#334155', desc: 'Usuários e permissões' },
 ];
+// Busca de telas: ignora maiúsculas e acentos
+const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const CORES_QUADROS = ['#059669', '#0d9488', '#7c3aed', '#e11d48', '#2563eb', '#ca8a04', '#9333ea', '#0891b2'];
 
 const fmt = (v) => (v == null ? '—' : Number(v).toLocaleString('pt-BR'));
@@ -81,6 +84,7 @@ export default function InicioClassico() {
   const [construtor, setConstrutor] = useState(false);
   useEffect(() => { construtorService.status().then(r => setConstrutor(!!r.data?.pode)).catch(() => {}); }, []);
   const [aba, setAba] = useState('telas');
+  const [buscaTela, setBuscaTela] = useState('');
   const chaveFav = `boxer_favoritas_${usuario?.id || ''}`;
   const [favoritas, setFavoritas] = useState(() => { try { return JSON.parse(localStorage.getItem(chaveFav) || '[]'); } catch { return []; } });
   function alternarFavorita(chave) {
@@ -103,7 +107,9 @@ export default function InicioClassico() {
     : [{ ...t, nome: nomes?.[t.chave] || t.nome }]))
     .map(t => ({ ...t, liberada: veTela(usuario, t.chave) })),
   [quadros, nomes, usuario]);
-  const lista = aba === 'favoritas' ? blocos.filter(b => favoritas.includes(b.chave)) : blocos;
+  const termoBusca = semAcento(buscaTela.trim());
+  const lista = (aba === 'favoritas' ? blocos.filter(b => favoritas.includes(b.chave)) : blocos)
+    .filter(b => !termoBusca || semAcento(`${b.nome} ${b.desc || ''}`).includes(termoBusca));
 
   const p = dados?.produtividade || {};
   const aprovPct = p.aprovados_mes != null && (p.aprovados_mes + (p.recusados_mes || 0)) > 0
@@ -140,13 +146,22 @@ export default function InicioClassico() {
 
       {/* Telas */}
       <div>
-        <div className="flex gap-6 border-b border-[var(--c-borda)] mb-4">
+        <div className="flex items-end gap-6 border-b border-[var(--c-borda)] mb-4">
           {[['telas', 'Telas'], ['favoritas', 'Favoritas']].map(([k, t]) => (
             <button key={k} onClick={() => setAba(k)}
               className={`pb-2.5 text-sm -mb-px border-b-2 ${aba === k ? 'border-[var(--c-texto)] text-[var(--c-texto)] font-medium' : 'border-transparent text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>{t}</button>
           ))}
+          <div className="ml-auto relative w-44 sm:w-64 -mt-1 mb-1.5">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)] pointer-events-none" />
+            <input value={buscaTela} onChange={e => setBuscaTela(e.target.value)} placeholder="Buscar tela…" aria-label="Buscar tela"
+              className="w-full pl-8 pr-7 py-1.5 rounded-full text-sm bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] placeholder:text-[var(--c-suave)] focus:outline-none focus:border-[var(--c-destaque)]" />
+            {buscaTela && <button onClick={() => setBuscaTela('')} aria-label="Limpar busca" className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={13} /></button>}
+          </div>
         </div>
-        {aba === 'favoritas' && !lista.length && (
+        {termoBusca && !lista.length && (
+          <p className="text-sm text-[var(--c-suave)] py-8 text-center">Nenhuma tela encontrada para "{buscaTela.trim()}".</p>
+        )}
+        {!termoBusca && aba === 'favoritas' && !lista.length && (
           <p className="text-sm text-[var(--c-suave)] py-8 text-center">Nenhuma favorita ainda. Clique na estrela de uma tela para fixar aqui.</p>
         )}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4">

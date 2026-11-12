@@ -16,13 +16,16 @@ import { useAuth } from '../context/AuthContext';
 import { useTelas } from '../utils/nomesTelas';
 import { veTela } from '../utils/telas';
 import api from '../services/api';
-import { LayoutTemplate, Radar, Users, Fuel, FileText, UserCog, Settings } from 'lucide-react';
+import { Search, X, LayoutTemplate, Radar, Users, Fuel, FileText, UserCog, Settings } from 'lucide-react';
 import { construtorService } from '../services/api';
 import { ExternalLink, Gauge, ListChecks, RefreshCcw, PackageCheck, ScanLine, Smartphone, CarFront, CalendarDays, Route, ClipboardCheck, Calculator } from 'lucide-react';
 import { MODULOS, enderecoDe, abrirComLogin } from '../utils/modulos';
 
 const ICONES_MODULO = { painel: Gauge, pedidos: ListChecks, reposicao: RefreshCcw, historico: History, separacao: ScanLine, conferencia: PackageCheck, coletor: Smartphone, frotas: CarFront, agenda: CalendarDays, viagens: Route, checklist: ClipboardCheck, custo: Calculator, operacoes: Radar, motoristas: Users, combustivel: Fuel, manutencao: Wrench, documentos: FileText, relatorios: BarChart3, usuarios: UserCog, configuracoes: Settings };
 const AZUL = 'var(--c-destaque)';
+// Busca de telas: ignora maiúsculas e acentos
+const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
 
 // Telas do sistema, por grupo (ordem da tela inicial). As telas criadas entram depois da Garantia.
 // Admin e Integrações ficam na barra superior.
@@ -89,6 +92,7 @@ export default function InicioNovo() {
   const [construtor, setConstrutor] = useState(false);
   useEffect(() => { construtorService.status().then(r => setConstrutor(!!r.data?.pode)).catch(() => {}); }, []);
   const [aba, setAba] = useState('telas');
+  const [buscaTela, setBuscaTela] = useState('');
   const chaveFav = `boxer_favoritas_${usuario?.id || ''}`;
   const [favoritas, setFavoritas] = useState(() => { try { return JSON.parse(localStorage.getItem(chaveFav) || '[]'); } catch { return []; } });
   function alternarFavorita(chave) {
@@ -157,18 +161,29 @@ export default function InicioNovo() {
 
       {/* Telas */}
       <div>
-        <div className="flex gap-6 border-b border-[var(--c-borda)] mb-4">
+        <div className="flex items-end gap-6 border-b border-[var(--c-borda)] mb-4">
           {[['telas', 'Telas'], ['favoritas', 'Favoritas']].map(([k, t]) => (
             <button key={k} onClick={() => setAba(k)}
               className={`pb-2.5 text-sm -mb-px border-b-2 ${aba === k ? 'border-[var(--c-texto)] text-[var(--c-texto)] font-medium' : 'border-transparent text-[var(--c-suave)] hover:text-[var(--c-texto)]'}`}>{t}</button>
           ))}
+          <div className="ml-auto relative w-44 sm:w-64 -mt-1 mb-1.5">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--c-suave)] pointer-events-none" />
+            <input value={buscaTela} onChange={e => setBuscaTela(e.target.value)} placeholder="Buscar tela…" aria-label="Buscar tela"
+              className="w-full pl-8 pr-7 py-1.5 rounded-full text-sm bg-[var(--c-superficie)] border border-[var(--c-borda)] text-[var(--c-texto)] placeholder:text-[var(--c-suave)] focus:outline-none focus:border-[var(--c-destaque)]" />
+            {buscaTela && <button onClick={() => setBuscaTela('')} aria-label="Limpar busca" className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={13} /></button>}
+          </div>
         </div>
-        {aba === 'favoritas' && !todos.some(b => favoritas.includes(b.chave)) && (
+        {buscaTela.trim() && !todos.some(b => semAcento(`${b.nome} ${b.desc || ''}`).includes(semAcento(buscaTela.trim()))) && !grupos.some(g => semAcento(g.nome).includes(semAcento(buscaTela.trim()))) && (
+          <p className="text-sm text-[var(--c-suave)] py-8 text-center">Nenhuma tela encontrada para "{buscaTela.trim()}".</p>
+        )}
+        {!buscaTela.trim() && aba === 'favoritas' && !todos.some(b => favoritas.includes(b.chave)) && (
           <p className="text-sm text-[var(--c-suave)] py-8 text-center">Nenhuma favorita ainda. Clique na estrela de uma tela para fixar aqui.</p>
         )}
         <div className="space-y-6">
           {grupos.map((g, gi) => {
-            const itens = aba === 'favoritas' ? g.itens.filter(b => favoritas.includes(b.chave)) : g.itens;
+            const termo = semAcento(buscaTela.trim());
+            const itens = (aba === 'favoritas' ? g.itens.filter(b => favoritas.includes(b.chave)) : g.itens)
+              .filter(b => !termo || semAcento(`${b.nome} ${b.desc || ''} ${g.nome}`).includes(termo));
             if (!itens.length) return null;
             return (
               <section key={g.chave}>
