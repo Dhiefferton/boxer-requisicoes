@@ -72,7 +72,21 @@ function garantirEstrutura() {
 }
 
 // ── Importação do Pipefy ──────────────────────────────────────
+// Campos de data e hora: o report_value do Pipefy vem em UTC (3 h a mais que o
+// horário de Brasília). O datetime_value traz o horário local marcado como "+00:00"
+// (mesmo tratamento das planilhas em pipefyTempos.js): usa a data/hora como está.
+const MESES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const TIPOS_DATA_HORA = new Set(['datetime', 'due_date']);
+function dataHoraLocal(v) {
+  const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return '';
+  return `${m[3]} de ${MESES_PT[Number(m[2]) - 1]} de ${m[1]}, ${m[4]}:${m[5]}`;
+}
 const texto = (f) => {
+  if (TIPOS_DATA_HORA.has(f.field?.type) && f.datetime_value) {
+    const local = dataHoraLocal(f.datetime_value);
+    if (local) return local;
+  }
   let v = f.report_value ?? f.value;
   if (v == null || v === '') return '';
   v = String(v).trim();
@@ -81,7 +95,7 @@ const texto = (f) => {
 };
 
 const CARD_RICO = `id title url createdAt updated_at finished_at createdBy { name } current_phase { id name }
-  fields { name value report_value field { id type } }
+  fields { name value report_value datetime_value field { id type } }
   phases_history { phase { id name } firstTimeIn lastTimeIn duration }`;
 const CARD_BASICO = `id title url createdAt createdBy { name } current_phase { id name }
   fields { name value field { id type } }`;
