@@ -88,6 +88,7 @@ export function telaDaRota(caminho) {
 const recontador = (u) => RECONTAGEM_EMAILS.includes(email(u));
 const adminOuOperador = (u) => perfilEm(u, 'admin', 'operador'); // colunas "só admin": admin e operador movem
 export const BOTOES = [
+  { chave: 'cat_maquinas',      tela: 'catalogo',   nome: 'Ver e pedir itens da categoria Máquinas' },
   { chave: 'orc_novo_card',     tela: 'orcamentos', nome: 'Novo card' },
   { chave: 'orc_trazer_pipefy', tela: 'orcamentos', nome: 'Trazer do Pipefy' },
   { chave: 'orc_movimentacao',  tela: 'orcamentos', nome: 'Movimentação (relatório)' },

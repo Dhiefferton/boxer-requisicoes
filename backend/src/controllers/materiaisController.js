@@ -4,10 +4,22 @@
 
 import { query } from '../config/db.js';
 import { garantirCategoriaMaquinas } from '../jobs/syncErpEstoque.js';
+import { telasDoUsuario, temBotao } from '../middlewares/telas.js';
 
 // A categoria "Máquinas" (perfil MAQ do Zen) é criada sozinha na
 // primeira listagem — não precisa rodar migração.
 let _categoriaMaquinasOk = false;
+
+// Máquinas: admin sempre vê; os demais só com "Ver a categoria Máquinas"
+// liberado no cadastro (Admin › Usuários › Editar › Catálogo / Requisição).
+async function podeVerMaquinas(usuario) {
+  if (!usuario) return false;
+  if (usuario.perfil === 'admin') return true;
+  try {
+    const telas = usuario.telas !== undefined ? usuario.telas : await telasDoUsuario(usuario.id);
+    return temBotao({ ...usuario, telas }, 'cat_maquinas');
+  } catch { return false; } // falha ao ler: continua escondida
+}
 
 const BASE_SELECT = `
   SELECT
@@ -46,8 +58,8 @@ export async function listarMateriais(req, res, next) {
     const params = [];
     let paramIdx = 1;
 
-    // Máquinas: categoria visível só para admin
-    if (req.usuario?.perfil !== 'admin') condicoes.push(`c.nome <> 'Máquinas'`);
+    // Máquinas: só admin ou quem tem a categoria liberada
+    if (!(await podeVerMaquinas(req.usuario))) condicoes.push(`c.nome <> 'Máquinas'`);
 
     if (categoria) {
       condicoes.push(`m.categoria_id = $${paramIdx++}`);
@@ -107,7 +119,7 @@ export async function listarCategorias(req, res, next) {
       `SELECT id, nome, icone FROM categorias
         WHERE ativo = TRUE AND ($1 OR nome <> 'Máquinas')
         ORDER BY ordem, nome`,
-      [req.usuario?.perfil === 'admin']
+      [await podeVerMaquinas(req.usuario)]
     );
     res.json({ categorias: result.rows });
   } catch (err) {
@@ -121,7 +133,7 @@ export async function detalharMaterial(req, res, next) {
     const { id } = req.params;
     const result = await query(
       `${BASE_SELECT} WHERE m.id = $1 AND ($2 OR c.nome <> 'Máquinas')`,
-      [parseInt(id), req.usuario?.perfil === 'admin']
+      [parseInt(id), await podeVerMaquinas(req.usuario)]
     );
 
     if (!result.rows[0]) {

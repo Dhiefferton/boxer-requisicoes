@@ -92,6 +92,8 @@ const emailDe = (u) => String(u?.email || '').trim().toLowerCase();
 const soAdminLeg = () => false; // não-admin: sem o botão por padrão
 const adminOuOperador = (u) => ['admin', 'operador'].includes(u?.perfil); // colunas "só admin": admin e operador movem
 export const BOTOES = [
+  // Catálogo / Requisição — ver e pedir itens da categoria Máquinas (checado no materiaisController)
+  { chave: 'cat_maquinas',      tela: 'catalogo', rotas: [] },
   // Orçamentos
   { chave: 'orc_novo_card',     tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/novo-card$/], ['GET', /^\/pedidos-orcamento\/cliente-zen$/]] },
   { chave: 'orc_trazer_pipefy', tela: 'orcamentos', rotas: [['POST', /^\/pedidos-orcamento\/importar-entrada$/]] },
