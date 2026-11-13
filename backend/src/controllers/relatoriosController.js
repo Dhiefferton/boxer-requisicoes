@@ -61,6 +61,12 @@ function garantirEstrutura() {
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      -- Nome de campo comparável: sem acento, maiúsculas, espaços e pontuação
+      -- ("Ínicio da Separação" = "Início da Separação"; "Quais erros na separação" = "...separação?")
+      CREATE OR REPLACE FUNCTION rel_norm(t text) RETURNS text AS $f$
+        SELECT regexp_replace(translate(lower(coalesce(t, '')),
+          'áàâãäéèêëíìîïóòôõöúùûüçñ', 'aaaaaeeeeiiiiooooouuuucn'), '[^a-z0-9]', '', 'g')
+      $f$ LANGUAGE sql IMMUTABLE;
       CREATE OR REPLACE FUNCTION rel_num(t text) RETURNS numeric AS $f$
       BEGIN
         IF t IS NULL OR btrim(t) = '' THEN RETURN NULL; END IF;
@@ -253,7 +259,11 @@ function coluna(chave, params) {
   if (!nome) throw Object.assign(new Error(`Coluna inválida: ${chave}`), { status: 400 });
   params.push(nome);
   const p = `$${params.length}`;
-  if (pref === 'c') return { sql: `(campos ->> ${p})`, tipo: 'texto', num: `rel_num(campos ->> ${p})` };
+  if (pref === 'c') {
+    // Cards dos quadros do sistema: campo com o mesmo nome, ignorando acento, maiúsculas e pontuação
+    const v = `COALESCE(campos ->> ${p}, CASE WHEN pipe_id LIKE 'bo:%' THEN (SELECT e.value FROM jsonb_each_text(campos) e WHERE rel_norm(e.key) = rel_norm(${p}) LIMIT 1) END)`;
+    return { sql: `(${v})`, tipo: 'texto', num: `rel_num(${v})` };
+  }
   if (pref === 'f') return { sql: `(SELECT SUM((h->>'duracao')::numeric) FROM jsonb_array_elements(historico) h WHERE h->>'fase' = ${p})`, tipo: 'numero' };
   if (pref === 'fe') return { sql: `(SELECT MIN((h->>'entrou')::timestamptz) FROM jsonb_array_elements(historico) h WHERE h->>'fase' = ${p})`, tipo: 'data' };
   throw Object.assign(new Error(`Coluna inválida: ${chave}`), { status: 400 });

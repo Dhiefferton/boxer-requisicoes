@@ -325,7 +325,10 @@ function Relatorio({ id, pipes, onVoltar, onMudou }) {
   const pipe = useMemo(() => {
     const esc = (fontes || []).filter(f => (cfg?.fontes || []).includes(f.chave));
     if (!esc.length) return pipeDoRel;
-    const campos = [...new Set([...(pipeDoRel?.campos || []), ...esc.flatMap(f => f.campos)])];
+    // Mesmo nome ignorando acento/maiúsculas/pontuação = mesma coluna (fica o nome do Pipefy)
+    const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const vistos = new Set();
+    const campos = [...(pipeDoRel?.campos || []), ...esc.flatMap(f => f.campos)].filter(c => !vistos.has(norm(c)) && vistos.add(norm(c)));
     const nomesFases = new Set();
     const fases = [...(pipeDoRel?.fases || []), ...esc.flatMap(f => f.fases)].filter(f => !nomesFases.has(f.nome) && nomesFases.add(f.nome));
     return { ...(pipeDoRel || {}), campos, fases };
