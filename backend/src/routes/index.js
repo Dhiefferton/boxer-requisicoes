@@ -38,7 +38,7 @@ import {
   gerarRelatorio, listarRelatorios, detalharRelatorio
 } from '../controllers/necessidadesPecasController.js';
 import {
-  listarPedidos, criarPedido, moverPedido, enviarFotoOrcamento, verFotoOrcamento, excluirFotoOrcamento, listarModelos, criarModelo, editarPedido, cancelarPedido, cancelarPedidoZen, listarPipesPipefy, sincronizarPipefy, importarEntradaPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, renomearPedido, criarCardBoxer, clienteZen, listarMovimentos
+  listarPedidos, criarPedido, moverPedido, enviarFotoOrcamento, verFotoOrcamento, excluirFotoOrcamento, listarModelos, criarModelo, editarPedido, cancelarPedido, cancelarPedidoZen, excluirPedidoZenAdmin, listarPipesPipefy, sincronizarPipefy, importarEntradaPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, renomearPedido, criarCardBoxer, clienteZen, listarMovimentos
 } from '../controllers/pedidosOrcamentoController.js';
 import {
   listarInventarios, previaInventario, criarInventario, detalharInventario, meuInventario,
@@ -244,6 +244,7 @@ router.patch('/pedidos-orcamento/:id/mover',    autenticar, exigirPerfil('operad
 router.patch('/pedidos-orcamento/:id',          autenticar, exigirPerfil('operador', 'admin'), editarPedido);
 router.post('/pedidos-orcamento/:id/cancelar',  autenticar, exigirPerfil('operador', 'admin'), cancelarPedido);
 router.post('/pedidos-orcamento/:id/cancelar-zen', autenticar, exigirPerfil('operador', 'admin'), cancelarPedidoZen);
+router.post('/pedidos-orcamento/:id/excluir-zen', autenticar, exigirPerfil('admin'), excluirPedidoZenAdmin);
 router.post('/pedidos-orcamento/:id/retirar-recusadas', autenticar, exigirPerfil('operador', 'admin'), retirarRecusadas);
 router.post('/pedidos-orcamento/:id/atualizar-itens-zen', autenticar, exigirPerfil('admin'), atualizarItensZen);
 router.post('/pedidos-orcamento/:id/voltar-separacao', autenticar, exigirPerfil('admin'), voltarSeparacaoRota);
