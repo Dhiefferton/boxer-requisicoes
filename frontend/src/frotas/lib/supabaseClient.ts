@@ -29,9 +29,13 @@ const supabaseAnonKey = import.meta.env.VITE_FROTAS_SUPABASE_ANON_KEY as string 
 /** true quando as variáveis de ambiente do Supabase estão definidas. */
 export const SUPABASE_CONFIGURADO = Boolean(supabaseUrl && supabaseAnonKey)
 
+// Schema do Frotas no banco (depois da unificação fica em "frotas" dentro do banco do Boxer Operações)
+const supabaseSchema = ((import.meta.env.VITE_FROTAS_SUPABASE_SCHEMA as string | undefined) || 'public').trim() || 'public'
+
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'public-anon-key-placeholder',
+  { db: { schema: supabaseSchema } },
 )
 
 // ---------------------------------------------------------------------------
@@ -1321,6 +1325,7 @@ export async function reativarUsuario(id: string) {
 // criar novos usuários via signUp sem substituir a sessão de quem está logado
 // no app (o supabase-js guarda a sessão ativa por instância de cliente).
 const supabaseNovoUsuario = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseAnonKey || 'public-anon-key-placeholder', {
+  db: { schema: supabaseSchema },
   auth: {
     storageKey: 'sb-frotas-criar-usuario',
     persistSession: false,
