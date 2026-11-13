@@ -56,7 +56,8 @@ export async function gerarCodigoSso(req, res, next) {
       const url = String(process.env.FROTAS_SUPABASE_URL || '').replace(/\/+$/, '');
       const chave = process.env.FROTAS_SUPABASE_SERVICE_KEY;
       if (!url || !chave) return res.json({ indisponivel: true, motivo: 'Login único do Frotas ainda não configurado no servidor.' });
-      const h = { apikey: chave, Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json' };
+      const _fs = (process.env.FROTAS_SUPABASE_SCHEMA || '').trim();
+      const h = { apikey: chave, Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json', ...(_fs && _fs !== 'public' ? { 'Accept-Profile': _fs, 'Content-Profile': _fs } : {}) };
       // Só gera link para quem já existe no Frotas (o link mágico criaria um usuário novo)
       const ex = await fetch(`${url}/rest/v1/usuarios_perfil?select=id,email&email=ilike.${encodeURIComponent(emailFrotas)}&limit=1`, { headers: h });
       if (!ex.ok) return res.json({ indisponivel: true, motivo: 'Não consegui conferir seu cadastro no Frotas.' });

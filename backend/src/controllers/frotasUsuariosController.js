@@ -14,11 +14,13 @@ import { emailNoDestino } from './ssoController.js';
 
 const PERFIS = ['gestor', 'operador', 'operador_comex', 'motorista'];
 
+const _FS = (process.env.FROTAS_SUPABASE_SCHEMA || '').trim(); // schema do Frotas no Supabase (vazio = public)
+const _FSH = _FS && _FS !== 'public' ? { 'Accept-Profile': _FS, 'Content-Profile': _FS } : {};
 function supa() {
   const url = String(process.env.FROTAS_SUPABASE_URL || '').replace(/\/+$/, '');
   const chave = process.env.FROTAS_SUPABASE_SERVICE_KEY;
   if (!url || !chave) return null;
-  return { url, h: { apikey: chave, Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json' } };
+  return { url, h: { apikey: chave, Authorization: `Bearer ${chave}`, 'Content-Type': 'application/json', ..._FSH } };
 }
 async function usuarioOperacoes(id) {
   return (await query(`SELECT id, nome, email FROM usuarios WHERE id = $1`, [parseInt(id) || 0])).rows[0] || null;
