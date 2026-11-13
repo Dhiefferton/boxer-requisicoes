@@ -5,7 +5,7 @@
 // colunas, fórmulas, ordenação, paginação e exportação CSV — igual ao Pipefy.
 // Os cards importados NÃO aparecem nos quadros: só aqui, nos relatórios.
 // ============================================================
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Search, Trash2, ChevronLeft, ChevronRight, Sigma, Columns3, Download, Save, X, ArrowUp, ArrowDown, Database, RefreshCw, ExternalLink, Pencil } from 'lucide-react';
 import { relatoriosService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -290,6 +290,9 @@ function Relatorio({ id, pipes, onVoltar, onMudou }) {
   const [sujo, setSujo] = useState(false);
   const [modal, setModal] = useState('');
   const [nome, setNome] = useState('');
+  const [arrastando, setArrastando] = useState(null); // coluna sendo arrastada no cabeçalho
+  const [sobre, setSobre] = useState(null);           // coluna sob o mouse ao arrastar
+  const pularBusca = useRef(false);                    // reordenar colunas não precisa buscar de novo
   const pipe = useMemo(() => pipes.find(p => p.pipe_id === rel?.pipe_id), [pipes, rel]);
 
   useEffect(() => {
@@ -302,6 +305,7 @@ function Relatorio({ id, pipes, onVoltar, onMudou }) {
 
   useEffect(() => {
     if (!aplicada || !rel) return;
+    if (pularBusca.current) { pularBusca.current = false; return; }
     let vivo = true;
     setRodando(true); setErro('');
     relatoriosService.executar({ ...aplicada, pipe_id: rel.pipe_id }, pagina)
@@ -340,6 +344,23 @@ function Relatorio({ id, pipes, onVoltar, onMudou }) {
       a.href = URL.createObjectURL(blob); a.download = `${nome || 'relatorio'}.csv`; a.click();
       URL.revokeObjectURL(a.href);
     } catch (e) { setErro(e.response?.data?.erro || 'Não consegui exportar.'); }
+  }
+  // Arrastar o cabeçalho: move a coluna "de" para a posição da coluna "para".
+  // Reordena a tabela na hora (sem buscar de novo); fica salvo no "Salvar".
+  function moverColuna(de, para) {
+    if (!de || !para || de === para || !res) return;
+    const mover = (lista) => {
+      const i = lista.indexOf(de), j = lista.indexOf(para);
+      if (i < 0 || j < 0) return lista;
+      const nova = [...lista]; nova.splice(i, 1); nova.splice(j, 0, de); return nova;
+    };
+    const ordemNova = mover(res.colunas);
+    const idx = ordemNova.map(c => res.colunas.indexOf(c));
+    setRes({ ...res, colunas: ordemNova, tipos: idx.map(k => res.tipos[k]), linhas: res.linhas.map(l => ({ ...l, v: idx.map(k => l.v[k]) })) });
+    setCfg(c => ({ ...c, colunas: mover(c.colunas) }));
+    pularBusca.current = true;
+    setAplicada(a => ({ ...a, colunas: mover(a.colunas) }));
+    setSujo(true);
   }
   function ordenar(chave) {
     const dir = aplicada?.ordem?.chave === chave && aplicada.ordem.dir === 'desc' ? 'asc' : 'desc';
@@ -439,7 +460,12 @@ function Relatorio({ id, pipes, onVoltar, onMudou }) {
               <thead>
                 <tr className="border-b border-[var(--c-borda)] text-[var(--c-suave)]">
                   {res?.colunas.map(c => (
-                    <th key={c} className="text-left font-semibold py-2 px-2 whitespace-nowrap">
+                    <th key={c} draggable title="Arraste para mudar a coluna de lugar"
+                      onDragStart={e => { setArrastando(c); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c); }}
+                      onDragOver={e => { if (arrastando) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (sobre !== c) setSobre(c); } }}
+                      onDrop={e => { e.preventDefault(); moverColuna(arrastando, c); setArrastando(null); setSobre(null); }}
+                      onDragEnd={() => { setArrastando(null); setSobre(null); }}
+                      className={`text-left font-semibold py-2 px-2 whitespace-nowrap cursor-grab active:cursor-grabbing select-none ${arrastando === c ? 'opacity-40' : ''} ${sobre === c && arrastando && arrastando !== c ? 'bg-[var(--c-destaque)]/15 border-l-2 border-[var(--c-destaque)]' : ''}`}>
                       <button className="flex items-center gap-1 hover:text-[var(--c-texto)]" onClick={() => ordenar(c)}>
                         {rotuloDe(c)}
                         {aplicada?.ordem?.chave === c && (aplicada.ordem.dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
