@@ -119,7 +119,8 @@ router.get('/debug-frotas-viagens', async (req, res) => {
     const chave = process.env.FROTAS_SUPABASE_SERVICE_KEY;
     if (!url || !chave) return res.status(400).json({ erro: 'Frotas não configurado' });
     const get = async (caminho) => {
-      const r = await fetch(`${url}/rest/v1/${caminho}`, { headers: { apikey: chave, Authorization: `Bearer ${chave}` } });
+      const _fs = (process.env.FROTAS_SUPABASE_SCHEMA || '').trim();
+      const r = await fetch(`${url}/rest/v1/${caminho}`, { headers: { apikey: chave, Authorization: `Bearer ${chave}`, ...(_fs && _fs !== 'public' ? { 'Accept-Profile': _fs } : {}) } });
       const t = await r.text();
       try { return JSON.parse(t); } catch { return t; }
     };
