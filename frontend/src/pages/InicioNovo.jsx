@@ -52,6 +52,7 @@ const GRUPOS = [
   { chave: 'logistica', nome: 'Logística / Manutenção', resumo: 'orçamentos, lojinha, garantia, notas de serviços, tratativa' },
   { chave: 'almoxarifado', nome: 'Almoxarifado', resumo: 'inventário, requisições, estoque, compras' },
 ];
+const COR_PADRAO = '#2563eb'; // WMS / Frotas e o que vier sem cor
 const CORES_QUADROS = ['#059669', '#0d9488', '#7c3aed', '#e11d48', '#2563eb', '#ca8a04', '#9333ea', '#0891b2'];
 
 const fmt = (v) => (v == null ? '—' : Number(v).toLocaleString('pt-BR'));
@@ -194,9 +195,10 @@ export default function InicioNovo() {
                     <span className="text-xs text-[var(--c-suave)] truncate">{g.resumo}</span>
                   </div>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4">
                   {itens.map(b => {
                     const Icon = b.icon;
+                    const cor = /^#[0-9a-f]{6}$/i.test(b.cor || '') ? b.cor : COR_PADRAO;
                     const fav = favoritas.includes(b.chave);
                     const qtd = b.conta ? dados?.telas?.[b.chave] : undefined;
                     return (
@@ -204,26 +206,26 @@ export default function InicioNovo() {
                         onClick={() => abrir(b)}
                         onKeyDown={e => { if (e.key === 'Enter') abrir(b); }}
                         title={!b.liberada ? 'Você não tem acesso a esta tela' : b.externo ? `Abrir ${b.nome} (em outra aba)` : `Abrir ${b.nome}`}
-                        className={`group relative rounded-2xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-3.5 flex items-center gap-3 transition-colors ${b.liberada ? 'cursor-pointer hover:border-[var(--c-destaque)]' : 'cursor-not-allowed opacity-50 grayscale'}`}>
-                        <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: b.liberada ? AZUL : '#4b5563' }}>
+                        className={`group relative h-36 rounded-2xl border p-4 flex flex-col transition-colors ${b.liberada ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed opacity-50 grayscale'}`}
+                        style={{ background: `${cor}1f`, borderColor: `${cor}40` }}>
+                        <span className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: b.liberada ? cor : '#4b5563' }}>
                           <Icon size={20} strokeWidth={1.75} className="text-white" />
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-1.5 text-sm font-semibold text-[var(--c-texto)] leading-tight">
-                            <span className="truncate">{b.nome}</span>
-                            {b.externo && b.liberada && <ExternalLink size={12} className="shrink-0 text-[var(--c-suave)]" />}
-                          </span>
-                          <span className="block text-[11px] text-[var(--c-suave)] mt-0.5 truncate">
-                            {!b.liberada ? 'Sem acesso' : b.conta ? (qtd != null ? `${fmt(qtd)} card${qtd === 1 ? '' : 's'}` : '…') : b.desc}
-                          </span>
-                        </span>
-                        {b.liberada ? (
+                        {b.liberada && (
                           <button onClick={e => { e.stopPropagation(); alternarFavorita(b.chave); }} aria-label={fav ? 'Tirar das favoritas' : 'Favoritar'}
-                            className={`shrink-0 p-1 rounded-lg ${fav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}>
-                            <Star size={16} className={fav ? 'text-[var(--c-destaque-claro)] fill-[var(--c-destaque-claro)]' : 'text-[var(--c-suave)]'} />
+                            className={`absolute top-3 right-3 p-1 rounded-lg ${fav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}>
+                            <Star size={16} className={fav ? 'text-amber-400 fill-amber-400' : 'text-[var(--c-suave)]'} />
                           </button>
-                        ) : (
-                          <span className="shrink-0 w-7 h-7 rounded-full bg-[var(--c-borda)] flex items-center justify-center"><Lock size={13} className="text-[var(--c-texto)]" /></span>
+                        )}
+                        <span className="mt-auto flex items-center gap-1.5 text-sm font-semibold text-[var(--c-texto)] leading-tight">
+                          <span className="line-clamp-2">{b.nome}</span>
+                          {b.externo && b.liberada && <ExternalLink size={12} className="shrink-0 text-[var(--c-suave)]" />}
+                        </span>
+                        <span className="text-[11px] text-[var(--c-suave)] mt-1 truncate">
+                          {!b.liberada ? 'Sem acesso' : b.conta ? (qtd != null ? `${fmt(qtd)} card${qtd === 1 ? '' : 's'}` : '…') : b.desc}
+                        </span>
+                        {!b.liberada && (
+                          <span className="absolute bottom-3 right-3 w-7 h-7 rounded-full bg-[var(--c-borda)] flex items-center justify-center"><Lock size={13} className="text-[var(--c-texto)]" /></span>
                         )}
                       </div>
                     );
