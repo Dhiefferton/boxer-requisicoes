@@ -53,6 +53,15 @@ const GRUPOS = [
   { chave: 'almoxarifado', nome: 'Almoxarifado', resumo: 'inventário, requisições, estoque, compras' },
 ];
 const COR_PADRAO = '#2563eb'; // WMS / Frotas e o que vier sem cor
+// Cores dos cards do Armazém (WMS) e do Frotas (mesma paleta das telas do sistema)
+const CORES_MODULO = {
+  wms_painel: '#2563eb', wms_pedidos: '#4f46e5', wms_reposicao: '#d97706', wms_historico: '#64748b',
+  wms_separacao: '#9333ea', wms_conferencia: '#0d9488', wms_coletor: '#475569',
+  frotas_painel: '#0284c7', frotas_agenda: '#7c3aed', frotas_viagens: '#059669', frotas_operacoes: '#dc2626',
+  frotas_veiculos: '#2563eb', frotas_motoristas: '#0891b2', frotas_combustivel: '#ca8a04', frotas_custo: '#be185d',
+  frotas_manutencao: '#ea580c', frotas_documentos: '#0369a1', frotas_checklist: '#16a34a', frotas_relatorios: '#0ea5e9',
+  frotas_motorista: '#9333ea',
+};
 const CORES_QUADROS = ['#059669', '#0d9488', '#7c3aed', '#e11d48', '#2563eb', '#ca8a04', '#9333ea', '#0891b2'];
 
 const fmt = (v) => (v == null ? '—' : Number(v).toLocaleString('pt-BR'));
@@ -120,7 +129,7 @@ export default function InicioNovo() {
   const modulos = useMemo(() => MODULOS.map(m => ({
     ...m,
     itens: m.itens.filter(i => m.chave === 'frotas' || enderecoDe(i)).map(i => ({
-      ...i, externo: m.chave === 'frotas' ? null : enderecoDe(i), rota: m.chave === 'frotas' ? (i.caminho === '/' ? '/frotas' : `/frotas${i.caminho}`) : undefined, icon: ICONES_MODULO[i.icone] || LayoutDashboard, liberada: veTela(usuario, m.chave),
+      ...i, externo: m.chave === 'frotas' ? null : enderecoDe(i), rota: m.chave === 'frotas' ? (i.caminho === '/' ? '/frotas' : `/frotas${i.caminho}`) : undefined, icon: ICONES_MODULO[i.icone] || LayoutDashboard, cor: i.cor || CORES_MODULO[i.chave], liberada: veTela(usuario, m.chave),
     })),
   })).filter(m => m.itens.length), [usuario]);
   const grupos = [...GRUPOS.map(g => ({ ...g, itens: blocos.filter(b => b.grupo === g.chave) })), ...modulos];
