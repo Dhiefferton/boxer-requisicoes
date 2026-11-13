@@ -434,6 +434,22 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
     } catch (err) { alert(err.response?.data?.erro || 'Erro ao cancelar o pedido no Zen.'); onAtualizar(); }
     finally { setCancelandoZen(false); }
   }
+  // Só admin, em qualquer fase: exclui SOMENTE o pedido de venda no Zen (o card continua no quadro)
+  const [excluindoZen, setExcluindoZen] = useState(false);
+  async function excluirZen() {
+    if (!confirm(
+      `Excluir o pedido de venda ${pedido.zen_venda_numero || pedido.zen_pedido_id} no Zen?\n\n` +
+      'A ordem de separação é desfeita (as peças voltam pro estoque) e o pedido de venda é EXCLUÍDO no Zen. ' +
+      'O card NÃO é excluído: continua aqui na mesma coluna, com os mesmos campos.'
+    )) return;
+    setExcluindoZen(true);
+    try {
+      await pedidosOrcamentoService.excluirZen(pedido.id);
+      alert(`Pronto! Pedido ${pedido.zen_venda_numero || pedido.zen_pedido_id} excluído no Zen. O card continua no quadro.`);
+      onAtualizar();
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao excluir o pedido no Zen.'); onAtualizar(); }
+    finally { setExcluindoZen(false); }
+  }
   async function cancelar() {
     const noZen = pedido.status === 'aprovado_recusado' && pedido.zen_pedido_id;
     const msg = noZen
@@ -571,6 +587,10 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
   if (podeEditar && recusado && pedido.zen_pedido_id && !pedido.zen_nota_id) {
     acoesZen.push({ id: 'cancelar_zen', onClick: cancelarZen, ocupado: cancelandoZen, alerta: true,
       texto: 'Cancelar pedido no Zen', textoOcupado: 'Cancelando no Zen…' });
+  }
+  if (eu?.perfil === 'admin' && pedido.zen_pedido_id && !pedido.zen_nota_id && !espelho) {
+    acoesZen.push({ id: 'excluir_zen', onClick: excluirZen, ocupado: excluindoZen, alerta: true,
+      texto: 'Excluir pedido no Zen', textoOcupado: 'Excluindo no Zen…' });
   }
   const temPecas = (pedido.itens || []).some(i => i?.codigo && Number(i.quantidade) > 0);
   const podeAvancar = !!proxima && !(proxima.status === 'separando' && !temPecas);
