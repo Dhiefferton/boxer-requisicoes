@@ -10,6 +10,7 @@
 // ============================================================
 import { query } from '../config/db.js';
 import { pipefyQueryPlanilhas } from '../integrations/pipefyService.js';
+import { fonteValida, listarFontes, sincronizarFontes } from '../integrations/relatoriosLocais.js';
 
 const ORG_ID = process.env.PIPEFY_ORG_ID || '327351';
 const LIMITE_LOTE_MS = 40000;   // tempo máximo de cada chamada de importação (serverless)
@@ -47,6 +48,9 @@ function garantirEstrutura() {
         PRIMARY KEY (pipe_id, card_id)
       );
       CREATE INDEX IF NOT EXISTS idx_rel_cards_criado ON rel_cards (pipe_id, criado_em);
+      -- Cards dos quadros do Boxer Operações (pipe_id 'bo:<fonte>', integrations/relatoriosLocais.js)
+      ALTER TABLE rel_cards ADD COLUMN IF NOT EXISTS origem TEXT;
+      ALTER TABLE rel_cards ADD COLUMN IF NOT EXISTS pipefy_refs JSONB NOT NULL DEFAULT '[]'::jsonb;
       CREATE TABLE IF NOT EXISTS rel_relatorios (
         id            SERIAL PRIMARY KEY,
         nome          VARCHAR(160) NOT NULL,
@@ -234,6 +238,7 @@ const FIXAS = {
   '@criado_em':      { sql: 'criado_em', tipo: 'data' },
   '@finalizado_em':  { sql: 'finalizado_em', tipo: 'data' },
   '@atualizado_em':  { sql: 'atualizado_em', tipo: 'data' },
+  '@origem':         { sql: `COALESCE(origem, 'Pipefy')`, tipo: 'texto' },
 };
 const OPS_TEXTO = ['contem', 'nao_contem', 'igual', 'diferente', 'comeca', 'vazio', 'preenchido'];
 const OPS_NUM = ['igual', 'diferente', 'maior', 'menor', 'maior_igual', 'menor_igual', 'vazio', 'preenchido'];
@@ -307,9 +312,19 @@ function condicao(f, params) {
   return `(COALESCE(lower(${col.sql}), '') <> lower(${lit(v)}))`; // diferente
 }
 
-function montarWhere(pipeId, filtros, params, periodo) {
+// Fontes do Boxer Operações escolhidas no relatório (orcamentos, lojinha, garantia, quadro_<id>)
+const fontesDe = (cfg) => [...new Set((Array.isArray(cfg?.fontes) ? cfg.fontes : []).map(String).filter(fonteValida))].slice(0, 30);
+
+function montarWhere(pipeId, filtros, params, periodo, fontes = []) {
   params.push(String(pipeId));
-  let where = `pipe_id = $${params.length}`;
+  const pp = `$${params.length}`;
+  let where = `pipe_id = ${pp}`;
+  if (fontes.length) {
+    // Cards do sistema entram junto; o que já tem card no Pipefy do relatório não entra de novo
+    params.push(fontes.map(f => `bo:${f}`));
+    where = `(pipe_id = ${pp} OR (pipe_id = ANY($${params.length}::text[]) AND NOT EXISTS (
+      SELECT 1 FROM rel_cards x WHERE x.pipe_id = ${pp} AND x.card_id IN (SELECT jsonb_array_elements_text(rel_cards.pipefy_refs)))))`;
+  }
   let expr = null;
   for (const f of (Array.isArray(filtros) ? filtros : []).slice(0, 40)) {
     if (!f?.chave || !f?.op) continue;
@@ -330,8 +345,10 @@ async function executar(cfg, { pagina = 1, todos = false } = {}) {
   const pipeId = String(cfg?.pipe_id || '');
   if (!/^\d+$/.test(pipeId)) throw Object.assign(new Error('Escolha o pipe do relatório.'), { status: 400 });
   const colunas = (Array.isArray(cfg.colunas) && cfg.colunas.length ? cfg.colunas : ['@id', '@titulo', '@fase', '@criado_em']).slice(0, 60);
+  const fontes = fontesDe(cfg);
+  if (fontes.length) await sincronizarFontes(fontes);
   const params = [];
-  const where = montarWhere(pipeId, cfg.filtros, params, cfg.periodo);
+  const where = montarWhere(pipeId, cfg.filtros, params, cfg.periodo, fontes);
   const nParams = params.length;
   const sel = colunas.map(c => coluna(c, params));
   const selSql = sel.map((c, i) => `${c.sql} AS c${i}`).join(', ');
@@ -365,6 +382,12 @@ async function executar(cfg, { pagina = 1, todos = false } = {}) {
   };
 }
 
+// GET /relatorios/fontes — quadros do Boxer Operações que podem entrar junto (com campos e fases)
+export async function listarFontesRelatorio(req, res, next) {
+  try { res.json({ fontes: await listarFontes() }); }
+  catch (err) { next(err); }
+}
+
 // POST /relatorios/executar { config, pagina, todos }
 export async function executarRelatorio(req, res, next) {
   try {
@@ -383,6 +406,7 @@ const limparConfig = (c) => ({
     ? { chave: String(c.periodo.chave), tipo: c.periodo.tipo, valor: String(c.periodo.valor ?? ''), valor2: String(c.periodo.valor2 ?? '') } : null,
   ordem: c?.ordem?.chave ? { chave: String(c.ordem.chave), dir: c.ordem.dir === 'asc' ? 'asc' : 'desc' } : null,
   formulas: (Array.isArray(c?.formulas) ? c.formulas : []).filter(f => FNS[f?.fn] && f?.chave).slice(0, 20).map(f => ({ chave: String(f.chave), fn: f.fn })),
+  fontes: fontesDe(c),
 });
 
 // GET /relatorios — lista (com a contagem atual de cada um)
@@ -397,7 +421,7 @@ export async function listarRelatorios(req, res, next) {
       let total = null;
       try {
         const params = [];
-        const where = montarWhere(rel.pipe_id, rel.config?.filtros, params, rel.config?.periodo);
+        const where = montarWhere(rel.pipe_id, rel.config?.filtros, params, rel.config?.periodo, fontesDe(rel.config));
         total = (await query(`SELECT COUNT(*)::int AS n FROM rel_cards WHERE ${where}`, params)).rows[0].n;
       } catch { /* filtro antigo inválido */ }
       lista.push({ ...rel, total });

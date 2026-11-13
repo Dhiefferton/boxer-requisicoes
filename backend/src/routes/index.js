@@ -61,6 +61,7 @@ import {
   estadoImportacao as estadoImpRel, listarPipesPipefy as listarPipesPipefyRel, importarLote as importarLoteRel,
   listarPipes as listarPipesRel, executarRelatorio as executarRel, listarRelatorios as listarRel, verRelatorio as verRel,
   criarRelatorio as criarRel, salvarRelatorio as salvarRel, excluirRelatorio as excluirRel,
+  listarFontesRelatorio as listarFontesRel,
 } from '../controllers/relatoriosController.js';
 import {
   opcoesIntegracao, listarChaves as listarChavesApi, criarChave as criarChaveApi, editarChave as editarChaveApi,
@@ -389,6 +390,7 @@ router.get('/relatorios/importacao',               ...relBase,  estadoImpRel);
 router.post('/relatorios/importacao/pipes',        ...relAdmin, listarPipesPipefyRel);
 router.post('/relatorios/importacao/lote',         ...relAdmin, importarLoteRel);
 router.get('/relatorios/pipes',                    ...relBase,  listarPipesRel);
+router.get('/relatorios/fontes',                   ...relBase,  listarFontesRel);
 router.post('/relatorios/executar',                ...relBase,  executarRel);
 router.get('/relatorios',                          ...relBase,  listarRel);
 router.get('/relatorios/:id',                      ...relBase,  verRel);

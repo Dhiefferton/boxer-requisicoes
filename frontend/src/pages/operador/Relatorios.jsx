@@ -6,7 +6,7 @@
 // Os cards importados NÃO aparecem nos quadros: só aqui, nos relatórios.
 // ============================================================
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Search, Trash2, ChevronLeft, ChevronRight, Sigma, Columns3, Download, Save, X, ArrowUp, ArrowDown, Database, RefreshCw, ExternalLink, Pencil } from 'lucide-react';
+import { Plus, Search, Trash2, ChevronLeft, ChevronRight, Sigma, Columns3, Download, Save, X, ArrowUp, ArrowDown, Database, RefreshCw, ExternalLink, Pencil, LayoutGrid } from 'lucide-react';
 import { relatoriosService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Spinner } from '../../components/ui';
@@ -15,6 +15,7 @@ const FIXAS = [
   ['@id', 'Código do card', 'texto'], ['@titulo', 'Título', 'texto'], ['@fase', 'Fase atual', 'texto'],
   ['@criado_por', 'Criado por', 'texto'], ['@criado_em', 'Criado em', 'data'],
   ['@finalizado_em', 'Finalizado em', 'data'], ['@atualizado_em', 'Atualizado em', 'data'],
+  ['@origem', 'Origem (Pipefy ou quadro do sistema)', 'texto'],
 ];
 const tipoDe = (chave) => {
   const f = FIXAS.find(x => x[0] === chave);
@@ -251,6 +252,30 @@ function Colunas({ pipe, colunas, onMudar, onFechar }) {
   );
 }
 
+// ── Quadros do Boxer Operações que entram junto com o Pipefy ──
+function Fontes({ fontes, escolhidas, onMudar, onFechar }) {
+  const alternar = (k) => onMudar(escolhidas.includes(k) ? escolhidas.filter(x => x !== k) : [...escolhidas, k]);
+  return (
+    <Modal titulo="Quadros do Boxer Operações" onFechar={onFechar}>
+      <p className="text-[11px] text-[var(--c-suave)]">
+        Os cards dos quadros marcados entram junto com os do Pipefy. Campos com o mesmo nome caem na mesma coluna.
+        Card que já tem card no Pipefy deste relatório não aparece duas vezes.
+      </p>
+      {!fontes ? <div className="flex justify-center py-6"><Spinner /></div> : (
+        <div className="space-y-1">
+          {fontes.map(f => (
+            <label key={f.chave} className="flex items-center gap-2 text-xs text-[var(--c-texto)] py-1 cursor-pointer">
+              <input type="checkbox" checked={escolhidas.includes(f.chave)} onChange={() => alternar(f.chave)} />
+              <span className="flex-1">{f.nome}</span>
+              <span className="text-[10px] text-[var(--c-suave)]">{f.campos.length} campos · {f.fases.length} colunas</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ── Fórmulas ─────────────────────────────────────────────────
 function Formulas({ colunas, formulas, onMudar, onFechar }) {
   const [chave, setChave] = useState(colunas[0] || '');
@@ -293,7 +318,18 @@ function Relatorio({ id, pipes, onVoltar, onMudou }) {
   const [arrastando, setArrastando] = useState(null); // coluna sendo arrastada no cabeçalho
   const [sobre, setSobre] = useState(null);           // coluna sob o mouse ao arrastar
   const pularBusca = useRef(false);                    // reordenar colunas não precisa buscar de novo
-  const pipe = useMemo(() => pipes.find(p => p.pipe_id === rel?.pipe_id), [pipes, rel]);
+  const [fontes, setFontes] = useState(null);        // quadros do Boxer Operações
+  useEffect(() => { relatoriosService.fontes().then(({ data }) => setFontes(data.fontes || [])).catch(() => setFontes([])); }, []);
+  const pipeDoRel = useMemo(() => pipes.find(p => p.pipe_id === rel?.pipe_id), [pipes, rel]);
+  // Pipe + quadros escolhidos: campos e fases juntos (mesmo nome = mesma coluna)
+  const pipe = useMemo(() => {
+    const esc = (fontes || []).filter(f => (cfg?.fontes || []).includes(f.chave));
+    if (!esc.length) return pipeDoRel;
+    const campos = [...new Set([...(pipeDoRel?.campos || []), ...esc.flatMap(f => f.campos)])];
+    const nomesFases = new Set();
+    const fases = [...(pipeDoRel?.fases || []), ...esc.flatMap(f => f.fases)].filter(f => !nomesFases.has(f.nome) && nomesFases.add(f.nome));
+    return { ...(pipeDoRel || {}), campos, fases };
+  }, [pipeDoRel, fontes, cfg?.fontes]);
 
   useEffect(() => {
     relatoriosService.ver(id).then(({ data }) => {
@@ -375,7 +411,8 @@ function Relatorio({ id, pipes, onVoltar, onMudou }) {
       <div className="flex items-center gap-2 flex-wrap">
         <button onClick={onVoltar} className="text-xs text-[var(--c-suave)] hover:text-[var(--c-texto)] flex items-center gap-1"><ChevronLeft size={14} /> Relatórios</button>
         <input className={`${campo} text-sm font-bold flex-1 min-w-[12rem]`} value={nome} onChange={e => { setNome(e.target.value); setSujo(true); }} />
-        <span className="text-[11px] text-[var(--c-suave)]">Pipe: {pipe?.nome || rel.pipe_id}</span>
+        <span className="text-[11px] text-[var(--c-suave)]">Pipe: {pipeDoRel?.nome || rel.pipe_id}{cfg.fontes?.length ? ` + ${cfg.fontes.length} quadro(s) do sistema` : ''}</span>
+        <button className={botao} onClick={() => setModal('fontes')}><LayoutGrid size={13} /> Quadros do sistema{cfg.fontes?.length ? ` (${cfg.fontes.length})` : ''}</button>
         <button className={botao} onClick={() => setModal('formulas')}><Sigma size={13} /> Fórmulas</button>
         <button className={botao} onClick={() => setModal('colunas')}><Columns3 size={13} /> Colunas</button>
         <button className={botao} onClick={exportar}><Download size={13} /> Exportar CSV</button>
@@ -501,6 +538,7 @@ function Relatorio({ id, pipes, onVoltar, onMudou }) {
       </div>
 
       {modal === 'colunas' && <Colunas pipe={pipe} colunas={cfg.colunas} onMudar={(c) => mudar({ colunas: c }, true)} onFechar={() => setModal('')} />}
+      {modal === 'fontes' && <Fontes fontes={fontes} escolhidas={cfg.fontes || []} onMudar={(f) => mudar({ fontes: f }, true)} onFechar={() => setModal('')} />}
       {modal === 'formulas' && <Formulas colunas={cfg.colunas} formulas={cfg.formulas} onMudar={(f) => mudar({ formulas: f }, true)} onFechar={() => setModal('')} />}
     </div>
   );

@@ -303,6 +303,7 @@ export const relatoriosService = {
   salvar:      (id, dados)   => api.patch(`/relatorios/${id}`, dados),
   excluir:     (id)          => api.delete(`/relatorios/${id}`),
   pipes:       ()            => api.get('/relatorios/pipes'),
+  fontes:      ()            => api.get('/relatorios/fontes'),
   executar:    (config, pagina = 1, todos = false) => api.post('/relatorios/executar', { config, pagina, todos }, { timeout: 120000 }),
   importacao:  ()            => api.get('/relatorios/importacao'),
   lerPipes:    ()            => api.post('/relatorios/importacao/pipes', {}, { timeout: 60000 }),
