@@ -1549,6 +1549,41 @@ export async function cancelarPedidoZen(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// POST /pedidos-orcamento/:id/excluir-zen  (só admin, em qualquer fase)
+// Exclui SOMENTE o pedido de venda no Zen (desfaz a ordem de separação antes).
+// O card continua no quadro, na mesma coluna e com os mesmos campos.
+export async function excluirPedidoZenAdmin(req, res, next) {
+  try {
+    await garantirColunas();
+    const pedido = (await query(`SELECT * FROM pedidos_orcamento WHERE id = $1`, [parseInt(req.params.id)])).rows[0];
+    if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (!pedido.zen_pedido_id) return res.status(400).json({ erro: 'Este card não tem pedido de venda no Zen.' });
+    if (pedido.zen_nota_id) return res.status(409).json({ erro: `Já existe nota fiscal (#${pedido.zen_nota_id}) para este pedido no Zen — cancele a nota no Zen antes.` });
+    let r;
+    try {
+      r = await excluirPedidoVendaZen(pedido);
+    } catch (err) {
+      console.error(`❌ ZenERP excluir pedido (admin) orçamento #${pedido.id}:`, err.message);
+      await query(`UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`, [err.message.slice(0, 1000), pedido.id]);
+      await registrarMovimento(pedido.id, 'erro_zen', {
+        de: pedido.status, para: pedido.status, usuario: req.usuario, detalhes: { acao: 'excluir_pedido_zen_admin' },
+        descricao: `Falha ao excluir o pedido #${pedido.zen_pedido_id} no Zen: ${err.message.slice(0, 500)}`,
+      });
+      return res.status(502).json({ erro: `Não foi possível excluir o pedido no ZenERP: ${err.message}` });
+    }
+    await query(
+      `UPDATE pedidos_orcamento SET zen_cancelado_id = zen_pedido_id, zen_cancelado_em = NOW(),
+              zen_pedido_id = NULL, zen_ordem_separacao_id = NULL, zen_romaneio_id = NULL, zen_erro = NULL, atualizado_em = NOW()
+        WHERE id = $1`, [pedido.id]);
+    await registrarMovimento(pedido.id, 'zen_cancelado', {
+      de: pedido.status, para: pedido.status, usuario: req.usuario,
+      descricao: `Pedido de venda #${pedido.zen_pedido_id} excluído no Zen pelo administrador${r.ordemCancelada ? ` (ordem de separação #${r.ordemCancelada} desfeita, peças de volta ao estoque)` : ''}${r.jaNaoExistia ? ' (já não existia no Zen)' : ''}. O card continua no quadro.`,
+      detalhes: { zen_pedido_id: pedido.zen_pedido_id, ordem_separacao: pedido.zen_ordem_separacao_id, acao: 'excluir_pedido_zen_admin' },
+    });
+    res.json({ sucesso: true, zen_pedido_id: pedido.zen_pedido_id, ordem_cancelada: r.ordemCancelada || null });
+  } catch (err) { next(err); }
+}
+
 // ── Fotos do card (só no B-Requisições) ─────────────────────
 // Fotos e arquivos (PDF, Word, Excel, texto) anexados no card
 const MIMES_ANEXO = /^(image\/(?:jpeg|png|webp|gif)|application\/pdf|application\/msword|application\/vnd\.ms-excel|application\/vnd\.openxmlformats-officedocument\.[\w.]+|text\/(?:plain|csv))$/;
