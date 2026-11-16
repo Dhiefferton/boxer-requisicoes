@@ -375,6 +375,7 @@ body.present .gx{ display:none; }
 .kpi .vl small{ font-family:Inter, system-ui, sans-serif; font-size:13px; color:var(--mute); }
 .kpi .dl, .kpi.kt .dl{ font-size:11px; color:var(--mute); margin-top:8px; }
 .kpi .tip{ font-size:11px; }
+.kpi .spark{ display:none; }
 .kpi.kt{ padding:20px; border-radius:12px; background:var(--surface); }
 .kpi.click:hover{ transform:translateY(-2px); border-color:var(--kc); }
 .kpi.gtile.ok{ --kc:var(--good); } .kpi.gtile.warn{ --kc:var(--warn); } .kpi.gtile.bad{ --kc:var(--bad); } .kpi.gtile.na{ --kc:var(--mute); }
@@ -1370,15 +1371,18 @@ function sparkValues(rows, ctx, k){
   for (var i=0;i<rows.length;i++){ var d = rows[i][dk]; if (!d) continue; var b = Math.min(nb-1, Math.floor(diffDays(range.from, d)/size)); if (b<0) continue; arr[b] += fn(rows[i])||0; }
   return arr;
 }
+var KTONS = ['navy', 'teal', 'violet', 'green', 'amber'];
 function renderKPIs(page, ctx){
   var box = $('#kpis'); if (!box) return; box.innerHTML = '';
-  (page.kpis||[]).forEach(function(k){
+  (page.kpis||[]).forEach(function(k, i){
     var cur = k.fn(ctx.rows, ctx, ctx.range), prev = ctx.prevRows ? k.fn(ctx.prevRows, ctx, ctx.prevRange) : null;
     var fv = k.fmtFn ? k.fmtFn(cur) : (F[k.fmt||'int'] || F.int)(cur);
-    var d = document.createElement('div'); d.className = 'kpi'+(k.tone ? ' kt kt-'+k.tone : '')+(k.mono ? ' kmono' : '');
+    // Todos os cards no modelo do Boxer Ops: cor por card (as páginas sem cor definida usam a sequência KTONS)
+    var tone = k.tone || KTONS[i % KTONS.length], mono = k.tone ? k.mono : true;
+    var d = document.createElement('div'); d.className = 'kpi kt kt-'+tone+(mono ? ' kmono' : '');
     var sub = k.sub ? k.sub(ctx.rows, ctx) : '';
-    var sp = k.spark && ctx.rows.length ? sparkSvg(sparkValues(ctx.rows, ctx, k), pal().accent) : '';
-    d.innerHTML = '<div class="lb">'+(k.tone ? '<i class="kdot"></i>' : '')+esc(k.label)+'</div><div class="vl">'+esc(fv)+(k.unit?'<small>'+esc(k.unit)+'</small>':'')+'</div><div class="dl">'+(k.noDelta ? '' : fmtDelta(k, cur, prev))+(sub?'<span>'+esc(sub)+'</span>':'')+'</div>'+sp;
+    var sp = '';
+    d.innerHTML = '<div class="lb"><i class="kdot"></i>'+esc(k.label)+'</div><div class="vl">'+esc(fv)+(k.unit?'<small>'+esc(k.unit)+'</small>':'')+'</div><div class="dl">'+(k.noDelta ? '' : fmtDelta(k, cur, prev))+(sub?'<span>'+esc(sub)+'</span>':'')+'</div>'+sp;
     if (k.title) d.title = k.title;
     box.appendChild(d);
   });
@@ -1887,10 +1891,11 @@ function render(root){
   else if (sy.state==='error') banner = h('div', { class:'note warn', style:'margin-bottom:14px' }, h('span', { html:'<b>Sem acesso à pasta agora.</b> '+esc(sy.error||'')+' Abra a gaveta em “Conectar pasta” (barra superior) para ver os detalhes.' }));
   if (banner) root.appendChild(banner);
   var kp0 = h('div', { class:'kpis' }); root.appendChild(kp0);
-  TILES.forEach(function(t){
+  var TT = ['navy', 'teal', 'violet', 'green', 'amber'];
+  TILES.forEach(function(t, i){
     var r = kp(t.ds, t.fn), fv = (F[t.fmt]||F.int)(r.cur), sub = t.sub ? t.sub(r.rows) : '';
-    var el = h('div', { class:'kpi click', title:'Abrir '+t.label, onclick:function(){ APP.go(t.page); } });
-    el.innerHTML = '<div class="lb"><span style="width:16px;height:16px;display:inline-flex">'+APP.icon(t.ic).replace('<svg','<svg style="width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round"')+'</span>'+esc(t.label)+'</div><div class="vl">'+esc(fv)+'</div><div class="dl">'+APP.fmtDelta(t, r.cur, r.prev)+(sub ? '<span>'+esc(sub)+'</span>' : '')+'</div>';
+    var el = h('div', { class:'kpi click kt kmono kt-'+TT[i % TT.length], title:'Abrir '+t.label, onclick:function(){ APP.go(t.page); } });
+    el.innerHTML = '<div class="lb"><i class="kdot"></i>'+esc(t.label)+'</div><div class="vl">'+esc(fv)+'</div><div class="dl">'+APP.fmtDelta(t, r.cur, r.prev)+(sub ? '<span>'+esc(sub)+'</span>' : '')+'</div>';
     kp0.appendChild(el);
   });
 
