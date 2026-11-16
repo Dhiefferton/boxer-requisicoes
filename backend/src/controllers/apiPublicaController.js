@@ -48,6 +48,7 @@ export function garantirEstruturaApi() {
 export const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 // ── Fontes de dados de cada tela ──────────────────────────────
+const GARANTIA = `(origem = 'pipefy_garantia' OR cif_status IS NOT NULL)`;
 // recurso -> { tabela, onde? (filtro fixo da tela), ordem? }
 const FONTES = {
   catalogo:               { materiais: { tabela: 'materiais' }, categorias: { tabela: 'categorias' } },
@@ -61,9 +62,16 @@ const FONTES = {
   necessidade_pecas:      { necessidades: { tabela: 'necessidades_pecas' } },
   recebimento_importacao: { notas: { tabela: 'rec_imp_notas' }, itens: { tabela: 'rec_imp_itens' }, pecas_fora_da_nota: { tabela: 'rec_imp_extras' } },
   relatorios:             { cards: { tabela: 'rel_cards' }, pipes: { tabela: 'rel_pipes' }, relatorios: { tabela: 'rel_relatorios' } },
-  lojinha:                { pedidos: { tabela: 'lojinha_boxer_pedidos', onde: `COALESCE(origem, '') <> 'pipefy_garantia'` }, movimentos: { tabela: 'loj_movimentos' } },
-  orcamentos:             { pedidos: { tabela: 'pedidos_orcamento' }, movimentos: { tabela: 'pedidos_orcamento_movimentos' } },
-  logistica_cif:          { pedidos: { tabela: 'lojinha_boxer_pedidos', onde: `(origem = 'pipefy_garantia' OR cif_status IS NOT NULL)` } },
+  // campos = nome de cada campo (id → rotulo) para ler os valores do card; colunas = fases do quadro
+  lojinha:                { pedidos: { tabela: 'lojinha_boxer_pedidos', onde: `COALESCE(origem, '') <> 'pipefy_garantia'` }, movimentos: { tabela: 'loj_movimentos' },
+                            campos: { tabela: 'loj_campos' }, colunas: { tabela: 'loj_colunas' } },
+  orcamentos:             { pedidos: { tabela: 'pedidos_orcamento' }, movimentos: { tabela: 'pedidos_orcamento_movimentos' },
+                            campos: { tabela: 'orc_campos' }, colunas: { tabela: 'orc_colunas' } },
+  // Garantia: pedidos (fase em cif_status, valores dos campos em cif_valores, tratativa do SAC em tratativa),
+  // movimentos (histórico de fases e campos preenchidos), campos (cif_bx_<id> → nome) e colunas (fases)
+  logistica_cif:          { pedidos: { tabela: 'lojinha_boxer_pedidos', onde: GARANTIA },
+                            movimentos: { tabela: 'loj_movimentos', onde: `pedido_id IN (SELECT id FROM lojinha_boxer_pedidos WHERE ${GARANTIA})` },
+                            campos: { tabela: 'cif_campos' }, colunas: { tabela: 'cif_colunas' } },
   databases:              { bases: { tabela: 'bx_bases' }, registros: { tabela: 'bx_base_registros' } },
 };
 // Telas que nunca saem pela API (usuários, senhas, configurações internas)
@@ -76,7 +84,11 @@ const quadroDe = (tela) => {
 function fontesDaTela(tela) {
   if (FONTES[tela]) return FONTES[tela];
   const q = quadroDe(tela);
-  if (q) return { cards: { tabela: 'bx_quadro_cards', onde: `quadro_id = ${q}` } };
+  if (q) return {
+    cards: { tabela: 'bx_quadro_cards', onde: `quadro_id = ${q}` },
+    movimentos: { tabela: 'bx_quadro_movimentos', onde: `quadro_id = ${q}` },
+    campos: { tabela: `qd${q}_campos` }, colunas: { tabela: `qd${q}_colunas` },
+  };
   return null;
 }
 
