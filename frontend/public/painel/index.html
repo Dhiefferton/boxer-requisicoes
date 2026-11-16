@@ -352,6 +352,35 @@ body.present .gx{ display:none; }
 .kt-violet{ --kc:#7c3aed; } .kt-navy{ --kc:#1e3a8a; } .kt-teal{ --kc:#0e8aa3; } .kt-green{ --kc:#059669; } .kt-red{ --kc:#dc2626; }
 :root[data-theme="dark"] .kt-violet{ --kc:#a78bfa; } :root[data-theme="dark"] .kt-navy{ --kc:#7aa2ff; } :root[data-theme="dark"] .kt-teal{ --kc:#35c4de; } :root[data-theme="dark"] .kt-green{ --kc:#34d399; } :root[data-theme="dark"] .kt-red{ --kc:#f87171; }
 .kt-amber{ --kc:#d97706; } :root[data-theme="dark"] .kt-amber{ --kc:#fbbf24; }
+
+/* ---------- Cards de indicadores no modelo do Boxer Ops (16/11/2026) ---------- */
+.kpis{ grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:14px; margin-bottom:18px; }
+.kpi:not(.kt):not(.gtile){ --kc:#0284c7; }
+.kpi{ background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px;
+  box-shadow:0 1px 3px rgba(0,0,0,.04); position:relative; overflow:hidden; text-align:left; }
+.kpi::before{ content:''; position:absolute; top:-30px; right:-30px; width:90px; height:90px; border-radius:50%;
+  background:var(--kc); opacity:.15; filter:blur(28px); pointer-events:none; }
+.kpis > .kpi:not(.kt):nth-child(5n+2){ --kc:#0e8aa3; }
+.kpis > .kpi:not(.kt):nth-child(5n+3){ --kc:#7c3aed; }
+.kpis > .kpi:not(.kt):nth-child(5n+4){ --kc:#059669; }
+.kpis > .kpi:not(.kt):nth-child(5n+5){ --kc:#d97706; }
+.kpi .lb, .kpi.kt .lb{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--mute);
+  display:flex; align-items:center; gap:5px; margin:0 0 10px; }
+.kpi .lb::before{ content:''; width:5px; height:5px; border-radius:50%; background:var(--kc); flex:0 0 auto; }
+.kpi .lb:has(> span)::before, .kpi.kt .lb::before, .kpi.gtile .lb::before{ display:none; }
+.kpi .lb > span{ color:var(--kc); }
+.kpi.kt .kdot{ width:5px; height:5px; }
+.kpi .vl, .kpi.kt .vl, .kpi.kt.kmono .vl{ font-family:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size:28px; font-weight:800; letter-spacing:-.03em; line-height:1; margin-top:0; color:var(--kc); font-variant-numeric:tabular-nums; }
+.kpi .vl small{ font-family:Inter, system-ui, sans-serif; font-size:13px; color:var(--mute); }
+.kpi .dl, .kpi.kt .dl{ font-size:11px; color:var(--mute); margin-top:8px; }
+.kpi .tip{ font-size:11px; }
+.kpi.kt{ padding:20px; border-radius:12px; background:var(--surface); }
+.kpi.click:hover{ transform:translateY(-2px); border-color:var(--kc); }
+.kpi.gtile.ok{ --kc:var(--good); } .kpi.gtile.warn{ --kc:var(--warn); } .kpi.gtile.bad{ --kc:var(--bad); } .kpi.gtile.na{ --kc:var(--mute); }
+.kpi.gtile .vl{ margin-bottom:10px; }
+.kpi.gtile .lb{ margin:0; }
+:root[data-theme="dark"] .kpi{ box-shadow:none; }
 </style>
 </head>
 <body>
@@ -1853,7 +1882,7 @@ function render(root){
   root.appendChild(h('div', { class:'hero' }, h('div', null, h('h2', { text:'Visão geral da operação' }), h('p', { text:'Resumo de '+perTxt+', comparado ao período imediatamente anterior. Clique em qualquer cartão ou gráfico para abrir a análise detalhada.' }))));
 
   var sy = APP.sync, banner = null;
-  if (sy.state==='idle') banner = h('div', { class:'note warn', style:'margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' }, h('span', { style:'flex:1;min-width:260px', html:'<b>Você está vendo a base embutida'+(APP.snapMeta ? ' de '+esc(APP.snapMeta.built) : '')+'.</b> Para o painel se atualizar sozinho, conecte a pasta das planilhas (uma vez por navegador).' }), h('button', { class:'btn primary', onclick:function(){ sy.connect(); }, text:'Conectar pasta' }));
+  if (sy.state==='idle' && !(APP.cloud && APP.cloud.role)) banner = h('div', { class:'note warn', style:'margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' }, h('span', { style:'flex:1;min-width:260px', html:'<b>Você está vendo a base embutida'+(APP.snapMeta ? ' de '+esc(APP.snapMeta.built) : '')+'.</b> Para o painel se atualizar sozinho, conecte a pasta das planilhas (uma vez por navegador).' }), h('button', { class:'btn primary', onclick:function(){ sy.connect(); }, text:'Conectar pasta' }));
   else if (sy.state==='needs-permission') banner = h('div', { class:'note warn', style:'margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' }, h('span', { style:'flex:1;min-width:260px', html:'<b>A pasta está conectada, mas o navegador pediu para confirmar o acesso.</b> Clique em “Permitir acesso” (e escolha “Permitir em todas as visitas”, se aparecer).' }), h('button', { class:'btn primary', onclick:function(){ sy.reauthorize(); }, text:'Permitir acesso' }));
   else if (sy.state==='error') banner = h('div', { class:'note warn', style:'margin-bottom:14px' }, h('span', { html:'<b>Sem acesso à pasta agora.</b> '+esc(sy.error||'')+' Abra a gaveta em “Conectar pasta” (barra superior) para ver os detalhes.' }));
   if (banner) root.appendChild(banner);
