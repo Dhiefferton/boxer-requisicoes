@@ -4492,6 +4492,102 @@ pg.kpis = [
 ];
 })();
 
+;
+/* ===== Cards de indicadores iguais ao Boxer Ops (boxer-ops.vercel.app) — demais páginas ===== */
+(function(){
+'use strict';
+var APP = window.APP, U = APP.U, F = U.F, H = APP.H;
+var MES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+function ymL(ym){ var p = ym.split('-'); return MES[+p[1]-1]+'/'+p[0]; }
+function periodo(ctx){
+  var r = ctx && ctx.range; if (!r || r.empty) return '';
+  var a = r.from.slice(0,7), b = r.to.slice(0,7);
+  if (a===b) return ymL(a);
+  return (r.ym || r.from.slice(8,10)==='01') ? ymL(a)+' – '+ymL(b) : F.date(r.from)+' – '+F.date(r.to);
+}
+function noPeriodo(lista, ctx){ var r = ctx && ctx.range; if (!r || r.empty) return lista; var a = r.from.slice(0,7), b = r.to.slice(0,7); return lista.filter(function(x){ return x.ym>=a && x.ym<=b; }); }
+function sum(a, f){ return U.sum(a, f); }
+function uniq(a, f){ return H.uniqCount(a, f); }
+function pct(v){ return v==null || isNaN(v) ? '' : (v*100).toLocaleString('pt-BR', { minimumFractionDigits:1, maximumFractionDigits:1 })+'%'; }
+function pct2(v){ return v==null || isNaN(v) ? '—' : (v*100).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })+'%'; }
+function por(id, kpis){ var pg = APP.pages.filter(function(p){ return p.id===id; })[0]; if (pg) pg.kpis = kpis; }
+function meta(id, padrao){ try { var G = APP.G, d = G && G.def && G.def(id); var m = d ? G.metaOf(d) : null; return m!=null ? m : padrao; } catch(e){ return padrao; } }
+var P = function(rows, ctx){ return periodo(ctx); };
+function txt(t){ return function(){ return t; }; }
+
+// Inventário
+function curva(c){ return function(rows){ var a = rows.filter(function(r){ return r.cur===c; }); return a.length ? sum(a, function(r){ return r.ok; })/a.length : null; }; }
+por('inv', [
+  { label:'Total de contagem', tone:'navy', noDelta:true, fn:function(rows){ return rows.length; }, sub:P },
+  { label:'Acuracidade geral', tone:'teal', noDelta:true, fmt:'pct', fn:function(rows){ return rows.length ? sum(rows, function(r){ return r.ok; })/rows.length : null; }, sub:P },
+  { label:'Curva A', tone:'violet', noDelta:true, fmt:'pct', fn:curva('Curva A'), sub:txt('Assertividade') },
+  { label:'Curva B', tone:'green', noDelta:true, fmt:'pct', fn:curva('Curva B'), sub:txt('Assertividade') },
+  { label:'Curva C', tone:'amber', noDelta:true, fmt:'pct', fn:curva('Curva C'), sub:txt('Assertividade') }
+]);
+// Insumos e EPIs
+por('ins', [
+  { label:'Valor total', tone:'navy', noDelta:true, fmt:'cur2', fn:function(rows){ return sum(rows, function(r){ return r.val; }); }, sub:P },
+  { label:'Produtos distintos', tone:'teal', noDelta:true, fn:function(rows){ return uniq(rows, function(r){ return r.prod; }); }, sub:txt('No período/filtro') },
+  { label:'Setores atendidos', tone:'violet', noDelta:true, fn:function(rows){ return uniq(rows, function(r){ return r.set; }); }, sub:P }
+]);
+// Partes e Peças
+por('pp', [
+  { label:'Quantidade total', tone:'navy', noDelta:true, fn:function(rows){ return sum(rows, function(r){ return r.qtd; }); }, sub:P },
+  { label:'Produtos distintos', tone:'teal', noDelta:true, fn:function(rows){ return uniq(rows, function(r){ return r.cod; }); }, sub:txt('Movimentados') },
+  { label:'Departamentos', tone:'violet', noDelta:true, fn:function(rows){ return uniq(rows, function(r){ return r.dep; }); }, sub:txt('Atendidos') },
+  { label:'Colaboradores', tone:'green', noDelta:true, fn:function(rows){ return uniq(rows, function(r){ return r.fn; }); }, sub:txt('Envolvidos') }
+]);
+// Faturamento
+function tipo(re){ return function(rows){ return rows.filter(function(r){ return re.test(r.pf||''); }).length; }; }
+function doTotal(re){ return function(rows){ return rows.length ? pct(rows.filter(function(r){ return re.test(r.pf||''); }).length/rows.length)+' do total' : ''; }; }
+por('fat', [
+  { label:'Notas emitidas (mês)', tone:'navy', noDelta:true, fn:function(rows){ return rows.length; }, sub:P },
+  { label:'Venda', tone:'teal', noDelta:true, fn:tipo(/^Venda$/), sub:doTotal(/^Venda$/) },
+  { label:'Remessa conserto', tone:'violet', noDelta:true, fn:tipo(/^RemessaConserto/), sub:doTotal(/^RemessaConserto/) },
+  { label:'Retorno conserto', tone:'green', noDelta:true, fn:tipo(/^RetornoConserto/), sub:doTotal(/^RetornoConserto/) },
+  { label:'Devolução', tone:'amber', noDelta:true, fn:tipo(/^Devolucao/), sub:doTotal(/^Devolucao/) }
+]);
+// Auditoria de frete (CT-e)
+por('auditoria', [
+  { label:'CT-e auditados', tone:'navy', noDelta:true, fn:function(rows, ctx){ return sum(noPeriodo(APP.DS.fq || [], ctx), function(r){ return r.aud; }); }, sub:P },
+  { label:'CT-e liberados', tone:'teal', noDelta:true, fn:function(rows, ctx){ return sum(noPeriodo(APP.DS.fq || [], ctx), function(r){ return r.lib; }); }, sub:P },
+  { label:'CT-e com erro', tone:'red', noDelta:true, fn:function(rows){ return sum(rows, function(r){ return r.qtd || 1; }); }, sub:txt('Identificados na auditoria') },
+  { label:'Saving do mês', tone:'green', noDelta:true, fmt:'cur2', fn:function(rows){ return sum(rows, function(r){ return r.sav; }); }, sub:txt('Correção de erros de frete') }
+]);
+// Transporte próprio (caminhão)
+var CUSTO_FIXO_CAMINHAO = 23052; // custo fixo mensal de referência (mesmo valor do Boxer Ops)
+por('caminhao', [
+  { label:'Custo mensal caminhão', tone:'navy', noDelta:true, fmt:'cur', fn:function(){ return CUSTO_FIXO_CAMINHAO; }, sub:txt('Custo fixo de referência') },
+  { label:'Custo caminhão (mês)', tone:'teal', noDelta:true, fmt:'cur', fn:function(rows){ return sum(rows, function(r){ return r.cam; }); }, sub:txt('Operação própria') },
+  { label:'Custo Rodo Cargo (mês)', tone:'violet', noDelta:true, fmt:'cur', fn:function(rows){ return sum(rows, function(r){ return r.rodo; }); }, sub:txt('Equivalente terceirizado') },
+  { label:'Redução de custos', tone:'green', noDelta:true, fmt:'cur', fn:function(rows){ return sum(rows, function(r){ return r.rodo; }) - sum(rows, function(r){ return r.cam; }); },
+    sub:function(rows){ var ro = sum(rows, function(r){ return r.rodo; }), c = sum(rows, function(r){ return r.cam; }); return ro ? pct((ro-c)/ro)+(ro>=c ? ' mais barato' : ' mais caro') : ''; } },
+  { label:'Viagens (mês)', tone:'amber', noDelta:true, fn:function(rows){ return rows.length; }, sub:P }
+]);
+// Correios
+por('correios', [
+  { label:'Tickets (mês)', tone:'navy', noDelta:true, fn:function(rows){ return sum(rows, function(r){ return r.qt; }); }, sub:P },
+  { label:'Valor tickets', tone:'teal', noDelta:true, fmt:'cur', fn:function(rows){ return sum(rows, function(r){ return r.vl; }); }, sub:P },
+  { label:'Valor declarado', tone:'violet', noDelta:true, fmt:'cur', fn:function(rows){ return sum(rows, function(r){ return r.vd; }); }, sub:P },
+  { label:'% Tickets / nota', tone:'amber', noDelta:true, fmtFn:pct2, fn:function(rows){ var d = sum(rows, function(r){ return r.vd; }); return d ? sum(rows, function(r){ return r.vl; })/d : null; }, sub:P }
+]);
+// Transportadoras
+por('transp', [
+  { label:'Faturamento (mês)', tone:'navy', noDelta:true, fmt:'cur', fn:function(rows){ return sum(rows, function(r){ return r.nf; }); }, sub:P },
+  { label:'Conta frete (mês)', tone:'teal', noDelta:true, fmt:'cur', fn:function(rows){ return sum(rows, function(r){ return r.fr; }); }, sub:P },
+  { label:'% Frete / nota', tone:'amber', noDelta:true, fmtFn:pct2, fn:function(rows){ var n = sum(rows, function(r){ return r.nf; }); return n ? sum(rows, function(r){ return r.fr; })/n : null; },
+    sub:function(){ return 'Meta: '+(meta('tr_pct', 0.03)*100).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })+'%'; } }
+]);
+// Declaração de conteúdo
+por('decl', [
+  { label:'Declarações', tone:'navy', noDelta:true, fn:function(rows){ return rows.length; }, sub:P },
+  { label:'Quantidade total', tone:'teal', noDelta:true, fn:function(rows){ return sum(rows, function(r){ return r.qtd; }); }, sub:txt('Itens declarados') },
+  { label:'Solicitantes', tone:'violet', noDelta:true, fn:function(rows){ return uniq(rows, function(r){ return r.sol; }); }, sub:txt('Distintos no período') },
+  { label:'Produtos', tone:'green', noDelta:true, fn:function(rows){ return uniq(rows, function(r){ return r.prod; }); }, sub:txt('Distintos no período') }
+]);
+})();
+
+
 </script>
 <script>window.CLOUD_CFG={"url":"boxer-operacoes","key":"boxer-operacoes"};</script>
 <script>
