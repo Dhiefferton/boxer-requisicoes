@@ -15,6 +15,8 @@ export default function PainelLogistico() {
       <iframe
         title="Painel Logístico"
         src="/painel/index.html"
+        allow="fullscreen"
+        allowFullScreen
         className="block w-full border-0 bg-[var(--c-fundo)]"
         style={{ height: 'calc(100dvh - 4rem)' }}
       />
