@@ -45,6 +45,8 @@ export const TELAS = [
   // Sem acesso por padrão: libera por pessoa em Admin › Usuários (admin sempre tem)
   { chave: 'wms',        nome: 'Armazém (WMS)',         rotas: [],                        legado: () => 'nenhum' },
   { chave: 'frotas',     nome: 'Frotas',                rotas: ['/frotas'],               legado: () => 'nenhum' },
+  // Painel Logístico (mesma tela, mesmo login): "Só ver" = leitura; "Ver e mexer" = importa planilhas e grava metas
+  { chave: 'painel',     nome: 'Painel Logístico',      rotas: ['/painel-logistico'],     legado: u => perfilEm(u, 'admin') ? 'editar' : 'nenhum' },
   { chave: 'orcamentos', nome: 'Orçamentos',            rotas: ['/pedidos-orcamento'],
     legado: u => perfilEm(u, 'operador', 'admin') ? 'editar' : ORCAMENTOS_SOMENTE_LEITURA.includes(email(u)) ? 'ver' : 'nenhum' },
 ];

@@ -21,6 +21,7 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;   // API e externos: direto na rede
   if (url.pathname.startsWith('/api/')) return;
+  if (url.pathname.startsWith('/painel/')) return;   // Painel Logístico: arquivo próprio, sempre da rede
 
   // Navegação: rede primeiro (sempre a versão nova), cache só se estiver offline
   if (req.mode === 'navigate') {

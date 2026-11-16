@@ -68,6 +68,11 @@ import {
   excluirChave as excluirChaveApi, acessosDaChave,
 } from '../controllers/apiPublicaController.js';
 import { autenticar, exigirPerfil, exigirAdminOuSetor } from '../middlewares/auth.js';
+import {
+  lerPainel, editarPainel, eu as euPainel, listarMeta as metaPainel, salvarMeta as salvarMetaPainel,
+  lerBlocos as blocosPainel, apagarBlocos as apagarBlocosPainel, gravarBlocos as gravarBlocosPainel,
+  lerEstado as estadoPainel, salvarEstado as salvarEstadoPainel,
+} from '../controllers/painelController.js';
 import { gerarCodigoSso, trocarCodigoSso, notaFrotas } from '../controllers/ssoController.js';
 import { acessoConstrutor, statusConstrutor, ligarConstrutor, listarRascunhos, verRascunho, criarRascunho, salvarRascunho, excluirRascunho, aprovarRascunho, telasParaCopiar, copiarTela } from '../controllers/construtorController.js';
 import { relatorioUsoPipefy, chamadasPipefy } from '../integrations/usoPipefy.js';
@@ -390,6 +395,16 @@ router.get('/relatorios/importacao',               ...relBase,  estadoImpRel);
 router.post('/relatorios/importacao/pipes',        ...relAdmin, listarPipesPipefyRel);
 router.post('/relatorios/importacao/lote',         ...relAdmin, importarLoteRel);
 router.get('/relatorios/pipes',                    ...relBase,  listarPipesRel);
+
+// ── Painel Logístico (frontend/public/painel) — mesmo login; tela "painel"
+router.get('/painel/eu',               autenticar, euPainel);
+router.get('/painel/meta',             autenticar, lerPainel, metaPainel);
+router.put('/painel/meta',             autenticar, editarPainel, salvarMetaPainel);
+router.get('/painel/blocos/:ds',       autenticar, lerPainel, blocosPainel);
+router.delete('/painel/blocos/:ds',    autenticar, editarPainel, apagarBlocosPainel);
+router.post('/painel/blocos',          autenticar, editarPainel, gravarBlocosPainel);
+router.get('/painel/estado',           autenticar, lerPainel, estadoPainel);
+router.put('/painel/estado',           autenticar, editarPainel, salvarEstadoPainel);
 router.get('/relatorios/fontes',                   ...relBase,  listarFontesRel);
 router.post('/relatorios/executar',                ...relBase,  executarRel);
 router.get('/relatorios',                          ...relBase,  listarRel);

@@ -37,6 +37,7 @@ const SISTEMA = [
   { chave: 'databases', grupo: 'logistica', rota: '/databases', nome: 'Databases', icon: Database, cor: '#0369a1', desc: 'Bases de registros' },
   { chave: 'armazenamento', grupo: 'logistica', rota: '/armazenamento', nome: 'Armazenamento', icon: Video, cor: '#4b5563', desc: 'Vídeos e arquivos' },
   { chave: 'relatorios', grupo: 'logistica', rota: '/relatorios', nome: 'Relatórios', icon: BarChart3, cor: '#0ea5e9', desc: 'Histórico do Pipefy' },
+  { chave: 'painel', grupo: 'logistica', rota: '/painel-logistico', nome: 'Painel Logístico', icon: Gauge, cor: '#0f766e', desc: 'Indicadores e gestão' },
   { chave: 'inventario', grupo: 'almoxarifado', rota: '/inventario', nome: 'Inventário', icon: Boxes, cor: '#d97706', desc: 'Contagens de estoque' },
   { chave: 'catalogo', grupo: 'almoxarifado', rota: '/catalogo', nome: 'Catálogo / Requisição', icon: ClipboardList, cor: '#475569', desc: 'Requisição de materiais' },
   { chave: 'historico', grupo: 'almoxarifado', rota: '/historico', nome: 'Histórico', icon: History, cor: '#64748b', desc: 'Requisições feitas' },

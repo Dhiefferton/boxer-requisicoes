@@ -34,6 +34,7 @@ export const TELAS = [
   // Outros sistemas abertos pela tela inicial (sem rotas aqui)
   { chave: 'wms',                    nome: 'Armazém (WMS)' },
   { chave: 'frotas',                 nome: 'Frotas' },
+  { chave: 'painel',                 nome: 'Painel Logístico' },
 ];
 const CHAVES = new Set(TELAS.map(t => t.chave));
 // Telas criadas pelo admin (quadros): quadro_<id>

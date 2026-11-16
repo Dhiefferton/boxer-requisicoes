@@ -11,7 +11,7 @@ import {
   Wrench, ShoppingBag, ShieldCheck, Kanban, Boxes, ClipboardList, History, LayoutDashboard, PackageOpen, Warehouse,
   Truck, BarChart3, ShoppingCart, Puzzle, Database, Video, Settings, Plus, Lock, Star,
   ArrowRightLeft, CheckCheck, ThumbsUp, FileCheck2, Timer,
-  Search, X,
+  Search, X, Gauge,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTelas } from '../utils/nomesTelas';
@@ -34,6 +34,7 @@ const SISTEMA = [
   { chave: 'estoque', rota: '/estoque', nome: 'Estoque', icon: Warehouse, cor: '#0891b2', desc: 'Saldo de estoque' },
   { chave: 'recebimento_importacao', rota: '/recebimento-importacao', nome: 'Recebimento / Importação', icon: Truck, cor: '#7c3aed', desc: 'Conferência de importação' },
   { chave: 'relatorios', rota: '/relatorios', nome: 'Relatórios', icon: BarChart3, cor: '#0ea5e9', desc: 'Histórico do Pipefy' },
+  { chave: 'painel', rota: '/painel-logistico', nome: 'Painel Logístico', icon: Gauge, cor: '#0f766e', desc: 'Indicadores e gestão' },
   { chave: 'mrp', rota: '/mrp', nome: 'MRP', icon: BarChart3, cor: '#be185d', desc: 'Planejamento' },
   { chave: 'compras', rota: '/compras', nome: 'Compras', icon: ShoppingCart, cor: '#ca8a04', desc: 'Pedidos de compra' },
   { chave: 'necessidade_pecas', rota: '/necessidade-pecas', nome: 'Necessidade de Peças', icon: Puzzle, cor: '#dc2626', desc: 'Peças a comprar' },

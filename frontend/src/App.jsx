@@ -25,6 +25,7 @@ import LogisticaCif from './pages/operador/LogisticaCif';
 import QuadroPersonalizado from './pages/operador/QuadroPersonalizado';
 import Telas from './pages/operador/Telas';
 const FrotasApp = lazy(() => import('./frotas/FrotasApp'));
+const PainelLogistico = lazy(() => import('./pages/operador/PainelLogistico'));
 import Construtor from './pages/operador/Construtor';
 import Inicio from './pages/Inicio';
 import Databases from './pages/operador/Databases';
@@ -134,6 +135,9 @@ export default function App() {
             } />
             <Route path="/frotas/*" element={
               <RotaTela tela="frotas"><Suspense fallback={<div className="min-h-[50vh] flex items-center justify-center"><Spinner size={32} className="text-[var(--c-destaque)]" /></div>}><FrotasApp /></Suspense></RotaTela>
+            } />
+            <Route path="/painel-logistico" element={
+              <RotaTela tela="painel"><Suspense fallback={null}><PainelLogistico /></Suspense></RotaTela>
             } />
             <Route path="/telas" element={
               <RotaTela tela="telas"><Telas /></RotaTela>
