@@ -208,7 +208,6 @@ export default function InicioNovo() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4">
                   {itens.map(b => {
                     const Icon = b.icon;
-                    const cor = /^#[0-9a-f]{6}$/i.test(b.cor || '') ? b.cor : COR_PADRAO;
                     const fav = favoritas.includes(b.chave);
                     const qtd = b.conta ? dados?.telas?.[b.chave] : undefined;
                     return (
@@ -216,9 +215,8 @@ export default function InicioNovo() {
                         onClick={() => abrir(b)}
                         onKeyDown={e => { if (e.key === 'Enter') abrir(b); }}
                         title={!b.liberada ? 'Você não tem acesso a esta tela' : b.externo ? `Abrir ${b.nome} (em outra aba)` : `Abrir ${b.nome}`}
-                        className={`group relative h-36 rounded-2xl border p-4 flex flex-col transition-colors ${b.liberada ? 'cursor-pointer hover:brightness-110' : 'cursor-not-allowed opacity-50 grayscale'}`}
-                        style={{ background: `${cor}1f`, borderColor: `${cor}40` }}>
-                        <span className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: b.liberada ? cor : '#4b5563' }}>
+                        className={`group relative h-36 rounded-2xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4 flex flex-col transition-colors ${b.liberada ? 'cursor-pointer hover:border-[var(--c-destaque)] hover:shadow-sm' : 'cursor-not-allowed opacity-50 grayscale'}`}>
+                        <span className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: b.liberada ? AZUL : '#4b5563' }}>
                           <Icon size={20} strokeWidth={1.75} className="text-white" />
                         </span>
                         {b.liberada && (
