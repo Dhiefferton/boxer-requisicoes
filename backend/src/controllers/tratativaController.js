@@ -31,7 +31,7 @@ export async function verTratativa(req, res, next) {
     await garantir();
     const p = (await query(`SELECT id, pipefy_card_id, tratativa, tratativa_em FROM pedidos_orcamento WHERE id = $1`, [parseInt(req.params.id) || 0])).rows[0];
     if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
-    if (!p.pipefy_card_id) return res.json({ tratativa: null, motivo: 'Card criado no B-Requisições (sem tratativa do SAC).' });
+    if (!p.pipefy_card_id) return res.json(p.tratativa ? { tratativa: p.tratativa, lido_em: p.tratativa_em } : { tratativa: null, motivo: 'Card criado no B-Requisições (sem tratativa do SAC).' });
     if (p.tratativa_em && req.query.atualizar !== '1') return res.json({ tratativa: p.tratativa, lido_em: p.tratativa_em });
     try {
       const t = await buscarTratativa(p.pipefy_card_id);

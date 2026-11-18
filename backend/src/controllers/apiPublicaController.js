@@ -63,7 +63,7 @@ const FONTES = {
   recebimento_importacao: { notas: { tabela: 'rec_imp_notas' }, itens: { tabela: 'rec_imp_itens' }, pecas_fora_da_nota: { tabela: 'rec_imp_extras' } },
   relatorios:             { cards: { tabela: 'rel_cards' }, pipes: { tabela: 'rel_pipes' }, relatorios: { tabela: 'rel_relatorios' } },
   // campos = nome de cada campo (id → rotulo) para ler os valores do card; colunas = fases do quadro
-  lojinha:                { pedidos: { tabela: 'lojinha_boxer_pedidos', onde: `COALESCE(origem, '') <> 'pipefy_garantia'` }, movimentos: { tabela: 'loj_movimentos' },
+  lojinha:                { pedidos: { tabela: 'lojinha_boxer_pedidos', onde: `COALESCE(origem, '') NOT IN ('pipefy_garantia', 'tratativa_sac')` }, movimentos: { tabela: 'loj_movimentos' },
                             campos: { tabela: 'loj_campos' }, colunas: { tabela: 'loj_colunas' } },
   orcamentos:             { pedidos: { tabela: 'pedidos_orcamento' }, movimentos: { tabela: 'pedidos_orcamento_movimentos' },
                             campos: { tabela: 'orc_campos' }, colunas: { tabela: 'orc_colunas' } },

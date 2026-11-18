@@ -561,8 +561,111 @@ export async function moverCard(req, res, next) {
     await movimento(qid, r.rows[0], 'movido', { de: atual, para: status, usuario: req.usuario,
       descricao: `Movido de ${col.get(atual)?.nome || atual} para ${col.get(status)?.nome || status}` });
     if (ehLiberacao(col.get(status)?.nome)) await copiarParaTelas(`quadro_${qid}`, p.id, req.usuario);
+    if (ehEmTransito(col.get(status)?.nome)) await encaminharTratativa(qid, r.rows[0], cfg, c, req.usuario);
     res.json({ card: r.rows[0] });
   } catch (err) { next(err); }
+}
+
+// ── Tratativa do SAC → Orçamentos / Garantia ────────────────────────────────
+// Quando um card da tela de Tratativa chega na coluna "Em Trânsito", cria o card na tela certa:
+//   • "Mover para" = Garantia, ou Situação p/ = "Garantia de Conserto"            → Garantia - Boxer Soldas
+//   • "Mover para" = Orçamento, ou Situação p/ = Orçamento / Orçamento - Análise de
+//     Garantia / Retorno em Garantia / SOS Boxer                                   → Orçamentos
+//   • Análise de Troca / Troca (ou sem situação): não cria nada.
+// O card novo leva a tratativa inteira (todos os campos preenchidos) para o Formulário inicial,
+// igual vinha do Pipefy, e o Registro de NS (#nº do card da tratativa). Cria uma vez só por card.
+export const ehEmTransito = (nome) => /em\s+transito/.test(normTxt(nome));
+const ehTelaTratativa = (nome) => /tratativa/.test(normTxt(nome));
+const textoValor = (v) => {
+  if (v == null) return '';
+  if (Array.isArray(v)) return v.map(x => (x && typeof x === 'object' ? (x.titulo ?? x.nome ?? x.title ?? '') : String(x ?? ''))).filter(Boolean).join(', ');
+  if (typeof v === 'object') return String(v.titulo ?? v.nome ?? v.title ?? '');
+  const t = String(v).trim();
+  if (t.startsWith('[')) { try { const a = JSON.parse(t); if (Array.isArray(a)) return textoValor(a); } catch { /* texto */ } }
+  return t;
+};
+export function destinoTratativa(situacao, moverPara) {
+  const m = normTxt(moverPara), s = normTxt(situacao);
+  if (/garantia/.test(m) && !/orcamento/.test(m)) return 'garantia';
+  if (/orcamento/.test(m)) return 'orcamento';
+  if (s === 'garantia de conserto') return 'garantia';
+  if (/orcamento/.test(s) || s === 'retorno em garantia' || s === 'sos boxer') return 'orcamento';
+  return null;
+}
+let estEnvios = null;
+const garantirEnvios = () => (estEnvios ||= query(`
+  CREATE TABLE IF NOT EXISTS bx_tratativa_envios (
+    quadro_id  INTEGER NOT NULL,
+    card_id    INTEGER NOT NULL,
+    destino    VARCHAR(20) NOT NULL,
+    destino_id INTEGER,
+    criado_em  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (quadro_id, card_id)
+  );
+  ALTER TABLE bx_tratativa_envios ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS tratativa JSONB;
+  ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS tratativa_em TIMESTAMPTZ;
+  ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS tratativa_card_id TEXT;
+  ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS tratativa JSONB;
+  ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS tratativa_em TIMESTAMPTZ;
+  ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS tratativa_card_id TEXT;`).catch(e => { estEnvios = null; throw e; }));
+
+/** Nunca lança erro: falha fica no histórico do card da tratativa. */
+export async function encaminharTratativa(qid, card, cfg, cq, usuario = null) {
+  try {
+    const q = (await query(`SELECT id, nome FROM bx_quadros WHERE id = $1`, [qid])).rows[0];
+    if (!q || !ehTelaTratativa(q.nome)) return null;
+    const valores = card.valores || {};
+    const valorDe = (re) => cfg.campos.filter(f => re.test(normTxt(f.rotulo))).map(f => textoValor(valores[cq.idCampoConfig(f)])).find(Boolean) || '';
+    const situacao = valorDe(/^situacao/);
+    const moverPara = valorDe(/^mover para/);
+    const destino = destinoTratativa(situacao, moverPara);
+    if (!destino) return null;
+    await garantirEnvios();
+    const reserva = await query(`INSERT INTO bx_tratativa_envios (quadro_id, card_id, destino) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING card_id`, [qid, card.id, destino]);
+    if (!reserva.rows[0]) return null; // já foi criado antes
+    // Tratativa no mesmo formato da que vinha do Pipefy (TratativaSAC.jsx)
+    const fase = cfg.colunas.find(x => x.chave === card.status)?.nome || card.status;
+    const campos = cfg.campos.filter(f => f.tipo !== 'anexo')
+      .map(f => ({ id: cq.idCampoConfig(f), nome: f.rotulo, tipo: f.tipo, valor: textoValor(valores[cq.idCampoConfig(f)]) }))
+      .filter(x => x.valor);
+    const tratativa = { card_id: String(card.id), titulo: card.titulo, url: null, pipe: q.nome, fase, origem: 'boxer',
+      criado_em: card.criado_em, criado_por: card.criado_por_nome || null, campos };
+    const cliente = (valorDe(/^cliente$/) || card.titulo || `Tratativa #${card.id}`).slice(0, 255);
+    let destinoId = null, destinoNome = '';
+    if (destino === 'orcamento') {
+      const ins = await query(
+        `INSERT INTO pedidos_orcamento (referencia, status, criado_por, pipefy_campos, tratativa, tratativa_em, tratativa_card_id)
+         VALUES ($1, 'entrada', $2, '[]'::jsonb, $3::jsonb, NOW(), $4) RETURNING id`,
+        [String(card.titulo || cliente).slice(0, 255), usuario?.id || null, JSON.stringify(tratativa), String(card.id)]);
+      destinoId = ins.rows[0].id; destinoNome = 'Orçamentos';
+      await query(`INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, para_status, descricao, detalhes, usuario_id, usuario_nome, origem)
+                   VALUES ($1, 'criado_tratativa', 'entrada', $2, $3::jsonb, $4, $5, 'sistema')`,
+        [destinoId, `Card criado pela tratativa do SAC #${card.id} (${q.nome}) — situação: ${situacao || moverPara}`,
+         JSON.stringify({ quadro_id: qid, card_id: card.id }), usuario?.id || null, usuario?.nome || 'Sistema']).catch(() => {});
+    } else {
+      const col = (await query(`SELECT chave FROM cif_colunas WHERE ativo AND NOT arquivada ORDER BY ordem, chave LIMIT 1`).catch(() => ({ rows: [] }))).rows[0]?.chave || 'aguardando_envio';
+      const ins = await query(
+        `INSERT INTO lojinha_boxer_pedidos (documento, cliente_nome, data, numero_pedido, vendedora, tipo_envio, itens, status, origem,
+            criado_por, criado_por_nome, cif_status, cif_entrou_em, tratativa, tratativa_em, tratativa_card_id)
+         VALUES ('', $1, CURRENT_DATE, $2, $3, $4, '[]'::jsonb, 'garantia', 'tratativa_sac', $5, $6, $7, NOW(), $8::jsonb, NOW(), $9) RETURNING id`,
+        [cliente, `GAR-BX-${card.id}`, (valorDe(/^responsavel/) || '—').slice(0, 150), (valorDe(/^frete por conta/) || valorDe(/^tipo de envio/) || '—').slice(0, 30),
+         usuario?.id || null, usuario?.nome || 'Sistema', col, JSON.stringify(tratativa), String(card.id)]);
+      destinoId = ins.rows[0].id; destinoNome = 'Garantia';
+      await query(`INSERT INTO loj_movimentos (pedido_id, referencia, cliente_nome, tipo, para_status, descricao, detalhes, usuario_id, usuario_nome, origem)
+                   VALUES ($1, $2, $3, 'cif_entrada', $4, $5, $6::jsonb, $7, $8, 'sistema')`,
+        [destinoId, `GAR-BX-${card.id}`, cliente, col, `Card criado pela tratativa do SAC #${card.id} (${q.nome}) — situação: ${situacao || moverPara}`,
+         JSON.stringify({ quadro_id: qid, card_id: card.id }), usuario?.id || null, usuario?.nome || 'Sistema']).catch(() => {});
+    }
+    await query(`UPDATE bx_tratativa_envios SET destino_id = $3 WHERE quadro_id = $1 AND card_id = $2`, [qid, card.id, destinoId]);
+    await movimento(qid, card, 'encaminhado', { usuario, descricao: `Card criado em ${destinoNome} (#${destinoId})`, detalhes: { destino, destino_id: destinoId } });
+    return { destino, id: destinoId };
+  } catch (e) {
+    console.error('[Quadros] tratativa → orçamento/garantia:', e.message);
+    await query(`DELETE FROM bx_tratativa_envios WHERE quadro_id = $1 AND card_id = $2 AND destino_id IS NULL`, [qid, card.id]).catch(() => {});
+    await movimento(qid, card, 'erro', { usuario, descricao: `Não consegui criar o card em Orçamentos/Garantia: ${e.message}` }).catch(() => {});
+    return null;
+  }
 }
 
 // POST /quadros/:qid/cards/:id/campos { campos: { bx_<id>: valor }, titulo? }

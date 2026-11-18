@@ -242,7 +242,7 @@ export async function verTratativaCif(req, res, next) {
     await garantirTratativa();
     const p = (await query(`SELECT id, pipefy_garantia_id, tratativa, tratativa_em FROM lojinha_boxer_pedidos WHERE id = $1 AND cif_status IS NOT NULL`, [parseInt(req.params.id) || 0])).rows[0];
     if (!p) return res.status(404).json({ erro: 'Pedido não encontrado na Logística CIF.' });
-    if (!p.pipefy_garantia_id) return res.json({ tratativa: null, motivo: 'Card sem origem no Pipefy.' });
+    if (!p.pipefy_garantia_id) return res.json(p.tratativa ? { tratativa: p.tratativa, lido_em: p.tratativa_em } : { tratativa: null, motivo: 'Card sem origem no Pipefy.' });
     if (p.tratativa_em && req.query.atualizar !== '1') return res.json({ tratativa: p.tratativa, lido_em: p.tratativa_em });
     const { buscarTratativa } = await import('../integrations/pipefyTratativa.js');
     try {

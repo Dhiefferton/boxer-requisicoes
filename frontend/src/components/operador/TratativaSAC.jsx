@@ -58,7 +58,8 @@ export default function TratativaSAC({ pedido, semRegistroNS = false, cif = fals
     catch (e) { setDados(d => ({ ...(d || {}), erro: e.response?.data?.erro || 'Não consegui ler a tratativa.' })); }
     finally { setCarregando(false); }
   }
-  useEffect(() => { if (cardPipefy) carregar(); }, [pedido.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Com Pipefy: lê a tratativa de lá. Sem Pipefy: mostra a tratativa da tela do SAC no Boxer (guardada no card), se houver.
+  useEffect(() => { carregar(); }, [pedido.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function abrirAnexo(a) {
     const janela = window.open('', '_blank');
@@ -70,7 +71,7 @@ export default function TratativaSAC({ pedido, semRegistroNS = false, cif = fals
     finally { setAbrindo(''); }
   }
 
-  if (!cardPipefy) return null;
+  if (!cardPipefy && !dados?.tratativa) return null;
   if (!dados) return <div className="flex items-center gap-2 text-[11px] text-[var(--c-suave)] py-2"><Spinner size={12} /> Lendo a tratativa do SAC…</div>;
   const t = dados.tratativa;
 
@@ -83,10 +84,10 @@ export default function TratativaSAC({ pedido, semRegistroNS = false, cif = fals
           {t && <p className="text-[10px] text-[var(--c-suave)] mt-0.5">Fase: <span className="text-[var(--c-texto)]">{t.fase || '—'}</span>
             {t.criado_em && <> · criado em {fmtData(t.criado_em)}{t.criado_por ? ` por ${t.criado_por}` : ''}</>}</p>}
         </div>
-        <button type="button" onClick={() => carregar(true)} disabled={carregando} title="Ler de novo do Pipefy"
+        {cardPipefy && <button type="button" onClick={() => carregar(true)} disabled={carregando} title="Ler de novo do Pipefy"
           className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40 disabled:opacity-40">
           {carregando ? <Spinner size={12} /> : <RefreshCw size={12} />}
-        </button>
+        </button>}
         {t?.url && <a href={t.url} target="_blank" rel="noreferrer" title="Abrir a tratativa no Pipefy" className="p-1.5 rounded-lg text-[var(--c-suave)] hover:text-[var(--c-destaque)]"><ExternalLink size={12} /></a>}
       </div>
       {dados.erro && <p className="text-[11px] text-amber-400">{dados.erro}</p>}
