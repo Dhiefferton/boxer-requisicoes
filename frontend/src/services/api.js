@@ -285,6 +285,7 @@ export const quadroService = (qid) => ({
   cards:        ()              => api.get(`/quadros/${qid}/cards`),
   criar:        (dados)         => api.post(`/quadros/${qid}/cards`, dados),
   mover:        (id, status)    => api.post(`/quadros/${qid}/cards/${id}/mover`, { status }),
+  encaminhar:   (id)            => api.post(`/quadros/${qid}/cards/${id}/encaminhar`, {}, { timeout: 60000 }),
   editarCampos: (id, campos, titulo) => api.post(`/quadros/${qid}/cards/${id}/campos`, { campos, titulo }),
   excluir:      (id)            => api.delete(`/quadros/${qid}/cards/${id}`),
   config:       ()              => api.get(`/quadros/${qid}/config`, { timeout: 30000 }),

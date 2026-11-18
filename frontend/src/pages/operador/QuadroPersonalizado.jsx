@@ -533,6 +533,32 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
 
+  // Tratativa do SAC, coluna "Em Trânsito": envia o card para Orçamentos ou Garantia (sai da tratativa)
+  const norm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const emTransitoTratativa = podeEditar && /tratativa/.test(norm(nomeQuadro)) && /em transito/.test(norm(colAtual?.titulo));
+  const textoDe = (re) => (cfg?.campos || []).map(c => campoDaConfig(c, 0, cfg?.campos || []))
+    .filter(c => re.test(norm(c.rotulo))).map(c => valorLista(valorDe(c.id)).join(', ')).find(Boolean) || '';
+  const destinoEnvio = (() => {
+    if (!emTransitoTratativa) return null;
+    const m = norm(textoDe(/^mover para/)), si = norm(textoDe(/^situacao/));
+    if (/garantia/.test(m) && !/orcamento/.test(m)) return 'Garantia';
+    if (/orcamento/.test(m)) return 'Orçamentos';
+    if (si === 'garantia de conserto') return 'Garantia';
+    if (/orcamento/.test(si) || si === 'retorno em garantia' || si === 'sos boxer') return 'Orçamentos';
+    return null;
+  })();
+  async function enviarDestino() {
+    if (sujo && !(await salvar())) return;
+    if (!confirm(`Enviar "${p.titulo}" para ${destinoEnvio}? O card sai da tratativa.`)) return;
+    setMovendo(true); setErro('');
+    try {
+      const { data } = await svc.encaminhar(p.id);
+      alert(`Card enviado para ${data?.tela || destinoEnvio}${data?.id ? ` (#${data.id})` : ''}.`);
+      onFechar(); carregar();
+    } catch (e) { setErro(e.response?.data?.erro || 'Erro ao enviar.'); }
+    finally { setMovendo(false); }
+  }
+
   const blocoCampo = (c, editavel) => (
     <div key={c.id} className="min-w-0">
       <dt className="text-xs font-semibold text-[var(--c-texto)]">{editavel && obrigatorioAgora(c, valorDe) && <span className="text-red-400">* </span>}{c.rotulo}</dt>
@@ -615,10 +641,16 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
               <p className="text-sm font-bold text-[var(--c-texto)]">Mover card para</p>
               <button onClick={fechar} aria-label="Fechar" className="p-1 text-[var(--c-suave)] hover:text-[var(--c-texto)]"><X size={18} /></button>
             </div>
+            {emTransitoTratativa && (destinoEnvio
+              ? <button onClick={enviarDestino} disabled={movendo}
+                  className="w-full flex items-center gap-2 rounded-xl border border-[var(--c-destaque)]/50 bg-[var(--c-destaque)]/15 px-3 py-2 text-xs font-semibold text-left text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/25 disabled:opacity-40">
+                  <span className="flex-1 truncate">Enviar para {destinoEnvio}</span><ArrowRight size={13} className="shrink-0" />
+                </button>
+              : <p className="text-[11px] text-[var(--c-suave)]">Preencha "Mover para" / "Situação" para enviar a Orçamentos ou Garantia.</p>)}
             {proxima && botao(proxima, true)}
             {movendo && <p className="flex items-center gap-2 text-[11px] text-[var(--c-suave)]"><Spinner size={12} /> Movendo…</p>}
             {outros.length > 0 && <div className="space-y-1.5 pt-3 border-t border-[var(--c-borda)]">{outros.map(c => botao(c))}</div>}
-            {!destinos.length && <p className="text-[11px] text-[var(--c-suave)]">{podeEditar ? 'Esta coluna não tem para onde mover.' : 'Você só pode visualizar esta tela.'}</p>}
+            {!destinos.length && !emTransitoTratativa && <p className="text-[11px] text-[var(--c-suave)]">{podeEditar ? 'Esta coluna não tem para onde mover.' : 'Você só pode visualizar esta tela.'}</p>}
             {onConfigurar && (
               <button onClick={onConfigurar} className="flex items-center gap-1.5 text-[11px] text-[var(--c-suave)] hover:text-[var(--c-destaque)]">
                 <Settings size={12} /> Configurar colunas e campos

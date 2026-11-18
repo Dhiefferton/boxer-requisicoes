@@ -3,7 +3,7 @@ import { resumoInicio, buscaInicio } from '../controllers/inicioController.js';
 import { Router } from 'express';
 import { verTratativa, anexoTratativa } from '../controllers/tratativaController.js';
 import { acessoQuadro, verTelas, criarQuadro, editarQuadro, salvarNomesTelas, verConfigQuadro, salvarConfigQuadroDin, adicionarOpcaoQuadro,
-  listarCards, criarCard, moverCard, editarCamposCard, excluirCard, listarMovimentosQuadro, enviarFotoQuadro, verFotoQuadro, excluirFotoQuadro, arquivoNotaCardQuadro } from '../controllers/quadrosController.js';
+  listarCards, criarCard, moverCard, encaminharCard, editarCamposCard, excluirCard, listarMovimentosQuadro, enviarFotoQuadro, verFotoQuadro, excluirFotoQuadro, arquivoNotaCardQuadro } from '../controllers/quadrosController.js';
 import { autorizarUpload, registrarVisto, alertaBlob, verUsoBlob, salvarLimites, excluirArquivo, conferirNaVercel } from '../controllers/blobController.js';
 import { listarBases, criarBase, listarRegistros, criarRegistro, editarRegistro, excluirBase, importarBasePipefy, editarBase, excluirRegistro, importarRegistros, listarLotes, desfazerImportacao } from '../controllers/basesController.js';
 import bcrypt from 'bcryptjs';
@@ -349,6 +349,7 @@ const qd = [autenticar, acessoQuadro];
 router.get('/quadros/:qid/cards',             ...qd, listarCards);
 router.post('/quadros/:qid/cards',            ...qd, criarCard);
 router.post('/quadros/:qid/cards/:id/mover',  ...qd, moverCard);
+router.post('/quadros/:qid/cards/:id/encaminhar', ...qd, encaminharCard);
 router.post('/quadros/:qid/cards/:id/campos', ...qd, editarCamposCard);
 router.delete('/quadros/:qid/cards/:id',      ...qd, excluirCard);
 router.post('/quadros/:qid/cards/:id/fotos',  ...qd, enviarFotoQuadro);

@@ -451,7 +451,7 @@ export async function listarCards(req, res, next) {
     const cfg = await cfgDe(qid).ler();
     const arquivadas = cfg.colunas.filter(c => c.arquivada).map(c => c.chave);
     const r = await query(
-      `SELECT * FROM ((${SELECT_CARD} WHERE c.quadro_id = $1 AND NOT (c.status = ANY($2::text[])))
+      `SELECT * FROM ((${SELECT_CARD} WHERE c.quadro_id = $1 AND c.status <> '_encaminhado' AND NOT (c.status = ANY($2::text[])))
         UNION ALL (${SELECT_CARD} WHERE c.quadro_id = $1 AND c.status = ANY($2::text[]) ORDER BY c.entrou_em DESC LIMIT 100)) t
         ORDER BY t.entrou_em DESC, t.id DESC`, [qid, arquivadas]);
     res.json({ quadro: req.quadro, cards: r.rows });
@@ -561,19 +561,19 @@ export async function moverCard(req, res, next) {
     await movimento(qid, r.rows[0], 'movido', { de: atual, para: status, usuario: req.usuario,
       descricao: `Movido de ${col.get(atual)?.nome || atual} para ${col.get(status)?.nome || status}` });
     if (ehLiberacao(col.get(status)?.nome)) await copiarParaTelas(`quadro_${qid}`, p.id, req.usuario);
-    if (ehEmTransito(col.get(status)?.nome)) await encaminharTratativa(qid, r.rows[0], cfg, c, req.usuario);
     res.json({ card: r.rows[0] });
   } catch (err) { next(err); }
 }
 
 // ── Tratativa do SAC → Orçamentos / Garantia ────────────────────────────────
-// Quando um card da tela de Tratativa chega na coluna "Em Trânsito", cria o card na tela certa:
+// Na coluna "Em Trânsito" da tela de Tratativa, depois de preencher os campos da fase, o colaborador clica em
+// "Enviar para Orçamentos/Garantia": o card SAI da tratativa (some do quadro, histórico fica) e entra na tela certa:
 //   • "Mover para" = Garantia, ou Situação p/ = "Garantia de Conserto"            → Garantia - Boxer Soldas
 //   • "Mover para" = Orçamento, ou Situação p/ = Orçamento / Orçamento - Análise de
 //     Garantia / Retorno em Garantia / SOS Boxer                                   → Orçamentos
 //   • Análise de Troca / Troca (ou sem situação): não cria nada.
 // O card novo leva a tratativa inteira (todos os campos preenchidos) para o Formulário inicial,
-// igual vinha do Pipefy, e o Registro de NS (#nº do card da tratativa). Cria uma vez só por card.
+// igual vinha do Pipefy, e o Registro de NS (#nº do card da tratativa). Uma vez só por card.
 export const ehEmTransito = (nome) => /em\s+transito/.test(normTxt(nome));
 const ehTelaTratativa = (nome) => /tratativa/.test(normTxt(nome));
 const textoValor = (v) => {
@@ -610,20 +610,21 @@ const garantirEnvios = () => (estEnvios ||= query(`
   ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS tratativa_em TIMESTAMPTZ;
   ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS tratativa_card_id TEXT;`).catch(e => { estEnvios = null; throw e; }));
 
-/** Nunca lança erro: falha fica no histórico do card da tratativa. */
+/** Cria o card no destino e tira o card da tratativa. Lança erro com mensagem para o usuário. */
 export async function encaminharTratativa(qid, card, cfg, cq, usuario = null) {
-  try {
+  {
     const q = (await query(`SELECT id, nome FROM bx_quadros WHERE id = $1`, [qid])).rows[0];
-    if (!q || !ehTelaTratativa(q.nome)) return null;
+    if (!q || !ehTelaTratativa(q.nome)) throw Object.assign(new Error('Só a tela de Tratativa envia cards para Orçamentos/Garantia.'), { status: 400 });
     const valores = card.valores || {};
     const valorDe = (re) => cfg.campos.filter(f => re.test(normTxt(f.rotulo))).map(f => textoValor(valores[cq.idCampoConfig(f)])).find(Boolean) || '';
     const situacao = valorDe(/^situacao/);
     const moverPara = valorDe(/^mover para/);
     const destino = destinoTratativa(situacao, moverPara);
-    if (!destino) return null;
+    if (!destino) throw Object.assign(new Error(`A situação "${situacao || '—'}" não vai para Orçamentos nem para Garantia.`), { status: 400 });
     await garantirEnvios();
     const reserva = await query(`INSERT INTO bx_tratativa_envios (quadro_id, card_id, destino) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING card_id`, [qid, card.id, destino]);
-    if (!reserva.rows[0]) return null; // já foi criado antes
+    if (!reserva.rows[0]) throw Object.assign(new Error('Este card já foi enviado.'), { status: 409 });
+    try {
     // Tratativa no mesmo formato da que vinha do Pipefy (TratativaSAC.jsx)
     const fase = cfg.colunas.find(x => x.chave === card.status)?.nome || card.status;
     const campos = cfg.campos.filter(f => f.tipo !== 'anexo')
@@ -658,13 +659,37 @@ export async function encaminharTratativa(qid, card, cfg, cq, usuario = null) {
          JSON.stringify({ quadro_id: qid, card_id: card.id }), usuario?.id || null, usuario?.nome || 'Sistema']).catch(() => {});
     }
     await query(`UPDATE bx_tratativa_envios SET destino_id = $3 WHERE quadro_id = $1 AND card_id = $2`, [qid, card.id, destinoId]);
-    await movimento(qid, card, 'encaminhado', { usuario, descricao: `Card criado em ${destinoNome} (#${destinoId})`, detalhes: { destino, destino_id: destinoId } });
-    return { destino, id: destinoId };
-  } catch (e) {
-    console.error('[Quadros] tratativa → orçamento/garantia:', e.message);
-    await query(`DELETE FROM bx_tratativa_envios WHERE quadro_id = $1 AND card_id = $2 AND destino_id IS NULL`, [qid, card.id]).catch(() => {});
-    await movimento(qid, card, 'erro', { usuario, descricao: `Não consegui criar o card em Orçamentos/Garantia: ${e.message}` }).catch(() => {});
-    return null;
+    // Sai da tratativa: não aparece mais no quadro (o histórico continua guardado)
+    await query(`UPDATE bx_quadro_cards SET status = '_encaminhado', entrou_em = NOW(), atualizado_em = NOW() WHERE id = $1`, [card.id]);
+    await movimento(qid, card, 'encaminhado', { de: card.status, para: '_encaminhado', usuario,
+      descricao: `Enviado para ${destinoNome} (#${destinoId}) — saiu da tratativa`, detalhes: { destino, destino_id: destinoId } });
+    return { destino, id: destinoId, tela: destinoNome };
+    } catch (e) {
+      await query(`DELETE FROM bx_tratativa_envios WHERE quadro_id = $1 AND card_id = $2 AND destino_id IS NULL`, [qid, card.id]).catch(() => {});
+      throw e;
+    }
+  }
+}
+
+// POST /quadros/:qid/cards/:id/encaminhar — "Enviar para Orçamentos/Garantia" (coluna Em Trânsito da Tratativa)
+export async function encaminharCard(req, res, next) {
+  try {
+    const qid = req.quadro.id;
+    const c = cfgDe(qid);
+    const cfg = await c.ler();
+    const p = await cardDoQuadro(qid, req.params.id);
+    if (!p) return res.status(404).json({ erro: 'Card não encontrado.' });
+    const col = cfg.colunas.find(x => x.chave === p.status);
+    if (!ehEmTransito(col?.nome)) return res.status(400).json({ erro: 'O card precisa estar na coluna "Em Trânsito".' });
+    const valores = p.valores || {};
+    const faltando = cfg.campos.filter(f => f.coluna === p.status && f.tipo !== 'anexo' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
+      && !String(valores[c.idCampoConfig(f)] ?? '').replace(/[\[\]"]/g, '').trim());
+    if (faltando.length) return res.status(400).json({ erro: `Preencha antes de enviar: ${faltando.map(f => f.rotulo).join(', ')}.` });
+    const r = await encaminharTratativa(qid, p, cfg, c, req.usuario);
+    res.json(r);
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ erro: err.message });
+    next(err);
   }
 }
 

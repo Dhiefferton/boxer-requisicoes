@@ -34,7 +34,7 @@ export async function resumoInicio(req, res, next) {
       contar('lojinha', `SELECT COUNT(*) AS n FROM lojinha_boxer_pedidos WHERE status <> 'garantia' AND NOT (status = ANY($1::text[]))`, [arq(cLoj)]),
       contar('logistica_cif', `SELECT COUNT(*) AS n FROM lojinha_boxer_pedidos WHERE cif_status IS NOT NULL AND NOT (cif_status = ANY($1::text[]))`, [arq(cCif)]),
       ...quadros.map(q => contar(`quadro_${q.id}`,
-        `SELECT COUNT(*) AS n FROM bx_quadro_cards c WHERE c.quadro_id = $1
+        `SELECT COUNT(*) AS n FROM bx_quadro_cards c WHERE c.quadro_id = $1 AND c.status <> '_encaminhado'
             AND NOT EXISTS (SELECT 1 FROM qd${Number(q.id)}_colunas k WHERE k.chave = c.status AND k.arquivada)`, [q.id])),
     ]);
 
