@@ -344,7 +344,7 @@ function useFaseQuadro({ p, cfg, colunas, svc, podeEditar, admin, servicoFotos, 
           {camposAtuais.length
             ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, podeEditar))}</dl>
             : <p className="text-xs text-[var(--c-suave)] py-2">Esta coluna de {nomeQuadro} não tem campos para preencher.</p>}
-          <StatusAutoSalvar salvando={auto.salvando} pendente={sujo} salvoEm={auto.salvoEm} erro={auto.erroSalvar} />
+          <StatusAutoSalvar salvando={auto.salvando} pendente={sujo} salvoEm={auto.salvoEm} erro={auto.erroSalvar} onSalvar={auto.salvarAgora} onDescartar={auto.descartar} />
         </div>
       </FotosProvider>
     ),
@@ -606,7 +606,7 @@ function CardAberto({ p, cfg, colunas, svc, podeEditar, admin, nomeQuadro, carre
             {camposAtuais.length
               ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, podeEditar))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.{admin ? ' Crie em Configurar (engrenagem da coluna).' : ''}</p>}
-            <StatusAutoSalvar salvando={auto.salvando} pendente={Object.keys(rascunho).length > 0} salvoEm={auto.salvoEm} erro={auto.erroSalvar} />
+            <StatusAutoSalvar salvando={auto.salvando} pendente={Object.keys(rascunho).length > 0} salvoEm={auto.salvoEm} erro={auto.erroSalvar} onSalvar={auto.salvarAgora} onDescartar={auto.descartar} />
           </div>
 
           {/* Direita: mover, histórico, excluir */}

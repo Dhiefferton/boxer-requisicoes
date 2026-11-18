@@ -630,7 +630,7 @@ function CardAbertoLojinha({ p, cfg, colunas, botoes = {}, carregar, onFechar, o
             {camposAtuais.length
               ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, true))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.{botoes.configurar ? ' Crie em Configurar (engrenagem da coluna).' : ''}</p>}
-            <StatusAutoSalvar salvando={auto.salvando} pendente={sujo} salvoEm={auto.salvoEm} erro={auto.erroSalvar} />
+            <StatusAutoSalvar salvando={auto.salvando} pendente={sujo} salvoEm={auto.salvoEm} erro={auto.erroSalvar} onSalvar={auto.salvarAgora} onDescartar={auto.descartar} />
           </div>
 
           {/* Direita: mover e ações */}

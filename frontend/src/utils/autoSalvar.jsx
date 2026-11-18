@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import { Spinner } from '../components/ui';
 
-// Campos do card gravam sozinhos ao sair do campo (sem botões Salvar/Descartar).
+// Campos do card: as alterações ficam num rascunho e gravam no botão Salvar (ou ao fechar o card).
 // enviar(rascunho) grava e recarrega o card; depois disso só saem do rascunho os campos que não mudaram de novo.
 const NAO_DIGITA = new Set(['checkbox', 'radio', 'file', 'button', 'submit', 'reset', 'range', 'color']);
 function campoDeDigitarEmFoco() {
@@ -42,30 +42,38 @@ export function useAutoSalvar(rascunho, setRascunho, enviar, atraso = 300) {
     try { return await p; } finally { if (emAndamento.current === p) emAndamento.current = null; }
   }
 
-  // Grava quando a pessoa SAI do campo (não enquanto digita).
-  // Escolhas feitas com clique (lista, marcar, data no calendário) não deixam um campo de digitar em foco: gravam logo.
+  // Não grava sozinho a cada campo (economiza chamadas): grava no botão Salvar.
+  // Se o card for fechado com alterações pendentes, grava uma vez ao fechar (não perde o que foi digitado).
+  useEffect(() => () => {
+    const pend = atual.current.rascunho;
+    if (Object.keys(pend).length) Promise.resolve(atual.current.enviar(pend)).catch(() => {});
+  }, []);
   useEffect(() => {
     if (!Object.keys(rascunho).length) return undefined;
-    if (!campoDeDigitarEmFoco()) {
-      const t = setTimeout(() => { salvarAgora(); }, atraso);
-      return () => clearTimeout(t);
-    }
-    const sair = () => { setTimeout(() => { salvarAgora(); }, 0); };
-    document.addEventListener('focusout', sair, true);
-    return () => document.removeEventListener('focusout', sair, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const aviso = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', aviso);
+    return () => window.removeEventListener('beforeunload', aviso);
   }, [rascunho]);
 
-  return { salvando, salvoEm, erroSalvar: erro, salvarAgora };
+  const descartar = () => { setRascunho({}); setErro(''); };
+  return { salvando, salvoEm, erroSalvar: erro, salvarAgora, descartar };
 }
 
-// Indicador discreto no lugar da barra Salvar/Descartar
-// eslint-disable-next-line no-unused-vars
-export function StatusAutoSalvar({ salvando, pendente, salvoEm, erro }) {
-  if (erro) return <p className="text-[11px] text-red-400">Não salvou: {erro}</p>;
-  if (salvando) {
-    return <p className="flex items-center gap-1.5 text-[11px] text-[var(--c-suave)]"><Spinner size={10} /> Salvando…</p>;
+// Barra Salvar / Descartar (aparece quando há alteração não salva)
+export function StatusAutoSalvar({ salvando, pendente, salvoEm, erro, onSalvar, onDescartar }) {
+  if (pendente || salvando) {
+    return (
+      <div className="flex items-center gap-2 flex-wrap rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+        <span className="flex-1 min-w-0 text-[11px] text-amber-500">{salvando ? 'Salvando…' : erro ? `Não salvou: ${erro}` : 'Alterações não salvas'}</span>
+        {onDescartar && <button type="button" disabled={salvando} onClick={onDescartar}
+          className="text-xs px-3 py-1.5 rounded-lg border border-[var(--c-borda)] text-[var(--c-texto)] hover:bg-[var(--c-borda)] disabled:opacity-50">Descartar</button>}
+        {onSalvar && <button type="button" disabled={salvando} onClick={onSalvar}
+          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[var(--c-destaque)] text-white hover:brightness-110 disabled:opacity-50">
+          {salvando ? <Spinner size={11} /> : <Check size={12} />} Salvar</button>}
+      </div>
+    );
   }
-  if (salvoEm) return <p className="flex items-center gap-1 text-[11px] text-green-400"><Check size={11} /> Salvo automaticamente</p>;
+  if (erro) return <p className="text-[11px] text-red-400">Não salvou: {erro}</p>;
+  if (salvoEm) return <p className="flex items-center gap-1 text-[11px] text-green-400"><Check size={11} /> Salvo</p>;
   return null;
 }
