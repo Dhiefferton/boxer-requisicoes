@@ -421,6 +421,45 @@ export async function fotografarCard(qid, cardId, { refazer = false } = {}) {
   return r.rows[0];
 }
 
+// Tratativa vinda do quadro do SAC (origem 'boxer'): fotos e vídeos dos campos de anexo, lidos do card de origem
+export async function anexosTratativaBoxer(t) {
+  if (!t || t.origem !== 'boxer' || !t.card_id) return t;
+  try {
+    const card = (await query(`SELECT id, quadro_id FROM bx_quadro_cards WHERE id = $1`, [parseInt(t.card_id) || 0])).rows[0];
+    if (!card) return t;
+    const fotos = (await query(`SELECT id, campo_id, nome, mime, blob_url FROM bx_quadro_fotos WHERE pedido_id = $1 AND quadro_id = $2 ORDER BY id`,
+      [card.id, card.quadro_id])).rows;
+    if (!fotos.length) return t;
+    const c = cfgDe(card.quadro_id);
+    const cfg = await c.ler();
+    const nomeArq = (f, i) => f.nome || `${String(f.mime || '').startsWith('video/') ? 'Vídeo' : 'Foto'} ${i + 1}`;
+    const usados = new Set();
+    const anexos = [];
+    for (const f of cfg.campos.filter(x => x.tipo === 'anexo')) {
+      const id = c.idCampoConfig(f);
+      const doCampo = fotos.filter(x => x.campo_id === id);
+      if (!doCampo.length) continue;
+      doCampo.forEach(x => usados.add(x.id));
+      anexos.push({ id, nome: f.rotulo, tipo: 'anexo', anexos: doCampo.map((x, i) => ({ nome: nomeArq(x, i), caminho: `bx:${x.id}`, mime: x.mime })) });
+    }
+    const resto = fotos.filter(x => !usados.has(x.id));
+    if (resto.length) anexos.push({ id: 'bx_fotos', nome: 'Fotos e vídeos', tipo: 'anexo', anexos: resto.map((x, i) => ({ nome: nomeArq(x, i), caminho: `bx:${x.id}`, mime: x.mime })) });
+    return { ...t, campos: [...(t.campos || []).filter(x => !x.anexos), ...anexos] };
+  } catch { return t; }
+}
+
+// Responde o anexo "bx:<foto>" de uma tratativa do SAC do Boxer: link do vídeo/arquivo (blob) ou a própria imagem
+export async function responderAnexoTratativaBoxer(t, caminho, req, res) {
+  const f = (await query(`SELECT id, imagem, mime, nome, blob_url FROM bx_quadro_fotos WHERE id = $1 AND pedido_id = $2`,
+    [parseInt(String(caminho).slice(3)) || 0, parseInt(t?.card_id) || 0])).rows[0];
+  if (!f) return res.status(404).json({ erro: 'Anexo não encontrado.' });
+  if (f.blob_url) return res.json({ url: f.blob_url });
+  if (req.query.baixar !== '1') return res.json({ inline: true, mime: f.mime || 'image/jpeg' });
+  res.set('Content-Type', f.mime || 'image/jpeg');
+  res.set('Cache-Control', 'private, max-age=86400');
+  res.send(f.imagem);
+}
+
 // GET /quadros/:qid/cards/:id/nf/:tipo — XML/PDF da nota do card copiado (nota guardada na cópia)
 export async function arquivoNotaCardQuadro(req, res) {
   try {

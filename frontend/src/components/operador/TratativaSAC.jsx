@@ -66,7 +66,13 @@ export default function TratativaSAC({ pedido, semRegistroNS = false, cif = fals
     setAbrindo(a.caminho);
     try {
       const { data } = await svcAnexo(pedido.id, a.caminho);
-      if (janela) janela.location.href = data.url; else window.open(data.url, '_blank', 'noopener');
+      let url = data.url;
+      if (!url && data.inline) {
+        const r = await (cif ? tratativaService.arquivoCif : tratativaService.arquivo)(pedido.id, a.caminho);
+        url = URL.createObjectURL(r.data);
+        setTimeout(() => URL.revokeObjectURL(url), 120000);
+      }
+      if (janela) janela.location.href = url; else window.open(url, '_blank', 'noopener');
     } catch (e) { janela?.close(); alert(e.response?.data?.erro || 'Não consegui abrir o anexo.'); }
     finally { setAbrindo(''); }
   }

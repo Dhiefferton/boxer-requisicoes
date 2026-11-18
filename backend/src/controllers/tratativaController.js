@@ -31,6 +31,10 @@ export async function verTratativa(req, res, next) {
     await garantir();
     const p = (await query(`SELECT id, pipefy_card_id, tratativa, tratativa_em FROM pedidos_orcamento WHERE id = $1`, [parseInt(req.params.id) || 0])).rows[0];
     if (!p) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (!p.pipefy_card_id && p.tratativa?.origem === 'boxer') {
+      const { anexosTratativaBoxer } = await import('./quadrosController.js');
+      return res.json({ tratativa: await anexosTratativaBoxer(p.tratativa), lido_em: p.tratativa_em });
+    }
     if (!p.pipefy_card_id) return res.json(p.tratativa ? { tratativa: p.tratativa, lido_em: p.tratativa_em } : { tratativa: null, motivo: 'Card criado no B-Requisições (sem tratativa do SAC).' });
     if (p.tratativa_em && req.query.atualizar !== '1') return res.json({ tratativa: p.tratativa, lido_em: p.tratativa_em });
     try {
@@ -50,6 +54,10 @@ export async function anexoTratativa(req, res, next) {
     await garantir();
     const p = (await query(`SELECT tratativa FROM pedidos_orcamento WHERE id = $1`, [parseInt(req.params.id) || 0])).rows[0];
     const caminho = String(req.query.caminho || '');
+    if (p?.tratativa?.origem === 'boxer' && caminho.startsWith('bx:')) {
+      const { responderAnexoTratativaBoxer } = await import('./quadrosController.js');
+      return responderAnexoTratativaBoxer(p.tratativa, caminho, req, res);
+    }
     const tem = (p?.tratativa?.campos || []).some(c => (c.anexos || []).some(a => a.caminho === caminho));
     if (!p?.tratativa?.card_id || !tem) return res.status(404).json({ erro: 'Anexo não encontrado.' });
     const url = await linkAnexoTratativa(p.tratativa.card_id, caminho);

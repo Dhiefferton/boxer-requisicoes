@@ -242,6 +242,10 @@ export async function verTratativaCif(req, res, next) {
     await garantirTratativa();
     const p = (await query(`SELECT id, pipefy_garantia_id, tratativa, tratativa_em FROM lojinha_boxer_pedidos WHERE id = $1 AND cif_status IS NOT NULL`, [parseInt(req.params.id) || 0])).rows[0];
     if (!p) return res.status(404).json({ erro: 'Pedido não encontrado na Logística CIF.' });
+    if (!p.pipefy_garantia_id && p.tratativa?.origem === 'boxer') {
+      const { anexosTratativaBoxer } = await import('./quadrosController.js');
+      return res.json({ tratativa: await anexosTratativaBoxer(p.tratativa), lido_em: p.tratativa_em });
+    }
     if (!p.pipefy_garantia_id) return res.json(p.tratativa ? { tratativa: p.tratativa, lido_em: p.tratativa_em } : { tratativa: null, motivo: 'Card sem origem no Pipefy.' });
     if (p.tratativa_em && req.query.atualizar !== '1') return res.json({ tratativa: p.tratativa, lido_em: p.tratativa_em });
     const { buscarTratativa } = await import('../integrations/pipefyTratativa.js');
@@ -260,6 +264,10 @@ export async function anexoTratativaCif(req, res, next) {
     await garantirTratativa();
     const p = (await query(`SELECT tratativa FROM lojinha_boxer_pedidos WHERE id = $1 AND cif_status IS NOT NULL`, [parseInt(req.params.id) || 0])).rows[0];
     const caminho = String(req.query.caminho || '');
+    if (p?.tratativa?.origem === 'boxer' && caminho.startsWith('bx:')) {
+      const { responderAnexoTratativaBoxer } = await import('./quadrosController.js');
+      return responderAnexoTratativaBoxer(p.tratativa, caminho, req, res);
+    }
     const tem = (p?.tratativa?.campos || []).some(c => (c.anexos || []).some(a => a.caminho === caminho));
     if (!p?.tratativa?.card_id || !tem) return res.status(404).json({ erro: 'Anexo não encontrado.' });
     const { linkAnexoTratativa } = await import('../integrations/pipefyTratativa.js');

@@ -258,6 +258,9 @@ export const tratativaService = {
   // Garantia (Logística CIF): mesma tratativa do SAC
   verCif:   (id, atualizar = false) => api.get(`/logistica-cif/pedidos/${id}/tratativa`, { params: atualizar ? { atualizar: 1 } : {}, timeout: 60000 }),
   anexoCif: (id, caminho)           => api.get(`/logistica-cif/pedidos/${id}/tratativa/anexo`, { params: { caminho }, timeout: 30000 }),
+  // Foto guardada no banco (tratativa do SAC do Boxer): baixa a imagem
+  arquivo:    (id, caminho) => api.get(`/pedidos-orcamento/${id}/tratativa/anexo`, { params: { caminho, baixar: 1 }, responseType: 'blob', timeout: 60000 }),
+  arquivoCif: (id, caminho) => api.get(`/logistica-cif/pedidos/${id}/tratativa/anexo`, { params: { caminho, baixar: 1 }, responseType: 'blob', timeout: 60000 }),
 };
 
 // Telas criadas pelo admin (quadros de cards) e nomes das telas renomeadas
