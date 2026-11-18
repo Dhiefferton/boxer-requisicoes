@@ -75,6 +75,8 @@ export default function CardAbertoOrcamento({
   const grupos = useMemo(() => (fases ? montarGrupos(fases, pedido, pedido.status, colunaAtual?.faseId) : []),
     [fases, pedido, colunaAtual?.faseId]);
 
+  // Veio do Pipefy ou da Tratativa do SAC do Boxer Operações: mostra o Formulário inicial com a tratativa
+  const daTratativa = !!(pedido.pipefy_card_id || pedido.tratativa_card_id);
   const doPipefy = useMemo(() => Object.fromEntries((Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [])
     .filter(c => c?.id).map(c => [c.id, c.valor])), [pedido.pipefy_campos]);
   const editados = pedido.campos_editados || {};
@@ -214,22 +216,24 @@ export default function CardAbertoOrcamento({
                 <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-borda)] text-[var(--c-suave)]">Orçamento</span>
                 {pedido.pipefy_card_id
                   ? <span className="text-[10px] font-semibold text-[var(--c-destaque)] bg-[var(--c-destaque)]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
-                  : <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 rounded px-1.5 py-0.5">Criado no B-Requisições</span>}
+                  : pedido.tratativa_card_id
+                    ? <span className="text-[10px] font-semibold text-sky-400 bg-sky-500/15 rounded px-1.5 py-0.5">Tratativa do SAC #{pedido.tratativa_card_id}</span>
+                    : <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 rounded px-1.5 py-0.5">Criado no B-Requisições</span>}
                 {pedido.aprovacao && <span className="text-[10px] font-bold uppercase rounded px-1.5 py-0.5 text-[var(--c-texto)] bg-[var(--c-borda)]">{pedido.aprovacao}</span>}
               </div>
               <p className="text-[11px] text-[var(--c-suave)] mt-1.5">Criado em {formatarData(pedido.created_at)} · por {pedido.criado_por_nome || '—'}</p>
             </div>
 
             {!fases && !erro && <div className="flex justify-center py-10"><Spinner className="text-[var(--c-destaque)]" /></div>}
-            {fases && !anteriores.length && !pedido.pipefy_card_id && <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido nas fases anteriores.</p>}
+            {fases && !anteriores.length && !daTratativa && <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido nas fases anteriores.</p>}
             {/* Card vindo do Pipefy sem campos no Formulário inicial: a tratativa do SAC fica numa caixa própria */}
             {/* Card criado aqui sem campos no Formulário inicial: mostra a NS numa caixa própria */}
-            {fases && !pedido.pipefy_card_id && linhaNS && !anteriores.some(g => g.chave === 'inicio') && (
+            {fases && !daTratativa && linhaNS && !anteriores.some(g => g.chave === 'inicio') && (
               <CaixaFase titulo="Formulário inicial" aberta={!fechadas.has('inicio-ns')} onAlternar={() => alternarFase('inicio-ns', !fechadas.has('inicio-ns'))}>
                 <dl>{linhaNS}</dl>
               </CaixaFase>
             )}
-            {fases && pedido.pipefy_card_id && !anteriores.some(g => g.chave === 'inicio') && (
+            {fases && daTratativa && !anteriores.some(g => g.chave === 'inicio') && (
               <CaixaFase titulo="Formulário inicial" aberta={!fechadas.has('inicio-sac')} onAlternar={() => alternarFase('inicio-sac', !fechadas.has('inicio-sac'))}>
                 {linhaNS && <dl className="mb-3">{linhaNS}</dl>}
                 <TratativaSAC pedido={pedido} semRegistroNS={!!registroNS} />

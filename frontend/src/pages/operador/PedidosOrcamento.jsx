@@ -625,7 +625,10 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
       {pedido.pipefy_card_id && (
         <span className="inline-block mr-1 text-[10px] font-semibold text-[var(--c-destaque)] bg-[var(--c-destaque)]/10 rounded px-1.5 py-0.5">Pipefy #{pedido.pipefy_card_id}</span>
       )}
-      {!pedido.pipefy_card_id && (
+      {!pedido.pipefy_card_id && pedido.tratativa_card_id && (
+        <span className="inline-block mr-1 text-[10px] font-semibold text-sky-400 bg-sky-500/15 rounded px-1.5 py-0.5">Tratativa do SAC #{pedido.tratativa_card_id}</span>
+      )}
+      {!pedido.pipefy_card_id && !pedido.tratativa_card_id && (
         <span className="inline-block mr-1 text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 rounded px-1.5 py-0.5">Criado no B-Requisições</span>
       )}
       <EtiquetasDoCard campos={CONFIG_ORCAMENTO.campos} valorDe={(id) => {

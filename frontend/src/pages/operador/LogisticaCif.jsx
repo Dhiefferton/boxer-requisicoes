@@ -457,20 +457,23 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
                 {p.pipefy_garantia_url && (
                   <a href={p.pipefy_garantia_url} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 text-[11px] text-[var(--c-destaque-claro)] hover:underline">Abrir no Pipefy <ExternalLink size={10} /></a>
                 )}
+              </> : p.tratativa_card_id ? <>
+                <NomeCardEditavel nome={p.cliente_nome} onSalvar={async (n) => { await cifService.renomear(p.id, n); await carregar(); }} />
+                <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-sky-500/15 text-sky-400">Tratativa do SAC → Garantia</span>
               </> : <>
                 <p className="text-lg font-bold font-mono text-[var(--c-texto)]">Pedido {p.numero_pedido}</p>
                 <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-borda)] text-[var(--c-suave)]">Lojinha Boxer → Garantia</span>
               </>}
             </div>
-            {ehPipefy(p) && (
+            {(ehPipefy(p) || p.tratativa_card_id) && (
               <CaixaFase titulo="Formulário inicial"
                 aberta={!abertas.has('pipefy-fechado')} onAlternar={() => alternar('pipefy-fechado', abertas.has('pipefy-fechado'))}>
                 {linhaNS}
                 <TratativaSAC pedido={p} cif semRegistroNS={!!registroNS} />
-                <CamposPipefy p={p} />
+                {ehPipefy(p) && <CamposPipefy p={p} />}
               </CaixaFase>
             )}
-            {!ehPipefy(p) && <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4 space-y-1.5">
+            {!ehPipefy(p) && !p.tratativa_card_id && <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4 space-y-1.5">
               <p className="text-sm font-bold text-[var(--c-texto)] mb-1">Dados do pedido</p>
               {linhaNS}
               <DadosPedido p={p} sempreProdutos />
