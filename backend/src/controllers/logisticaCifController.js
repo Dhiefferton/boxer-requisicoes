@@ -190,14 +190,18 @@ export async function criarOrcamentoPerda(req, res, next) {
       const tratativa = { ...(t || { origem: 'garantia', campos: [] }), garantia };
       const ns = p.tratativa_card_id || t?.ns || null;
       const cliente = String(p.cliente_nome || `Garantia #${p.id}`).slice(0, 255);
+      // Nasce em "Liberado p/ Orçar" (a coluna pelo nome; se não achar, a chave padrão)
+      const colOrc = (await query(`SELECT chave FROM orc_colunas WHERE ativo AND NOT arquivada
+          AND translate(lower(nome), 'çãâáà', 'caaaa') ~ '^liberad[oa]s?\\s+(p/|para)\\s*orcar' ORDER BY ordem LIMIT 1`).catch(() => ({ rows: [] }))).rows[0]?.chave
+        || 'liberado_orcar';
       const ins = await query(
         `INSERT INTO pedidos_orcamento (referencia, cliente_nome, status, criado_por, pipefy_campos, tratativa, tratativa_em, tratativa_card_id)
-         VALUES ($1, $1, 'entrada', $2, '[]'::jsonb, $3::jsonb, NOW(), $4) RETURNING id`,
-        [cliente, req.usuario?.id || null, JSON.stringify(tratativa), ns]);
+         VALUES ($1, $1, $5, $2, '[]'::jsonb, $3::jsonb, NOW(), $4) RETURNING id`,
+        [cliente, req.usuario?.id || null, JSON.stringify(tratativa), ns, colOrc]);
       const orcId = ins.rows[0].id;
       await query(`INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, para_status, descricao, detalhes, usuario_id, usuario_nome, origem)
-        VALUES ($1, 'criado', 'entrada', $2, $3::jsonb, $4, $5, 'usuario')`,
-        [orcId, `Criado pela Garantia (perda de garantia) — card ${cliente}`, JSON.stringify({ garantia_id: p.id }), req.usuario?.id || null, req.usuario?.nome || null]).catch(() => {});
+        VALUES ($1, 'criado', $6, $2, $3::jsonb, $4, $5, 'usuario')`,
+        [orcId, `Criado pela Garantia (perda de garantia) — card ${cliente}`, JSON.stringify({ garantia_id: p.id }), req.usuario?.id || null, req.usuario?.nome || null, colOrc]).catch(() => {});
       await query(`UPDATE lojinha_boxer_pedidos SET orcamento_perda_id = $2 WHERE id = $1`, [p.id, orcId]);
       await registrarMovLoj(p, 'cif_orcamento_perda', { usuario: req.usuario,
         descricao: `Perda de garantia: criado o card #${orcId} em Orçamentos com a tratativa e os dados da Garantia`, detalhes: { orcamento_id: orcId } });

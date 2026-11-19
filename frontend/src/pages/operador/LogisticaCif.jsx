@@ -426,7 +426,7 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
     if (sujo && !(await salvar())) return;
     if (!confirm(`Criar um card em Orçamentos para "${p.cliente_nome || p.numero_pedido}" com a tratativa e os dados da Garantia?`)) return;
     setCriandoOrc(true); setErro('');
-    try { const { data } = await cifService.orcamentoPerda(p.id); alert(`Card #${data.id} criado na Entrada de Orçamentos.`); await carregar(); }
+    try { const { data } = await cifService.orcamentoPerda(p.id); alert(`Card #${data.id} criado em Orçamentos, na fase Liberado p/ Orçar.`); await carregar(); }
     catch (e) { setErro(e.response?.data?.erro || 'Erro ao criar o orçamento.'); }
     finally { setCriandoOrc(false); }
   }
