@@ -463,6 +463,16 @@ export function DadosPedido({ p, sempreProdutos = false }) {
 }
 
 // Card do quadro (enxuto): clique abre o card
+// Origem do pedido: Lojinha (pedido já faturado no Zen) ou Loja Integrada (site)
+function TagOrigem({ p }) {
+  const zen = p.origem === 'zen';
+  return (
+    <span className={`shrink-0 text-[10px] font-semibold rounded px-1.5 py-0.5 ${zen ? 'bg-amber-500/15 text-amber-600' : 'bg-sky-500/15 text-sky-600'}`}>
+      {zen ? 'Lojinha' : 'Loja Integrada'}
+    </span>
+  );
+}
+
 function CardPedido({ p, campos = [], carregar, onAbrir, movendo = false, onArrastar, onFimArraste }) {
   const itens = Array.isArray(p.itens) ? p.itens : [];
   const [excluindo, setExcluindo] = useState(false);
@@ -480,7 +490,10 @@ function CardPedido({ p, campos = [], carregar, onAbrir, movendo = false, onArra
       onDragEnd={() => onFimArraste?.()}
       className={`${movendo ? 'opacity-50 pointer-events-none ' : ''}p-3 rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] space-y-1.5 min-w-0 break-words cursor-pointer hover:border-[var(--c-borda-forte)] transition-colors`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-mono font-semibold text-sm text-[var(--c-texto)]">Pedido {p.numero_pedido}</span>
+          <TagOrigem p={p} />
+        </div>
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] text-[var(--c-suave)]">{fmtData(p.data)}</span>
           <button onClick={excluir} disabled={excluindo} title="Excluir pedido (Zen e Lojinha)"
@@ -595,7 +608,7 @@ function CardAbertoLojinha({ p, cfg, colunas, botoes = {}, carregar, onFechar, o
           {/* Esquerda: dados do pedido e fases anteriores */}
           <div className="lg:w-[38%] lg:min-w-[340px] lg:overflow-y-auto border-b lg:border-b-0 lg:border-r border-[var(--c-borda)] p-5 space-y-4">
             <div className="pb-3 border-b border-[var(--c-borda)]">
-              <p className="text-lg font-bold font-mono text-[var(--c-texto)]">Pedido {p.numero_pedido}</p>
+              <div className="flex items-center gap-2"><p className="text-lg font-bold font-mono text-[var(--c-texto)]">Pedido {p.numero_pedido}</p><TagOrigem p={p} /></div>
               <span className="text-[10px] font-semibold rounded px-1.5 py-0.5 bg-[var(--c-borda)] text-[var(--c-suave)]">Lojinha Boxer</span>
             </div>
             <div className="rounded-xl border border-[var(--c-borda)] bg-[var(--c-superficie)] p-4 space-y-1.5">
