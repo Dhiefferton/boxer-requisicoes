@@ -7,6 +7,9 @@
 // ============================================================
 import { query } from '../config/db.js';
 import { pipefyQueryPlanilhas } from '../integrations/pipefyService.js';
+import { baseCardsId, sincronizarBaseCards, ehBaseCards } from '../integrations/baseCards.js';
+
+const MSG_CARDS = 'Os registros de "Cards do sistema" são os cards das telas e se atualizam sozinhos — não dá para criar, editar ou excluir aqui.';
 
 let estrutura = null;
 function garantir() {
@@ -84,6 +87,8 @@ const registro = (r, base, colunas = null) => ({ id: r.id, base_id: r.base_id, b
 export async function listarBases(req, res, next) {
   try {
     await garantir();
+    // Database "Cards do sistema": garante que existe e atualiza (no máx. a cada 3 min)
+    try { await baseCardsId(); await sincronizarBaseCards(); } catch (e) { console.error('[Bases] cards:', e.message); }
     const r = await query(`SELECT b.id, b.nome, b.com_valor, b.pipefy_tabela, b.colunas, b.criado_em, COUNT(g.id)::int AS registros
       FROM bx_bases b LEFT JOIN bx_base_registros g ON g.base_id = b.id AND g.ativo
       WHERE b.ativo GROUP BY b.id ORDER BY b.nome`);
@@ -114,6 +119,7 @@ export async function listarRegistros(req, res, next) {
     await garantir();
     const b = (await query(`SELECT id, nome, com_valor, colunas, pipefy_tabela FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!b) return res.status(404).json({ erro: 'Base não encontrada.' });
+    if (await ehBaseCards(b.id)) await sincronizarBaseCards();
     // Com ?limite= (tela Databases) lista por páginas e com busca no servidor; sem ele, devolve tudo (até 10000) como antes
     const paginado = req.query.limite !== undefined;
     if (paginado) {
@@ -137,6 +143,7 @@ export async function criarRegistro(req, res, next) {
     await garantir();
     const b = (await query(`SELECT id, nome, com_valor, colunas FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!b) return res.status(404).json({ erro: 'Base não encontrada.' });
+    if (await ehBaseCards(b.id)) return res.status(400).json({ erro: MSG_CARDS });
     const descricao = limpar(req.body?.descricao, 300);
     const dados = limparDados(req.body?.dados, b.colunas);
     const valor = b.com_valor ? lerValor(req.body?.valor) : 0; // lista: só descrição
@@ -156,6 +163,7 @@ export async function editarRegistro(req, res, next) {
     await garantir();
     const atual = (await query(`SELECT g.*, b.nome AS base, b.colunas AS base_colunas, b.com_valor FROM bx_base_registros g JOIN bx_bases b ON b.id = g.base_id WHERE g.id = $1 AND g.ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!atual) return res.status(404).json({ erro: 'Registro não encontrado.' });
+    if (await ehBaseCards(atual.base_id)) return res.status(400).json({ erro: MSG_CARDS });
     const descricao = req.body?.descricao !== undefined ? limpar(req.body.descricao, 300) : atual.descricao;
     const dados = req.body?.dados !== undefined ? limparDados({ ...(atual.dados || {}), ...req.body.dados }, atual.base_colunas) : (atual.dados || {});
     const valor = req.body?.valor !== undefined ? lerValor(req.body.valor) : Number(atual.valor);
@@ -292,6 +300,8 @@ export async function editarBase(req, res, next) {
 export async function excluirRegistro(req, res, next) {
   try {
     await garantir();
+    const reg = (await query(`SELECT base_id FROM bx_base_registros WHERE id = $1`, [Number(req.params.id) || 0])).rows[0];
+    if (reg && await ehBaseCards(reg.base_id)) return res.status(400).json({ erro: MSG_CARDS });
     const r = await query(`UPDATE bx_base_registros SET ativo = FALSE, atualizado_em = NOW() WHERE id = $1 AND ativo RETURNING id`, [Number(req.params.id) || 0]);
     if (!r.rows[0]) return res.status(404).json({ erro: 'Registro não encontrado.' });
     res.json({ sucesso: true });
@@ -304,6 +314,7 @@ export async function importarRegistros(req, res, next) {
     await garantir();
     const b = (await query(`SELECT id, nome, com_valor, colunas FROM bx_bases WHERE id = $1 AND ativo`, [Number(req.params.id) || 0])).rows[0];
     if (!b) return res.status(404).json({ erro: 'Database não encontrada.' });
+    if (await ehBaseCards(b.id)) return res.status(400).json({ erro: MSG_CARDS });
     const linhas = Array.isArray(req.body?.linhas) ? req.body.linhas.slice(0, 2000) : [];
     let novos = 0, atualizados = 0, ignorados = 0;
     // Prepara tudo em memória; repetida na própria planilha vale a última
