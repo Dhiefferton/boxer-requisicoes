@@ -32,6 +32,8 @@ export const TIPOS_CAMPO = [
   { tipo: 'documento', nome: 'CPF / CNPJ', sigla: 'DOC' },
   { tipo: 'conexao', nome: 'Lista do B-Requisições', sigla: '⇄', boxer: true },
   { tipo: 'registro', nome: 'Registro (descrição e valor)', sigla: '$', boxer: true },
+  // Só nas telas criadas pelo admin (o servidor diz quais tipos aceita)
+  { tipo: 'ns', nome: 'Nº de NS (automático)', sigla: 'NS', boxer: true, so: true },
 ];
 const TIPO = Object.fromEntries(TIPOS_CAMPO.map(t => [t.tipo, t]));
 const COM_OPCOES = ['lista', 'unica', 'checkbox', 'etiquetas'];
@@ -156,6 +158,7 @@ function Previa({ campo }) {
   if (campo.tipo === 'anexo') return <div className="h-12 rounded-lg border-2 border-dashed border-[var(--c-borda-forte)] flex items-center justify-center text-[11px] text-[var(--c-suave)]">Adicionar foto ou arquivo</div>;
   if (campo.tipo === 'etiquetas' && (campo.opcoes || []).length) return <div className="flex flex-wrap gap-1.5">{campo.opcoes.map(o => <span key={o} className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-white" style={{ background: campo.cores?.[o] || '#64748b' }}>{o}</span>)}</div>;
   if (campo.tipo === 'checkbox' || campo.tipo === 'etiquetas') return <div className="flex items-center gap-2 text-[11px] text-[var(--c-suave)]"><span className="w-3.5 h-3.5 rounded border border-[var(--c-borda-forte)]" />{ops}</div>;
+  if (campo.tipo === 'ns') return <div className="text-xs font-semibold font-mono text-[var(--c-destaque-claro)]">#123 · gerado pelo sistema</div>;
   if (campo.tipo === 'registro') return <div className="rounded-lg border border-[var(--c-borda)] p-2 text-[11px] text-[var(--c-suave)]"><span className="font-semibold text-[var(--c-texto)]">Descrição do registro</span> · Base · Valor R$</div>;
   if (campo.tipo === 'conexao' && campo.pipefy_campo) return <div className="text-xs font-semibold text-sky-400">Conexão do Pipefy</div>;
   if (campo.tipo === 'conexao') return <div className="text-xs font-semibold text-[var(--c-destaque-claro)]">+ Selecionar na lista{String(campo.lista || '').startsWith('base:') ? '' : ` “${campo.lista || LISTAS[0]}”`}</div>;
@@ -170,7 +173,8 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [colunas, setColunas] = useState([]);   // { chave | chave_temp, nome, cor, so_admin, arquivada, sistema, zen, fase_pipefy }
-  const [campos, setCampos] = useState([]);     // { id | uid, coluna, tipo, rotulo, descricao, obrigatorio, opcoes, lista }
+  const [campos, setCampos] = useState([]);
+  const [tiposServ, setTiposServ] = useState(null); // tipos que o servidor desta tela aceita     // { id | uid, coluna, tipo, rotulo, descricao, obrigatorio, opcoes, lista }
   const [aba, setAba] = useState(colunaInicial === 'inicio' && !semInicio ? 'inicio' : 'colunas');    // 'inicio' | 'colunas'
   const [colSel, setColSel] = useState(null);
   const [campoSel, setCampoSel] = useState(null);
@@ -212,7 +216,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
   }
   useEffect(() => {
     Promise.all([svc.config(), svc.estrutura ? svc.estrutura().then(r => r.data.fases).catch(() => null) : Promise.resolve(null)])
-      .then(([{ data }, fases]) => carregarDe(data, fases))
+      .then(([{ data }, fases]) => { setTiposServ(Array.isArray(data?.tipos) ? data.tipos : null); carregarDe(data, fases); })
       .catch(e => setErro(e.response?.data?.erro || 'Não consegui carregar a configuração.'))
       .finally(() => setCarregando(false));
   }, []);
@@ -433,7 +437,7 @@ export default function ConfigOrcamento({ onFechar, onSalvo, colunaInicial = nul
               <p className="text-sm font-bold text-[var(--c-texto)]">Tipos de campo</p>
               <p className="text-[11px] text-[var(--c-suave)] mb-2">Clique para adicionar em <b className="text-[var(--c-texto)]">{aba === 'inicio' ? 'Formulário inicial' : colAtual?.nome || '—'}</b></p>
               <div className="space-y-1.5">
-                {TIPOS_CAMPO.map(t => (
+                {TIPOS_CAMPO.filter(t => !t.so || (tiposServ || []).includes(t.tipo)).map(t => (
                   <button key={t.tipo} onClick={() => addCampo(t.tipo)} disabled={!chaveAtual}
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg border border-[var(--c-borda)] bg-[var(--c-cartao)] text-xs text-[var(--c-texto)] hover:border-[var(--c-destaque)] disabled:opacity-40">
                     <Sigla tipo={t.tipo} /><span className="flex-1 text-left">{t.nome}</span>
@@ -768,6 +772,7 @@ const TIPO_EDITOR = {
   texto: 'short_text', longo: 'long_text', anexo: 'attachment', checkbox: 'checklist_vertical', responsavel: 'short_text',
   data: 'date', datahora: 'datetime', vencimento: 'due_date', etiquetas: 'label_select', email: 'email', telefone: 'phone',
   lista: 'select', unica: 'radio_vertical', numero: 'number', moeda: 'currency', documento: 'short_text', conexao: 'connector', registro: 'registro',
+  ns: 'id', // gerado pelo sistema (nº do card), só leitura
 };
 export function campoDaConfig(c, _i, todos = []) {
   // Obrigatório só quando outro campo tiver um valor (condição gravada com o id do outro campo)

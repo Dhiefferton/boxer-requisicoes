@@ -99,7 +99,7 @@ function cfgDe(id) {
   const n = Number(id);
   if (!cfgs.has(n)) {
     cfgs.set(n, criarConfigQuadro({ TC: `qd${n}_colunas`, TF: `qd${n}_campos`,
-      tabPedidos: `(SELECT * FROM bx_quadro_cards WHERE quadro_id = ${n}) qc`, padrao: COLUNAS_PADRAO }));
+      tabPedidos: `(SELECT * FROM bx_quadro_cards WHERE quadro_id = ${n}) qc`, padrao: COLUNAS_PADRAO, tiposExtras: ['ns'] }));
   }
   return cfgs.get(n);
 }
@@ -482,12 +482,23 @@ const SELECT_CARD = `SELECT c.*, (SELECT COALESCE(json_agg(json_build_object('id
     'blob_url', f.blob_url, 'tamanho', f.tamanho) ORDER BY f.id), '[]'::json) FROM bx_quadro_fotos f WHERE f.pedido_id = c.id) AS fotos_locais
   FROM bx_quadro_cards c`;
 
+// Campo "Nº de NS (automático)": o nº do card, gravado nos valores (como o ID do Pipefy no Registro de NS).
+// Preenche os cards que ainda não têm (cards novos e os que já existiam quando o campo foi criado).
+async function preencherNS(qid, cfg, c, cardId = null) {
+  for (const f of cfg.campos.filter(x => x.tipo === 'ns')) {
+    await query(`UPDATE bx_quadro_cards SET valores = COALESCE(valores, '{}'::jsonb) || jsonb_build_object($2::text, id::text)
+      WHERE quadro_id = $1 AND NOT (COALESCE(valores, '{}'::jsonb) ? $2::text)${cardId ? ' AND id = $3' : ''}`,
+      cardId ? [qid, c.idCampoConfig(f), cardId] : [qid, c.idCampoConfig(f)]);
+  }
+}
+
 // GET /quadros/:qid/cards
 export async function listarCards(req, res, next) {
   try {
     const qid = req.quadro.id;
     await semearFormularioSac(qid);
     const cfg = await cfgDe(qid).ler();
+    await preencherNS(qid, cfg, cfgDe(qid));
     const arquivadas = cfg.colunas.filter(c => c.arquivada).map(c => c.chave);
     const r = await query(
       `SELECT * FROM ((${SELECT_CARD} WHERE c.quadro_id = $1 AND c.status <> '_encaminhado' AND NOT (c.status = ANY($2::text[])))
@@ -515,7 +526,7 @@ export async function criarCard(req, res, next) {
     const c = cfgDe(qid);
     const cfg = await c.ler();
     const valores = Object.fromEntries(Object.entries(limparValores(req.body?.campos)).filter(([, v]) => v !== ''));
-    const faltando = cfg.campos.filter(f => f.coluna === 'inicio' && f.tipo !== 'anexo' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
+    const faltando = cfg.campos.filter(f => f.coluna === 'inicio' && f.tipo !== 'anexo' && f.tipo !== 'ns' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
       && !String(valores[c.idCampoConfig(f)] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha: ${faltando.map(f => f.rotulo).join(', ')}.` });
     // Título automático (a tela não pede mais): o cliente, senão o 1º campo preenchido do formulário
@@ -538,6 +549,10 @@ export async function criarCard(req, res, next) {
       [qid, titulo || 'Card novo', coluna?.chave || 'entrada', JSON.stringify(valores), req.usuario?.id || null, req.usuario?.nome || null]);
     let card = r.rows[0];
     if (!titulo) card = (await query(`UPDATE bx_quadro_cards SET titulo = $2 WHERE id = $1 RETURNING *`, [card.id, `Card #${card.id}`])).rows[0];
+    if (cfg.campos.some(f => f.tipo === 'ns')) {
+      await preencherNS(qid, cfg, c, card.id);
+      card = (await query(`SELECT * FROM bx_quadro_cards WHERE id = $1`, [card.id])).rows[0];
+    }
     await movimento(qid, card, 'criado', { para: card.status, usuario: req.usuario, descricao: `Card criado em ${coluna?.nome || card.status}` });
     res.status(201).json({ card: { ...card, fotos_locais: [] } });
   } catch (err) { next(err); }
@@ -591,7 +606,7 @@ export async function moverCard(req, res, next) {
   // Admin voltando o card para uma coluna anterior: não exige os campos obrigatórios da coluna atual
     const ordemCol = (k) => cfg.colunas.findIndex(x => x.chave === k);
     const voltandoAdmin = req.usuario?.perfil === 'admin' && ordemCol(status) >= 0 && ordemCol(status) < ordemCol(atual);
-    const faltando = voltandoAdmin ? [] : cfg.campos.filter(f => f.coluna === atual && f.tipo !== 'anexo' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
+    const faltando = voltandoAdmin ? [] : cfg.campos.filter(f => f.coluna === atual && f.tipo !== 'anexo' && f.tipo !== 'ns' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
       && !String(valores[c.idCampoConfig(f)] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha antes de sair de "${col.get(atual)?.nome || atual}": ${faltando.map(f => f.rotulo).join(', ')}.` });
     const copiados = preencherCopias(cfg, c, [status], valores);
@@ -721,7 +736,7 @@ export async function encaminharCard(req, res, next) {
     const col = cfg.colunas.find(x => x.chave === p.status);
     if (!ehEmTransito(col?.nome)) return res.status(400).json({ erro: 'O card precisa estar na coluna "Em Trânsito".' });
     const valores = p.valores || {};
-    const faltando = cfg.campos.filter(f => f.coluna === p.status && f.tipo !== 'anexo' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
+    const faltando = cfg.campos.filter(f => f.coluna === p.status && f.tipo !== 'anexo' && f.tipo !== 'ns' && exigidoAgora(f, cfg.campos, valores, c.idCampoConfig)
       && !String(valores[c.idCampoConfig(f)] ?? '').replace(/[\[\]"]/g, '').trim());
     if (faltando.length) return res.status(400).json({ erro: `Preencha antes de enviar: ${faltando.map(f => f.rotulo).join(', ')}.` });
     const r = await encaminharTratativa(qid, p, cfg, c, req.usuario);
@@ -742,7 +757,9 @@ export async function editarCamposCard(req, res, next) {
     const rot = new Map(cfg.campos.map(f => [cfgDe(qid).idCampoConfig(f), f.rotulo]));
     const novo = { ...(p.valores || {}) };
     const alterados = [];
+    const nsIds = new Set(cfg.campos.filter(f => f.tipo === 'ns').map(f => cfgDe(qid).idCampoConfig(f)));
     for (const [k, v] of Object.entries(limparValores(req.body?.campos))) {
+      if (nsIds.has(k)) continue; // Nº de NS automático: não se edita
       if (v === '') delete novo[k]; else novo[k] = v;
       alterados.push(rot.get(k) || k);
     }

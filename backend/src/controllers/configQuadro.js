@@ -106,7 +106,8 @@ export function exigidoAgora(c, todos, valores, idCampo) {
  * @param {{ TC: string, TF: string, tabPedidos: string, padrao: Array<{chave,nome,cor,so_admin?,arquivada?,zen?}>, colStatus?: string, prefixoId?: string }} o
  * colStatus = coluna do pedido com a fase deste quadro; prefixoId = prefixo do id do valor do campo (ex.: cif_bx_)
  */
-export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'status', prefixoId = 'bx_' }) {
+export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'status', prefixoId = 'bx_', tiposExtras = [] }) {
+  const TIPOS = [...TIPOS_CAMPO, ...tiposExtras];
   const porChave = new Map(padrao.map(c => [c.chave, c]));
   let estrutura = null;
   function garantirConfig() {
@@ -184,7 +185,7 @@ export function criarConfigQuadro({ TC, TF, tabPedidos, padrao, colStatus = 'sta
   
   // GET /pedidos-orcamento/config
   async function verConfig(req, res, next) {
-    try { res.json({ ...(await ler()), tipos: TIPOS_CAMPO, listas: LISTAS }); }
+    try { res.json({ ...(await ler()), tipos: TIPOS, listas: LISTAS }); }
     catch (err) { next(err); }
   }
   
@@ -260,7 +261,7 @@ for (const c of lista) if (Array.isArray(c.destinos_admin)) c.destinos_admin = [
       for (const c of campos) {
         const coluna = novasChaves[c?.coluna] || String(c?.coluna || '');
         if (!colunasValidas.has(coluna)) continue;
-        const tipo = TIPOS_CAMPO.includes(c?.tipo) ? c.tipo : null;
+        const tipo = TIPOS.includes(c?.tipo) ? c.tipo : null;
         const rotulo = limpar(c?.rotulo, 120);
         if (!tipo) return res.status(400).json({ erro: `Tipo de campo inválido: ${c?.tipo}.` });
         if (!rotulo) return res.status(400).json({ erro: 'Todo campo precisa de um nome.' });

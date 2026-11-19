@@ -439,7 +439,13 @@ function NovoCard({ svc, cfg, nome, onFechar, onCriado, onConfigurar = null }) {
         </div>
         {!todos.length && <p className="text-xs text-[var(--c-suave)]">Sem campos no Formulário inicial. O admin cria em Configurar → Formulário inicial.</p>}
         <dl className="flex flex-col gap-4">
-          {campos.filter(c => c.tipo !== 'attachment').map(c => (
+          {campos.filter(c => c.tipo === 'id').map(c => (
+            <div key={c.id}>
+              <dt className="text-xs font-semibold text-[var(--c-texto)]">{c.rotulo}</dt>
+              <dd className="mt-1 text-[11px] text-[var(--c-suave)]">Gerado automaticamente ao criar o card.</dd>
+            </div>
+          ))}
+          {campos.filter(c => c.tipo !== 'attachment' && c.tipo !== 'id').map(c => (
             <div key={c.id}>
               <dt className="text-xs font-semibold text-[var(--c-texto)]">{obrigatorioAgora(c, valorDe) && <span className="text-red-400">* </span>}{c.rotulo}</dt>
               {c.descricao && <p className="text-[11px] text-[var(--c-suave)]">{c.descricao}</p>}

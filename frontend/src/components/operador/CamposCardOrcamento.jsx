@@ -105,6 +105,7 @@ export function Valor({ campo, valor }) {
       </div>
     );
   }
+  if (campo?.tipo === 'id') return <span className="font-mono font-semibold">#{lista.join('').replace(/^#/, '')}</span>;
   if (campo?.cores) return <Etiquetas lista={lista} cores={campo.cores} />;
   return <span className="whitespace-pre-wrap break-words">{lista.join(', ')}</span>;
 }
