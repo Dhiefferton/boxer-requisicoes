@@ -100,7 +100,12 @@ export default function TratativaSAC({ pedido, semRegistroNS = false, cif = fals
       {!t && !dados.erro && <p className="text-[11px] text-[var(--c-suave)]">Este card não veio de uma tratativa do SAC.</p>}
       {/* Registro de NS: no Pipefy é o campo do tipo "ID" da fase Direcionar cliente, que mostra o nº do próprio card
           da tratativa (#<id>). O Pipefy não devolve esse campo na leitura, então ele é montado a partir do id do card. */}
-      {t && !semRegistroNS && (t.campos.some(ehRegistroNS) ? t.campos.filter(ehRegistroNS).map((c, i) => (
+      {t && !semRegistroNS && (t.ns ? (
+        <div>
+          <p className="text-[11px] text-[var(--c-suave)]">Registro de NS</p>
+          <p className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">#{t.ns}</p>
+        </div>
+      ) : t.campos.some(ehRegistroNS) ? t.campos.filter(ehRegistroNS).map((c, i) => (
         <div key={`rns-${i}`}>
           <p className="text-[11px] text-[var(--c-suave)]">Registro de NS</p>
           <p className="text-[13px] font-semibold font-mono text-[var(--c-texto)]">{textoCampo(c)}</p>
@@ -113,7 +118,7 @@ export default function TratativaSAC({ pedido, semRegistroNS = false, cif = fals
       ) : null)}
       {t && (
         <dl className="flex flex-col gap-3">
-          {t.campos.map((c, i) => (
+          {t.campos.filter(c => c.tipo !== 'ns').map((c, i) => (
             <div key={c.id || i} className="min-w-0">
               <dt className="text-xs font-semibold text-[var(--c-texto)]">{c.nome}</dt>
               <dd className="text-xs text-[var(--c-texto)] mt-1">

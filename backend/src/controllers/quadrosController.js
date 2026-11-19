@@ -484,11 +484,32 @@ const SELECT_CARD = `SELECT c.*, (SELECT COALESCE(json_agg(json_build_object('id
 
 // Campo "Nº de NS (automático)": o nº do card, gravado nos valores (como o ID do Pipefy no Registro de NS).
 // Preenche os cards que ainda não têm (cards novos e os que já existiam quando o campo foi criado).
+// Nº de NS: sequência própria (0000000001, 0000000002…), 10 dígitos, um por card, na ordem de criação.
+let estNS = null;
+const garantirNS = () => (estNS ||= query(`ALTER TABLE bx_quadro_cards ADD COLUMN IF NOT EXISTS ns VARCHAR(10);
+  CREATE SEQUENCE IF NOT EXISTS bx_ns_seq START 1;
+  CREATE UNIQUE INDEX IF NOT EXISTS uq_bx_quadro_cards_ns ON bx_quadro_cards (ns) WHERE ns IS NOT NULL;`).catch(e => { estNS = null; throw e; }));
 async function preencherNS(qid, cfg, c, cardId = null) {
-  for (const f of cfg.campos.filter(x => x.tipo === 'ns')) {
-    await query(`UPDATE bx_quadro_cards SET valores = COALESCE(valores, '{}'::jsonb) || jsonb_build_object($2::text, id::text)
-      WHERE quadro_id = $1 AND NOT (COALESCE(valores, '{}'::jsonb) ? $2::text)${cardId ? ' AND id = $3' : ''}`,
+  const campos = cfg.campos.filter(x => x.tipo === 'ns');
+  if (!campos.length) return;
+  await garantirNS();
+  const sem = (await query(`SELECT id FROM bx_quadro_cards WHERE quadro_id = $1 AND ns IS NULL${cardId ? ' AND id = $2' : ''} ORDER BY id`,
+    cardId ? [qid, cardId] : [qid])).rows;
+  for (const r of sem) {
+    await query(`UPDATE bx_quadro_cards SET ns = LPAD(nextval('bx_ns_seq')::text, 10, '0') WHERE id = $1 AND ns IS NULL`, [r.id]);
+  }
+  for (const f of campos) {
+    await query(`UPDATE bx_quadro_cards SET valores = COALESCE(valores, '{}'::jsonb) || jsonb_build_object($2::text, ns)
+      WHERE quadro_id = $1 AND ns IS NOT NULL AND (valores->>$2::text) IS DISTINCT FROM ns${cardId ? ' AND id = $3' : ''}`,
       cardId ? [qid, c.idCampoConfig(f), cardId] : [qid, c.idCampoConfig(f)]);
+  }
+  // Cards já enviados para Orçamentos/Garantia: o Registro de NS de lá passa a ser o nº de NS
+  if (!cardId) {
+    for (const tab of ['pedidos_orcamento', 'lojinha_boxer_pedidos']) {
+      await query(`UPDATE ${tab} p SET tratativa_card_id = c.ns, tratativa = jsonb_set(p.tratativa, '{ns}', to_jsonb(c.ns))
+        FROM bx_quadro_cards c WHERE c.quadro_id = $1 AND c.ns IS NOT NULL AND p.tratativa->>'origem' = 'boxer'
+          AND p.tratativa->>'card_id' = c.id::text AND p.tratativa_card_id IS DISTINCT FROM c.ns`, [qid]).catch(() => {});
+    }
   }
 }
 
@@ -684,7 +705,9 @@ export async function encaminharTratativa(qid, card, cfg, cq, usuario = null) {
     const campos = cfg.campos.filter(f => f.tipo !== 'anexo')
       .map(f => ({ id: cq.idCampoConfig(f), nome: f.rotulo, tipo: f.tipo, valor: textoValor(valores[cq.idCampoConfig(f)]) }))
       .filter(x => x.valor);
-    const tratativa = { card_id: String(card.id), titulo: card.titulo, url: null, pipe: q.nome, fase, origem: 'boxer',
+    await garantirNS().catch(() => {});
+    const ns = (await query(`SELECT ns FROM bx_quadro_cards WHERE id = $1`, [card.id]).catch(() => ({ rows: [] }))).rows[0]?.ns || null;
+    const tratativa = { card_id: String(card.id), ns, titulo: card.titulo, url: null, pipe: q.nome, fase, origem: 'boxer',
       criado_em: card.criado_em, criado_por: card.criado_por_nome || null, campos };
     const cliente = (valorDe(/^cliente$/) || card.titulo || `Tratativa #${card.id}`).slice(0, 255);
     let destinoId = null, destinoNome = '';
@@ -692,7 +715,7 @@ export async function encaminharTratativa(qid, card, cfg, cq, usuario = null) {
       const ins = await query(
         `INSERT INTO pedidos_orcamento (referencia, status, criado_por, pipefy_campos, tratativa, tratativa_em, tratativa_card_id)
          VALUES ($1, 'entrada', $2, '[]'::jsonb, $3::jsonb, NOW(), $4) RETURNING id`,
-        [String(card.titulo || cliente).slice(0, 255), usuario?.id || null, JSON.stringify(tratativa), String(card.id)]);
+        [String(card.titulo || cliente).slice(0, 255), usuario?.id || null, JSON.stringify(tratativa), ns || String(card.id)]);
       destinoId = ins.rows[0].id; destinoNome = 'Orçamentos';
       await query(`INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, para_status, descricao, detalhes, usuario_id, usuario_nome, origem)
                    VALUES ($1, 'criado_tratativa', 'entrada', $2, $3::jsonb, $4, $5, 'sistema')`,
@@ -705,7 +728,7 @@ export async function encaminharTratativa(qid, card, cfg, cq, usuario = null) {
             criado_por, criado_por_nome, cif_status, cif_entrou_em, tratativa, tratativa_em, tratativa_card_id)
          VALUES ('', $1, CURRENT_DATE, $2, $3, $4, '[]'::jsonb, 'garantia', 'tratativa_sac', $5, $6, $7, NOW(), $8::jsonb, NOW(), $9) RETURNING id`,
         [cliente, `GAR-BX-${card.id}`, (valorDe(/^responsavel/) || '—').slice(0, 150), (valorDe(/^frete por conta/) || valorDe(/^tipo de envio/) || '—').slice(0, 30),
-         usuario?.id || null, usuario?.nome || 'Sistema', col, JSON.stringify(tratativa), String(card.id)]);
+         usuario?.id || null, usuario?.nome || 'Sistema', col, JSON.stringify(tratativa), ns || String(card.id)]);
       destinoId = ins.rows[0].id; destinoNome = 'Garantia';
       await query(`INSERT INTO loj_movimentos (pedido_id, referencia, cliente_nome, tipo, para_status, descricao, detalhes, usuario_id, usuario_nome, origem)
                    VALUES ($1, $2, $3, 'cif_entrada', $4, $5, $6::jsonb, $7, $8, 'sistema')`,
