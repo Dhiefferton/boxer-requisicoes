@@ -35,6 +35,7 @@ const BASE_SELECT = `
     p.zen_romaneio_id, p.zen_nota_id, p.zen_cancelado_id, p.zen_cancelado_em, p.zen_venda_numero, p.zen_nf_numero, p.zen_nf_status,
     p.pecas_recusadas, p.recusadas_retiradas_em, p.itens_recusados, p.itens_alterados_em,
     p.campos_editados, p.pipefy_fase, p.tratativa_card_id,
+    (p.tratativa IS NOT NULL) AS tem_tratativa,
     p.created_at, p.atualizado_em,
     u.nome AS criado_por_nome,
     (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome, 'blob_url', f.blob_url, 'tamanho', f.tamanho) ORDER BY f.id), '[]'::json)

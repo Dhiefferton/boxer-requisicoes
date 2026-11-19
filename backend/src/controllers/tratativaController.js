@@ -54,6 +54,10 @@ export async function anexoTratativa(req, res, next) {
     await garantir();
     const p = (await query(`SELECT tratativa FROM pedidos_orcamento WHERE id = $1`, [parseInt(req.params.id) || 0])).rows[0];
     const caminho = String(req.query.caminho || '');
+    if (p?.tratativa?.garantia && caminho.startsWith('gar:')) {
+      const { responderAnexoGarantia } = await import('./logisticaCifController.js');
+      return responderAnexoGarantia(p.tratativa, caminho, req, res);
+    }
     if (p?.tratativa?.origem === 'boxer' && caminho.startsWith('bx:')) {
       const { responderAnexoTratativaBoxer } = await import('./quadrosController.js');
       return responderAnexoTratativaBoxer(p.tratativa, caminho, req, res);

@@ -118,6 +118,109 @@ export async function moverPedidoCif(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// ── Perda de garantia → novo card em Orçamentos ─────────────
+// O botão aparece quando o campo "Manutenção" do card está "Perda de Garantia". Cria um card
+// na Entrada de Orçamentos com a tratativa do SAC (a mesma do card da Garantia) e os dados da
+// Garantia (campos preenchidos, campos do Pipefy e fotos/arquivos). Um orçamento por card.
+const normTxt = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+function legivel(v) {
+  if (v == null) return '';
+  if (Array.isArray(v)) return v.map(legivel).filter(Boolean).join(', ');
+  if (typeof v === 'object') return String(v.descricao ?? v.titulo ?? v.nome ?? v.title ?? '').trim();
+  const t = String(v).trim();
+  if (/^[\[{]/.test(t)) { try { return legivel(JSON.parse(t)); } catch { /* texto */ } }
+  return t;
+}
+export function ehPerdaGarantia(cfg, valores) {
+  return cfg.campos.some(f => /^manuten/.test(normTxt(f.rotulo)) && /perda de garantia/.test(normTxt(legivel(valores?.[cfgCif.idCampoConfig(f)]))));
+}
+let colPerda = null;
+const garantirPerda = () => (colPerda ||= query(`
+  ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS orcamento_perda_id INTEGER;
+  ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS tratativa JSONB;
+  ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS tratativa_em TIMESTAMPTZ;
+  ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS tratativa_card_id TEXT;`).catch(e => { colPerda = null; throw e; }));
+
+// POST /logistica-cif/pedidos/:id/orcamento-perda
+export async function criarOrcamentoPerda(req, res, next) {
+  try {
+    await garantirTratativa();
+    await garantirPerda();
+    const p = (await query(`SELECT * FROM lojinha_boxer_pedidos WHERE id = $1 AND cif_status IS NOT NULL AND cif_status <> '_excluido'`, [parseInt(req.params.id) || 0])).rows[0];
+    if (!p) return res.status(404).json({ erro: 'Card não encontrado na Garantia.' });
+    if (p.orcamento_perda_id) return res.status(409).json({ erro: `O orçamento deste card já foi criado (#${p.orcamento_perda_id}).`, id: p.orcamento_perda_id });
+    const cfg = await cfgCif.ler();
+    const valores = p.cif_valores || {};
+    if (!ehPerdaGarantia(cfg, valores)) return res.status(400).json({ erro: 'Só dá para criar o orçamento quando "Manutenção" estiver marcado como "Perda de Garantia".' });
+    // Trava: um orçamento por card (dois cliques ao mesmo tempo não criam dois)
+    const trava = await query(`UPDATE lojinha_boxer_pedidos SET orcamento_perda_id = 0 WHERE id = $1 AND orcamento_perda_id IS NULL RETURNING id`, [p.id]);
+    if (!trava.rows[0]) return res.status(409).json({ erro: 'O orçamento deste card já está sendo criado.' });
+    try {
+      // Tratativa do SAC (a guardada; card do Pipefy sem leitura ainda: lê agora)
+      let t = p.tratativa;
+      if (!t && p.pipefy_garantia_id) {
+        try {
+          const { buscarTratativa } = await import('../integrations/pipefyTratativa.js');
+          t = await buscarTratativa(p.pipefy_garantia_id);
+          await query(`UPDATE lojinha_boxer_pedidos SET tratativa = $1::jsonb, tratativa_em = NOW() WHERE id = $2`, [JSON.stringify(t), p.id]);
+        } catch { t = null; }
+      }
+      // Dados da Garantia: campos preenchidos (na ordem das colunas), campos do Pipefy e fotos/arquivos
+      const ordemCol = new Map(cfg.colunas.map((c, i) => [c.chave, i]));
+      const nomeCol = new Map(cfg.colunas.map(c => [c.chave, c.nome]));
+      const camposGar = cfg.campos.filter(f => f.tipo !== 'anexo')
+        .sort((a, b) => (ordemCol.get(a.coluna) ?? 99) - (ordemCol.get(b.coluna) ?? 99))
+        .map(f => ({ id: cfgCif.idCampoConfig(f), nome: f.rotulo, fase: nomeCol.get(f.coluna) || '', valor: legivel(valores[cfgCif.idCampoConfig(f)]) }))
+        .filter(x => x.valor);
+      const doPipefy = (Array.isArray(p.pipefy_garantia_campos?.campos) ? p.pipefy_garantia_campos.campos : [])
+        .map(f => ({ id: `pf_${f.id || f.nome}`, nome: f.nome, fase: 'Pipefy (Garantia)', valor: legivel(f.valor) }))
+        .filter(x => x.valor && !/^https?:\/\//.test(x.valor) && !camposGar.some(c => normTxt(c.nome) === normTxt(x.nome)));
+      const fotos = (await query(`SELECT id, campo_id, nome, mime FROM loj_fotos WHERE pedido_id = $1 ORDER BY id`, [p.id])).rows;
+      const rotuloCampo = new Map(cfg.campos.map(f => [cfgCif.idCampoConfig(f), f.rotulo]));
+      const anexos = [];
+      for (const f of fotos) {
+        const nome = rotuloCampo.get(f.campo_id) || 'Fotos e arquivos';
+        let g = anexos.find(x => x.nome === nome);
+        if (!g) anexos.push(g = { id: `gar_${f.campo_id}`, nome, anexos: [] });
+        g.anexos.push({ nome: f.nome || `${String(f.mime || '').startsWith('video/') ? 'Vídeo' : 'Foto'} ${g.anexos.length + 1}`, caminho: `gar:${f.id}`, mime: f.mime });
+      }
+      const garantia = { pedido_id: p.id, titulo: p.cliente_nome || `Pedido ${p.numero_pedido}`, fase: nomeCol.get(p.cif_status) || p.cif_status,
+        pipefy_id: p.pipefy_garantia_id || null, criado_em: new Date().toISOString(), criado_por: req.usuario?.nome || null,
+        campos: [...camposGar, ...doPipefy], anexos };
+      const tratativa = { ...(t || { origem: 'garantia', campos: [] }), garantia };
+      const ns = p.tratativa_card_id || t?.ns || null;
+      const cliente = String(p.cliente_nome || `Garantia #${p.id}`).slice(0, 255);
+      const ins = await query(
+        `INSERT INTO pedidos_orcamento (referencia, cliente_nome, status, criado_por, pipefy_campos, tratativa, tratativa_em, tratativa_card_id)
+         VALUES ($1, $1, 'entrada', $2, '[]'::jsonb, $3::jsonb, NOW(), $4) RETURNING id`,
+        [cliente, req.usuario?.id || null, JSON.stringify(tratativa), ns]);
+      const orcId = ins.rows[0].id;
+      await query(`INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, para_status, descricao, detalhes, usuario_id, usuario_nome, origem)
+        VALUES ($1, 'criado', 'entrada', $2, $3::jsonb, $4, $5, 'usuario')`,
+        [orcId, `Criado pela Garantia (perda de garantia) — card ${cliente}`, JSON.stringify({ garantia_id: p.id }), req.usuario?.id || null, req.usuario?.nome || null]).catch(() => {});
+      await query(`UPDATE lojinha_boxer_pedidos SET orcamento_perda_id = $2 WHERE id = $1`, [p.id, orcId]);
+      await registrarMovLoj(p, 'cif_orcamento_perda', { usuario: req.usuario,
+        descricao: `Perda de garantia: criado o card #${orcId} em Orçamentos com a tratativa e os dados da Garantia`, detalhes: { orcamento_id: orcId } });
+      res.status(201).json({ id: orcId });
+    } catch (e) {
+      await query(`UPDATE lojinha_boxer_pedidos SET orcamento_perda_id = NULL WHERE id = $1 AND orcamento_perda_id = 0`, [p.id]).catch(() => {});
+      throw e;
+    }
+  } catch (err) { next(err); }
+}
+
+// Foto/arquivo da Garantia levado para o Orçamento (caminho "gar:<id>"): link do blob ou a imagem
+export async function responderAnexoGarantia(t, caminho, req, res) {
+  const f = (await query(`SELECT id, imagem, mime, nome, blob_url FROM loj_fotos WHERE id = $1 AND pedido_id = $2`,
+    [parseInt(String(caminho).slice(4)) || 0, parseInt(t?.garantia?.pedido_id) || 0])).rows[0];
+  if (!f) return res.status(404).json({ erro: 'Anexo não encontrado.' });
+  if (f.blob_url) return res.json({ url: f.blob_url });
+  if (req.query.baixar !== '1') return res.json({ inline: true, mime: f.mime || 'image/jpeg' });
+  res.set('Content-Type', f.mime || 'image/jpeg');
+  res.set('Cache-Control', 'private, max-age=86400');
+  res.send(f.imagem);
+}
+
 // DELETE /logistica-cif/pedidos/:id — tira o card da Garantia (fica marcado como excluído: não volta pelo
 // "Trazer do Pipefy", não volta pela Tratativa e não volta pela Lojinha; o histórico continua)
 export async function excluirPedidoCif(req, res, next) {

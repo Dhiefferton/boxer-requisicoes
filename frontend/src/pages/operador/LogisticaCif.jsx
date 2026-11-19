@@ -417,6 +417,19 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
     try { await cifService.excluir(p.id); onFechar(); carregar(); }
     catch (e) { alert(e.response?.data?.erro || 'Erro ao excluir o card.'); }
   }
+  // "Manutenção" = "Perda de Garantia": botão para criar o card em Orçamentos (tratativa + dados da Garantia)
+  const semAcento = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const perdaGarantia = camposCif.map(c => campoCif(c, 0, camposCif))
+    .some(f => /^manuten/.test(semAcento(f.rotulo)) && valorLista(valorCif(f.id)).some(v => /perda de garantia/.test(semAcento(v))));
+  const [criandoOrc, setCriandoOrc] = useState(false);
+  async function criarOrcamento() {
+    if (sujo && !(await salvar())) return;
+    if (!confirm(`Criar um card em Orçamentos para "${p.cliente_nome || p.numero_pedido}" com a tratativa e os dados da Garantia?`)) return;
+    setCriandoOrc(true); setErro('');
+    try { const { data } = await cifService.orcamentoPerda(p.id); alert(`Card #${data.id} criado na Entrada de Orçamentos.`); await carregar(); }
+    catch (e) { setErro(e.response?.data?.erro || 'Erro ao criar o orçamento.'); }
+    finally { setCriandoOrc(false); }
+  }
   const destinos = colunas.filter(c => c.status !== atual && permitido(c) && !(colAtual?.admin && !botoes.mover_admin));
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
@@ -545,6 +558,15 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
                 <Settings size={12} /> Configurar colunas e campos
               </button>
             )}
+            {perdaGarantia && (p.orcamento_perda_id > 0
+              ? <a href={`/pedidos-orcamento?busca=${encodeURIComponent(p.cliente_nome || '')}`}
+                  className="w-full flex items-center gap-2 rounded-xl border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-600">
+                  <Check size={13} /> <span className="flex-1 text-left">Orçamento #{p.orcamento_perda_id} criado</span><ExternalLink size={12} />
+                </a>
+              : <button onClick={criarOrcamento} disabled={criandoOrc}
+                  className="w-full flex items-center gap-2 rounded-xl border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-600 hover:bg-amber-500/20 disabled:opacity-50">
+                  {criandoOrc ? <Spinner size={13} /> : <FileText size={13} />} <span className="flex-1 text-left">Criar orçamento (perda de garantia)</span>
+                </button>)}
             <div className="space-y-1.5 pt-3 border-t border-[var(--c-borda)]">
               <button onClick={onHistorico}
                 className="w-full flex items-center gap-2 rounded-xl border border-[var(--c-borda)] px-3 py-2 text-xs font-semibold text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40">

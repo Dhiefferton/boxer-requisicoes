@@ -76,7 +76,7 @@ export default function CardAbertoOrcamento({
     [fases, pedido, colunaAtual?.faseId]);
 
   // Veio do Pipefy ou da Tratativa do SAC do Boxer Operações: mostra o Formulário inicial com a tratativa
-  const daTratativa = !!(pedido.pipefy_card_id || pedido.tratativa_card_id);
+  const daTratativa = !!(pedido.pipefy_card_id || pedido.tratativa_card_id || pedido.tem_tratativa);
   const doPipefy = useMemo(() => Object.fromEntries((Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [])
     .filter(c => c?.id).map(c => [c.id, c.valor])), [pedido.pipefy_campos]);
   const editados = pedido.campos_editados || {};

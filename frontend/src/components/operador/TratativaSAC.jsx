@@ -118,7 +118,7 @@ export default function TratativaSAC({ pedido, semRegistroNS = false, cif = fals
       ) : null)}
       {t && (
         <dl className="flex flex-col gap-3">
-          {t.campos.filter(c => c.tipo !== 'ns').map((c, i) => (
+          {(t.campos || []).filter(c => c.tipo !== 'ns').map((c, i) => (
             <div key={c.id || i} className="min-w-0">
               <dt className="text-xs font-semibold text-[var(--c-texto)]">{c.nome}</dt>
               <dd className="text-xs text-[var(--c-texto)] mt-1">
@@ -135,6 +135,33 @@ export default function TratativaSAC({ pedido, semRegistroNS = false, cif = fals
             </div>
           ))}
         </dl>
+      )}
+      {/* Card criado pela Garantia (perda de garantia): dados e fotos da Garantia */}
+      {t?.garantia && (
+        <div className="pt-3 mt-1 border-t border-[var(--c-borda)] space-y-3">
+          <div>
+            <p className="text-[10px] text-[var(--c-suave)]">Veio da Garantia (perda de garantia)</p>
+            <p className="text-xs text-[var(--c-destaque)] font-semibold">{t.garantia.titulo}</p>
+            <p className="text-[10px] text-[var(--c-suave)] mt-0.5">Fase: <span className="text-[var(--c-texto)]">{t.garantia.fase || '—'}</span>
+              {t.garantia.pipefy_id ? ` · Pipefy #${t.garantia.pipefy_id}` : ''}{t.garantia.criado_em ? ` · enviado em ${fmtData(t.garantia.criado_em)}${t.garantia.criado_por ? ` por ${t.garantia.criado_por}` : ''}` : ''}</p>
+          </div>
+          <dl className="flex flex-col gap-3">
+            {[...(t.garantia.campos || []), ...(t.garantia.anexos || [])].map((c, i) => (
+              <div key={c.id || i} className="min-w-0">
+                <dt className="text-xs font-semibold text-[var(--c-texto)]">{c.nome}{c.fase ? <span className="font-normal text-[var(--c-suave)]"> · {c.fase}</span> : null}</dt>
+                <dd className="text-xs text-[var(--c-texto)] mt-1">
+                  {c.anexos
+                    ? <div className="flex flex-col gap-1">{c.anexos.map(a => (
+                        <button key={a.caminho} type="button" onClick={() => abrirAnexo(a)} disabled={abrindo === a.caminho}
+                          className="inline-flex items-center gap-1.5 text-left text-[var(--c-destaque)] hover:underline break-all disabled:opacity-50">
+                          {abrindo === a.caminho ? <Spinner size={11} /> : <Paperclip size={11} />} {a.nome}
+                        </button>))}</div>
+                    : <span className="whitespace-pre-wrap break-words">{c.valor}</span>}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       )}
     </div>
   );
