@@ -117,6 +117,8 @@ export const BOTOES = [
   { chave: 'cif_movimentacao',  tela: 'logistica_cif', rotas: [] },
   { chave: 'cif_editar_fase',   tela: 'logistica_cif', rotas: [] },
   { chave: 'cif_mover_admin',   tela: 'logistica_cif', rotas: [], legado: adminOuOperador }, // checado no moverPedidoCif
+  // Perda de garantia → card em Orçamentos: liberado por padrão para todos (inclusive quem só vê a Garantia, ex.: Assistência Técnica)
+  { chave: 'cif_orcamento_perda', tela: 'logistica_cif', rotas: [['POST', /^\/logistica-cif\/pedidos\/\d+\/orcamento-perda$/]], legado: () => true },
   { chave: 'cif_excluir',       tela: 'logistica_cif', rotas: [['DELETE', /^\/logistica-cif\/pedidos\/\d+$/]] }, // só admin, ou quem tiver liberado
   { chave: 'cif_configurar',    tela: 'logistica_cif', rotas: [['POST', /^\/logistica-cif\/quadro-config$/],
     ['POST', /^\/bases(\/importar-pipefy)?$/], ['DELETE', /^\/bases\/\d+$/], ['PATCH', /^\/bases\/registros\/\d+$/]] },

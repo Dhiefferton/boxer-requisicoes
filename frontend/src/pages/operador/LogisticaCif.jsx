@@ -558,7 +558,7 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
                 <Settings size={12} /> Configurar colunas e campos
               </button>
             )}
-            {perdaGarantia && (p.orcamento_perda_id > 0
+            {perdaGarantia && (botoes.orcamento_perda || p.orcamento_perda_id > 0) && (p.orcamento_perda_id > 0
               ? <a href={`/pedidos-orcamento?busca=${encodeURIComponent(p.cliente_nome || '')}`}
                   className="w-full flex items-center gap-2 rounded-xl border border-green-500/40 bg-green-500/10 px-3 py-2 text-xs font-semibold text-green-600">
                   <Check size={13} /> <span className="flex-1 text-left">Orçamento #{p.orcamento_perda_id} criado</span><ExternalLink size={12} />
