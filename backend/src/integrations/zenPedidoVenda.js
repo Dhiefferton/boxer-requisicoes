@@ -323,7 +323,10 @@ export async function documentosZen({ zen_pedido_id, zen_ordem_separacao_id, zen
     if (romaneioId) {
       const notas = await zen('GET', `/fiscal/outgoingInvoice?q=${q(`outgoingList.id==${romaneioId}`)}&max=5`).catch(() => []);
       const lista = Array.isArray(notas) ? notas : (notas?.content || notas?.data || []);
-      const n = lista.find(x => x?.number) || lista[0];
+      // Nota refeita (cancelada e emitida de novo): vale a mais nova que não foi cancelada/denegada
+      const validas = lista.filter(x => x && !/CANCEL|DENIED|DENEG|INUTIL/i.test(String(x.status || ''))).sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+      const ordenadas = (validas.length ? validas : [...lista].sort((a, b) => Number(b?.id || 0) - Number(a?.id || 0)));
+      const n = ordenadas.find(x => x?.number) || ordenadas[0];
       if (n) { r.nfId = n.id || null; r.nfNumero = n.number ? String(n.number) : null; r.nfStatus = n.status || null; }
     }
   }

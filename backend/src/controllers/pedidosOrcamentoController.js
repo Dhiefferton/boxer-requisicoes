@@ -371,10 +371,11 @@ function atualizarDocumentosOrcamento() {
   docsUltima = Date.now();
   docsRodando = (async () => {
     const r = await query(`SELECT id, zen_pedido_id, zen_ordem_separacao_id, zen_venda_numero FROM pedidos_orcamento
-       WHERE zen_pedido_id IS NOT NULL AND status != 'cancelado' AND (zen_venda_numero IS NULL OR zen_nf_numero IS NULL)
-         AND (zen_docs_em IS NULL OR zen_docs_em < NOW() - INTERVAL '10 minutes')
-         AND created_at > NOW() - INTERVAL '90 days'
-       ORDER BY zen_docs_em NULLS FIRST, id DESC LIMIT 4`);
+       WHERE zen_pedido_id IS NOT NULL AND status != 'cancelado' AND created_at > NOW() - INTERVAL '90 days'
+         AND (((zen_venda_numero IS NULL OR zen_nf_numero IS NULL) AND (zen_docs_em IS NULL OR zen_docs_em < NOW() - INTERVAL '10 minutes'))
+           -- NF já lida: confere de novo a cada 30 min nos últimos 30 dias (nota cancelada e refeita muda o número)
+           OR (zen_nf_numero IS NOT NULL AND zen_docs_em < NOW() - INTERVAL '30 minutes' AND created_at > NOW() - INTERVAL '30 days'))
+       ORDER BY (zen_nf_numero IS NULL) DESC, zen_docs_em NULLS FIRST, id DESC LIMIT 4`);
     await Promise.all(r.rows.map(async (p) => {
       try {
         const d = await documentosZen(p);
