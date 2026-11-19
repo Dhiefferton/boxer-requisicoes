@@ -108,6 +108,7 @@ export const BOTOES = [
   { chave: 'cif_movimentacao',  tela: 'logistica_cif', nome: 'Movimentação (relatório)' },
   { chave: 'cif_editar_fase',   tela: 'logistica_cif', nome: 'Editar fases anteriores' },
   { chave: 'cif_mover_admin',   tela: 'logistica_cif', nome: 'Mover para colunas restritas (admin e operador)', legado: adminOuOperador },
+  { chave: 'cif_excluir',       tela: 'logistica_cif', nome: 'Excluir card' },
   { chave: 'cif_configurar',    tela: 'logistica_cif', nome: 'Configurar colunas e campos (engrenagem)' },
   { chave: 'inv_recontagem',    tela: 'inventario', nome: 'Fazer a recontagem', legado: recontador },
   { chave: 'inv_finalizar',     tela: 'inventario', nome: 'Finalizar inventário e marcar ajuste no Zen', legado: recontador },

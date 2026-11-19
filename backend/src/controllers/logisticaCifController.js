@@ -70,7 +70,7 @@ export async function listarPedidosCif(req, res, next) {
     const r = await query(
       `SELECT t.*, (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'campo', f.campo_id, 'mime', f.mime, 'nome', f.nome, 'blob_url', f.blob_url, 'tamanho', f.tamanho) ORDER BY f.id), '[]'::json)
                       FROM loj_fotos f WHERE f.pedido_id = t.id) AS fotos_locais
-         FROM ((SELECT * FROM lojinha_boxer_pedidos WHERE cif_status IS NOT NULL AND NOT (cif_status = ANY($1::text[])))
+         FROM ((SELECT * FROM lojinha_boxer_pedidos WHERE cif_status IS NOT NULL AND cif_status <> '_excluido' AND NOT (cif_status = ANY($1::text[])))
                UNION ALL
                (SELECT * FROM lojinha_boxer_pedidos WHERE cif_status = ANY($1::text[]) ORDER BY cif_entrou_em DESC NULLS LAST LIMIT 80)) t
         ORDER BY t.cif_entrou_em DESC NULLS LAST, t.id DESC`, [arquivadas]);
@@ -115,6 +115,20 @@ export async function moverPedidoCif(req, res, next) {
     });
     if (ehLiberacaoFaturamento(col.get(status)?.nome)) { await liberarFaturamento(p.id, req.usuario); await copiarParaTelas('logistica_cif', p.id, req.usuario); }
     res.json({ pedido: r.rows[0] });
+  } catch (err) { next(err); }
+}
+
+// DELETE /logistica-cif/pedidos/:id — tira o card da Garantia (fica marcado como excluído: não volta pelo
+// "Trazer do Pipefy", não volta pela Tratativa e não volta pela Lojinha; o histórico continua)
+export async function excluirPedidoCif(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const p = (await query(`SELECT * FROM lojinha_boxer_pedidos WHERE id = $1 AND cif_status IS NOT NULL AND cif_status <> '_excluido'`, [parseInt(req.params.id)])).rows[0];
+    if (!p) return res.status(404).json({ erro: 'Card não encontrado na Garantia.' });
+    const r = await query(`UPDATE lojinha_boxer_pedidos SET cif_status = '_excluido' WHERE id = $1 RETURNING *`, [p.id]);
+    await registrarMovLoj(r.rows[0], 'cif_excluido', { de: p.cif_status, para: null, usuario: req.usuario,
+      descricao: `Card ${p.cliente_nome || p.numero_pedido} excluído da Garantia` });
+    res.json({ ok: true });
   } catch (err) { next(err); }
 }
 

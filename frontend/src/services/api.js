@@ -172,6 +172,7 @@ export const cifService = {
   pedidos:     ()             => api.get('/logistica-cif/pedidos'),
   importarEntrada: ()         => api.post('/logistica-cif/importar-entrada', {}, { timeout: 120000 }), // "Trazer do Pipefy" (Garantia)
   mover:       (id, status)   => api.post(`/logistica-cif/pedidos/${id}/mover`, { status }),
+  excluir:     (id)           => api.delete(`/logistica-cif/pedidos/${id}`),
   editarCampos: (id, campos)  => api.post(`/logistica-cif/pedidos/${id}/campos`, { campos }),
   renomear:     (id, nome)    => api.post(`/logistica-cif/pedidos/${id}/nome`, { nome }),
   quadroConfig:       ()      => api.get('/logistica-cif/quadro-config', { timeout: 30000 }),

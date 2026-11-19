@@ -48,7 +48,7 @@ export function garantirEstruturaApi() {
 export const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 // ── Fontes de dados de cada tela ──────────────────────────────
-const GARANTIA = `(origem = 'pipefy_garantia' OR cif_status IS NOT NULL)`;
+const GARANTIA = `((origem = 'pipefy_garantia' OR cif_status IS NOT NULL) AND COALESCE(cif_status, '') <> '_excluido')`;
 // recurso -> { tabela, onde? (filtro fixo da tela), ordem? }
 const FONTES = {
   catalogo:               { materiais: { tabela: 'materiais' }, categorias: { tabela: 'categorias' } },

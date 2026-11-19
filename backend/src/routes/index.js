@@ -50,7 +50,7 @@ import {
   acessoLojinha, configLojinha, buscarClienteLojinha, buscarProdutoLojinha, listarPedidosLojinha, criarPedidoLojinha, reenviarZenLojinha, reenviarPipefyLojinha, moverPedidoLojinha, editarCamposLojinha, enviarFotoLojinha, verFotoLojinha, excluirFotoLojinha, listarMovimentosLojinha, verConfigLojinha, salvarConfigLojinha, adicionarOpcaoLojinha, excluirPedidoLojinha, buscarPedidoLojaIntegrada,
   buscarPedidoZenLojinha, criarPedidoLojinhaFaturada,
 } from '../controllers/lojinhaController.js';
-import { acessoCif, listarPedidosCif, moverPedidoCif, editarCamposCif, renomearCif, verConfigCif, salvarConfigCif, adicionarOpcaoCif, importarEntradaGarantia, verTratativaCif, anexoTratativaCif } from '../controllers/logisticaCifController.js';
+import { acessoCif, listarPedidosCif, moverPedidoCif, editarCamposCif, renomearCif, verConfigCif, salvarConfigCif, adicionarOpcaoCif, importarEntradaGarantia, verTratativaCif, anexoTratativaCif, excluirPedidoCif } from '../controllers/logisticaCifController.js';
 import {
   listarNotas as listarNotasRecImp, detalharNota as detalharNotaRecImp, verFoto as verFotoRecImp,
   fotoCatalogo as fotoCatalogoRecImp, enviarFoto as enviarFotoRecImp, excluirFoto as excluirFotoRecImp,
@@ -368,6 +368,7 @@ router.get('/logistica-cif/pedidos/:id/nf/:tipo', ...cif, arquivoNotaLojinha);
 router.post('/logistica-cif/pedidos/:id/mover',   ...cif, moverPedidoCif);
 router.post('/logistica-cif/pedidos/:id/campos',  ...cif, editarCamposCif);
 router.post('/logistica-cif/pedidos/:id/nome',    ...cif, renomearCif);
+router.delete('/logistica-cif/pedidos/:id',        ...cif, excluirPedidoCif);
 router.get('/logistica-cif/pedidos/:id/tratativa', ...cif, verTratativaCif);
 router.get('/logistica-cif/pedidos/:id/tratativa/anexo', ...cif, anexoTratativaCif);
 router.post('/logistica-cif/pedidos/:id/fotos',   ...cif, enviarFotoLojinha);

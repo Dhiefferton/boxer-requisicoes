@@ -146,7 +146,7 @@ async function cardsLojinha() {
 
 async function cardsGarantia() {
   const { fases, porId } = await lerConfig('cif_colunas', 'cif_campos', 'cif_bx_');
-  const r = await query(`SELECT * FROM lojinha_boxer_pedidos WHERE cif_status IS NOT NULL`);
+  const r = await query(`SELECT * FROM lojinha_boxer_pedidos WHERE cif_status IS NOT NULL AND cif_status <> '_excluido'`);
   const movs = movsPor((await query(`SELECT pedido_id, de_status, para_status, criado_em FROM loj_movimentos
                                        WHERE pedido_id IS NOT NULL AND tipo LIKE 'cif%' ORDER BY criado_em, id`).catch(() => ({ rows: [] }))).rows);
   return r.rows.map(p => {

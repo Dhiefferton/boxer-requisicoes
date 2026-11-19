@@ -9,7 +9,7 @@
 // ============================================================
 import { useEffect, useState } from 'react';
 import NomeCardEditavel from '../../components/operador/NomeCardEditavel.jsx';
-import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, ExternalLink, DownloadCloud, RefreshCw, FileText } from 'lucide-react';
+import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, ExternalLink, DownloadCloud, RefreshCw, FileText, Trash2 } from 'lucide-react';
 import { cifService } from '../../services/api';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
@@ -412,6 +412,11 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
 
   const permitido = (c) => (!Array.isArray(colAtual?.destinos) || colAtual.destinos.includes(c.status))
     && !regraBloqueiaMover(colAtual, c.status, camposCif, valorCif, (x) => `cif_${x.pipefy_campo || `bx_${x.id}`}`);
+  async function excluir() {
+    if (!confirm(`Excluir o card "${p.cliente_nome || p.numero_pedido}" da Garantia? Ele sai do quadro (o histórico fica guardado).`)) return;
+    try { await cifService.excluir(p.id); onFechar(); carregar(); }
+    catch (e) { alert(e.response?.data?.erro || 'Erro ao excluir o card.'); }
+  }
   const destinos = colunas.filter(c => c.status !== atual && permitido(c) && !(colAtual?.admin && !botoes.mover_admin));
   const proxima = destinos.find(c => colunas.indexOf(c) > idx) || null;
   const outros = destinos.filter(c => c !== proxima);
@@ -545,6 +550,12 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
                 className="w-full flex items-center gap-2 rounded-xl border border-[var(--c-borda)] px-3 py-2 text-xs font-semibold text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40">
                 <History size={13} /> <span className="flex-1 text-left">Histórico do pedido</span>
               </button>
+              {botoes.excluir && (
+                <button onClick={excluir}
+                  className="w-full flex items-center gap-2 rounded-xl border border-red-500/40 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-500/10">
+                  <Trash2 size={13} /> <span className="flex-1 text-left">Excluir card</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
