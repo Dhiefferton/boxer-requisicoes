@@ -21,9 +21,17 @@ async function podeVerMaquinas(usuario) {
   } catch { return false; } // falha ao ler: continua escondida
 }
 
+// CA (Certificado de Aprovação) dos EPIs: coluna criada sozinha na primeira chamada
+let _colunaCA = null;
+function garantirCA() {
+  if (!_colunaCA) _colunaCA = query(`ALTER TABLE materiais ADD COLUMN IF NOT EXISTS ca VARCHAR(40)`).catch(e => { _colunaCA = null; throw e; });
+  return _colunaCA;
+}
+const limparCA = (v) => { const t = String(v ?? '').replace(/^\s*CA[\s:.-]*/i, '').trim().slice(0, 40); return t || null; };
+
 const BASE_SELECT = `
   SELECT
-    m.id, m.codigo, m.descricao, m.unidade, m.ativo,
+    m.id, m.codigo, m.descricao, m.unidade, m.ativo, m.ca,
     c.nome AS categoria_nome, c.icone AS categoria_icone, c.id AS categoria_id,
     e.quantidade, e.nivel_minimo,
     m.quantidade_erp, m.ultima_sync_erp,
@@ -50,6 +58,7 @@ const BASE_SELECT = `
 // GET /materiais
 export async function listarMateriais(req, res, next) {
   try {
+    await garantirCA();
     const { categoria, busca, pagina = 1, limite = 50 } = req.query;
     const limiteReal = Math.min(parseInt(limite) || 50, 10000);
     const offset = (parseInt(pagina) - 1) * limiteReal;
@@ -130,6 +139,7 @@ export async function listarCategorias(req, res, next) {
 // GET /materiais/:id
 export async function detalharMaterial(req, res, next) {
   try {
+    await garantirCA();
     const { id } = req.params;
     const result = await query(
       `${BASE_SELECT} WHERE m.id = $1 AND ($2 OR c.nome <> 'Máquinas')`,
@@ -149,17 +159,18 @@ export async function detalharMaterial(req, res, next) {
 // POST /materiais - Somente admin
 export async function criarMaterial(req, res, next) {
   try {
-    const { codigo, descricao, categoria_id, unidade = 'UN' } = req.body;
+    await garantirCA();
+    const { codigo, descricao, categoria_id, unidade = 'UN', ca } = req.body;
 
     if (!codigo || !descricao || !categoria_id) {
       return res.status(400).json({ erro: 'Campos obrigatorios: codigo, descricao, categoria_id' });
     }
 
     const result = await query(
-      `INSERT INTO materiais (codigo, descricao, categoria_id, unidade)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, codigo, descricao, categoria_id, unidade`,
-      [codigo.toUpperCase(), descricao, parseInt(categoria_id), unidade]
+      `INSERT INTO materiais (codigo, descricao, categoria_id, unidade, ca)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, codigo, descricao, categoria_id, unidade, ca`,
+      [codigo.toUpperCase(), descricao, parseInt(categoria_id), unidade, limparCA(ca)]
     );
 
     const material = result.rows[0];
@@ -179,7 +190,9 @@ export async function criarMaterial(req, res, next) {
 export async function editarMaterial(req, res, next) {
   try {
     const { id } = req.params;
+    await garantirCA();
     const { descricao, codigo, categoria_id, unidade } = req.body;
+    const temCA = Object.prototype.hasOwnProperty.call(req.body || {}, 'ca');
 
     const result = await query(
       `UPDATE materiais
@@ -187,15 +200,18 @@ export async function editarMaterial(req, res, next) {
            codigo       = COALESCE($2, codigo),
            categoria_id = COALESCE($3, categoria_id),
            unidade      = COALESCE($4, unidade),
+           ca           = CASE WHEN $6 THEN $7 ELSE ca END,
            updated_at   = NOW()
        WHERE id = $5
-       RETURNING id, codigo, descricao, categoria_id, unidade`,
+       RETURNING id, codigo, descricao, categoria_id, unidade, ca`,
       [
         descricao || null,
         codigo ? codigo.toUpperCase() : null,
         categoria_id ? parseInt(categoria_id) : null,
         unidade || null,
-        parseInt(id)
+        parseInt(id),
+        temCA,
+        temCA ? limparCA(req.body.ca) : null,
       ]
     );
 

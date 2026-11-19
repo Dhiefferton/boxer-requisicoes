@@ -577,7 +577,9 @@ export function AbaEstoque() {
   const [criando,      setCriando]      = useState(false);
   const [salvandoNovo, setSalvandoNovo] = useState(false);
   const [erroNovo,     setErroNovo]     = useState('');
-  const [formNovo,     setFormNovo]     = useState({ codigo: '', descricao: '', categoria_id: '', unidade: 'UN', quantidade: 0 });
+  const [formNovo,     setFormNovo]     = useState({ codigo: '', descricao: '', categoria_id: '', unidade: 'UN', quantidade: 0, ca: '' });
+  // CA (Certificado de Aprovação) só para a categoria EPI
+  const ehEPI = (catId) => /^epi/i.test(String(categorias.find(c => String(c.id) === String(catId))?.nome || '').trim());
   const inputFileRef = useRef(null);
   const [fornsProd,     setFornsProd]    = useState([]);
   const [todosForns,    setTodosForns]   = useState([]);
@@ -649,6 +651,7 @@ export function AbaEstoque() {
         codigo:       editandoProd.codigo,
         categoria_id: parseInt(editandoProd.categoria_id),
         unidade:      editandoProd.unidade,
+        ...(ehEPI(editandoProd.categoria_id) ? { ca: editandoProd.ca || '' } : {}),
       });
       setEditandoProd(null);
       carregar();
@@ -667,12 +670,13 @@ export function AbaEstoque() {
         descricao:    formNovo.descricao,
         categoria_id: parseInt(formNovo.categoria_id),
         unidade:      formNovo.unidade,
+        ...(ehEPI(formNovo.categoria_id) ? { ca: formNovo.ca } : {}),
       });
       if (parseInt(formNovo.quantidade) > 0) {
         await api.patch(`/materiais/${data.material.id}/estoque`, { quantidade: parseInt(formNovo.quantidade) });
       }
       setCriando(false);
-      setFormNovo({ codigo: '', descricao: '', categoria_id: '', unidade: 'UN', quantidade: 0 });
+      setFormNovo({ codigo: '', descricao: '', categoria_id: '', unidade: 'UN', quantidade: 0, ca: '' });
       carregar();
     } catch (err) {
       setErroNovo(err.response?.data?.erro || 'Erro ao criar produto.');
@@ -840,6 +844,9 @@ export function AbaEstoque() {
               <option value="KT">KT — Kit</option>
               <option value="RS">RS — Resma</option>
             </select>
+            {ehEPI(formNovo.categoria_id) && (
+              <input value={formNovo.ca} onChange={e => setFormNovo(f => ({...f, ca: e.target.value}))} placeholder="CA do EPI (ex.: 12345)" className={inputClass} />
+            )}
             <input type="number" min="0" value={formNovo.quantidade} onChange={e => setFormNovo(f => ({...f, quantidade: e.target.value}))} placeholder="Quantidade inicial" className={inputClass} />
             <div className="flex gap-2 items-end">
               {erroNovo && <p className="text-xs text-red-400 flex-1">{erroNovo}</p>}
@@ -870,6 +877,10 @@ export function AbaEstoque() {
                   <option value="RL">RL</option><option value="KG">KG</option><option value="L">L</option>
                   <option value="PR">PR</option><option value="KT">KT</option><option value="RS">RS</option>
                 </select></div>
+              {ehEPI(editandoProd.categoria_id) && (
+                <div><label className="text-xs text-[var(--c-suave)] mb-1 block">CA (Certificado de Aprovação)</label>
+                  <input value={editandoProd.ca || ''} onChange={e => setEditandoProd(p => ({...p, ca: e.target.value}))} placeholder="ex.: 12345" className={inputClass} /></div>
+              )}
               {erroProd && <p className="text-xs text-red-400">{erroProd}</p>}
               <div className="border-t border-[var(--c-borda)] pt-3 mt-1">
                 <p className="text-xs font-semibold text-[var(--c-suave)] mb-2">Fornecedores</p>
@@ -927,7 +938,7 @@ export function AbaEstoque() {
                 <p className="text-sm text-[var(--c-texto)] truncate">{m.descricao}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <button onClick={() => { setEditandoProd({ id: m.id, codigo: m.codigo, descricao: m.descricao, categoria_id: m.categoria_id, unidade: m.unidade }); carregarFornsProd(m.id); }}
+                <button onClick={() => { setEditandoProd({ id: m.id, codigo: m.codigo, descricao: m.descricao, categoria_id: m.categoria_id, unidade: m.unidade, ca: m.ca || '' }); carregarFornsProd(m.id); }}
                   className="p-1.5 rounded-lg bg-[var(--c-destaque)]/10 text-[var(--c-destaque)] hover:bg-[var(--c-destaque)]/20 transition-colors" title="Editar produto">
                   <Pencil size={13} />
                 </button>

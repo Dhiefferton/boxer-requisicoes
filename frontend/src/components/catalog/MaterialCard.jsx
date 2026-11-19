@@ -55,6 +55,9 @@ export default function MaterialCard({ material }) {
         <p className="text-xs text-[var(--c-suave)] mt-1.5">
           {material.categoria_nome}
         </p>
+        {/^epi/i.test(String(material.categoria_nome || '').trim()) && material.ca && (
+          <p className="text-xs mt-1">CA: <span className="font-semibold text-[var(--c-texto)]">{material.ca}</span></p>
+        )}
 
         {/* Estoque ERP */}
         {qtdExibida !== null && qtdExibida !== undefined && (
