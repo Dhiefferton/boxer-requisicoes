@@ -49,7 +49,21 @@ export const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex')
 
 // ── Fontes de dados de cada tela ──────────────────────────────
 const GARANTIA = `((origem = 'pipefy_garantia' OR cif_status IS NOT NULL) AND COALESCE(cif_status, '') <> '_excluido')`;
-// recurso -> { tabela, onde? (filtro fixo da tela), ordem? }
+// Valor de um campo configurado pelo nome (sem acento/maiúscula), lido dos valores do card.
+// Orçamentos: campos_editados (id → valor) e pipefy_campos ([{ id, nome, valor }]); Garantia: cif_valores.
+const RE = (re) => `'${re}'`;
+const chavesCampo = (tab, prefixo, re) => `(SELECT COALESCE(NULLIF(pipefy_campo, ''), '${prefixo}' || id) FROM ${tab} WHERE ativo AND rotulo ~* ${RE(re)})`;
+// Registro (descrição e valor) guardado como JSON: devolve só a descrição
+const legivelSql = (v) => `(SELECT COALESCE(substring(vv from '"descricao"\\s*:\\s*"([^"]*)"'), vv) FROM (SELECT ${v} AS vv) z)`;
+const campoOrc = (re) => legivelSql(`COALESCE(
+    (SELECT NULLIF(p.campos_editados->>k, '') FROM ${chavesCampo('orc_campos', 'bx_', re)} AS kk(k) WHERE p.campos_editados ? k LIMIT 1),
+    (SELECT NULLIF(x->>'valor', '') FROM jsonb_array_elements(CASE WHEN jsonb_typeof(p.pipefy_campos) = 'array' THEN p.pipefy_campos ELSE '[]'::jsonb END) x
+      WHERE (x->>'nome' ~* ${RE(re)} OR x->>'id' IN ${chavesCampo('orc_campos', 'bx_', re)}) AND COALESCE(x->>'valor', '') NOT IN ('', '[]') LIMIT 1))`);
+const campoCif = (re) => legivelSql(`(SELECT NULLIF(p.cif_valores->>k, '') FROM ${chavesCampo('cif_campos', 'cif_bx_', re)} AS kk(k) WHERE p.cif_valores ? k LIMIT 1)`);
+const RE_CAUSA = '^\\s*causa\\s+identificada';
+const RE_MANUT = '^\\s*manuten[cç][aã]o';
+
+// recurso -> { tabela, onde? (filtro fixo da tela), ordem?, extras? (colunas calculadas: nome → SQL sobre o alias p) }
 const FONTES = {
   catalogo:               { materiais: { tabela: 'materiais' }, categorias: { tabela: 'categorias' } },
   historico:              { requisicoes: { tabela: 'requisicoes' }, itens: { tabela: 'itens_requisicao' } },
@@ -65,11 +79,11 @@ const FONTES = {
   // campos = nome de cada campo (id → rotulo) para ler os valores do card; colunas = fases do quadro
   lojinha:                { pedidos: { tabela: 'lojinha_boxer_pedidos', onde: `COALESCE(origem, '') NOT IN ('pipefy_garantia', 'tratativa_sac')` }, movimentos: { tabela: 'loj_movimentos' },
                             campos: { tabela: 'loj_campos' }, colunas: { tabela: 'loj_colunas' } },
-  orcamentos:             { pedidos: { tabela: 'pedidos_orcamento' }, movimentos: { tabela: 'pedidos_orcamento_movimentos' },
+  orcamentos:             { pedidos: { tabela: 'pedidos_orcamento', extras: { causa_identificada: campoOrc(RE_CAUSA), manutencao: campoOrc(RE_MANUT) } }, movimentos: { tabela: 'pedidos_orcamento_movimentos' },
                             campos: { tabela: 'orc_campos' }, colunas: { tabela: 'orc_colunas' } },
   // Garantia: pedidos (fase em cif_status, valores dos campos em cif_valores, tratativa do SAC em tratativa),
   // movimentos (histórico de fases e campos preenchidos), campos (cif_bx_<id> → nome) e colunas (fases)
-  logistica_cif:          { pedidos: { tabela: 'lojinha_boxer_pedidos', onde: GARANTIA },
+  logistica_cif:          { pedidos: { tabela: 'lojinha_boxer_pedidos', onde: GARANTIA, extras: { causa_identificada: campoCif(RE_CAUSA), manutencao: campoCif(RE_MANUT) } },
                             movimentos: { tabela: 'loj_movimentos', onde: `pedido_id IN (SELECT id FROM lojinha_boxer_pedidos WHERE ${GARANTIA})` },
                             campos: { tabela: 'cif_campos' }, colunas: { tabela: 'cif_colunas' } },
   databases:              { bases: { tabela: 'bx_bases' }, registros: { tabela: 'bx_base_registros' } },
@@ -116,6 +130,14 @@ async function colunasDe(tabela) {
   return cols;
 }
 const COLUNAS_DATA = ['criado_em', 'created_at', 'data', 'data_nota', 'em'];
+// Colunas do recurso (as da tabela + as calculadas) e o FROM (com as calculadas, quando houver)
+async function colunasRecurso(f) {
+  const cols = await colunasDe(f.tabela);
+  return f.extras ? [...cols, ...Object.keys(f.extras).filter(n => !cols.some(c => c.nome === n)).map(n => ({ nome: n, tipo: 'text' }))] : cols;
+}
+const fromDe = (f) => (f.extras
+  ? `(SELECT p.*, ${Object.entries(f.extras).map(([n, sql]) => `${sql} AS "${n}"`).join(', ')} FROM ${f.tabela} p) AS t`
+  : f.tabela);
 
 // ── Autenticação por chave ────────────────────────────────────
 export async function autenticarChave(req, res, next) {
@@ -179,7 +201,7 @@ export async function recursosDaTela(req, res, next) {
     const fontes = fontesDaTela(tela);
     const recursos = [];
     for (const [nome, f] of Object.entries(fontes)) {
-      recursos.push({ recurso: nome, colunas: (await colunasDe(f.tabela)).map(c => c.nome), url: `/api/v1/${tela}/${nome}` });
+      recursos.push({ recurso: nome, colunas: (await colunasRecurso(f)).map(c => c.nome), url: `/api/v1/${tela}/${nome}` });
     }
     res.json({ tela, recursos });
   } catch (err) { next(err); }
@@ -194,7 +216,7 @@ export async function listarRecurso(req, res, next) {
     const tela = telaOuErro(req, res); if (!tela) return;
     const f = fontesDaTela(tela)[req.params.recurso];
     if (!f) return res.status(404).json({ erro: 'Recurso não encontrado nesta tela.' });
-    const cols = await colunasDe(f.tabela);
+    const cols = await colunasRecurso(f);
     const porNome = new Map(cols.map(c => [c.nome, c]));
     const params = [];
     const where = f.onde ? [f.onde] : [];
@@ -234,9 +256,9 @@ export async function listarRecurso(req, res, next) {
     const limite = Math.min(500, Math.max(1, parseInt(req.query.limite) || 100));
     const pagina = Math.max(1, parseInt(req.query.pagina) || 1);
     const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const total = (await query(`SELECT COUNT(*)::int AS n FROM ${f.tabela} ${w}`, params)).rows[0].n;
+    const total = (await query(`SELECT COUNT(*)::int AS n FROM ${fromDe(f)} ${w}`, params)).rows[0].n;
     const linhas = await query(
-      `SELECT ${selecionadas.map(c => `"${c.nome}"`).join(', ')} FROM ${f.tabela} ${w} ORDER BY ${ordem} LIMIT ${limite} OFFSET ${(pagina - 1) * limite}`, params);
+      `SELECT ${selecionadas.map(c => `"${c.nome}"`).join(', ')} FROM ${fromDe(f)} ${w} ORDER BY ${ordem} LIMIT ${limite} OFFSET ${(pagina - 1) * limite}`, params);
     res.json({ tela, recurso: req.params.recurso, total, pagina, limite, paginas: Math.max(1, Math.ceil(total / limite)), dados: linhas.rows });
   } catch (err) { next(err); }
 }
@@ -247,10 +269,10 @@ export async function umRegistro(req, res, next) {
     const tela = telaOuErro(req, res); if (!tela) return;
     const f = fontesDaTela(tela)[req.params.recurso];
     if (!f) return res.status(404).json({ erro: 'Recurso não encontrado nesta tela.' });
-    const cols = await colunasDe(f.tabela);
+    const cols = await colunasRecurso(f);
     const chavePk = cols.some(c => c.nome === 'id') ? 'id' : cols[0].nome;
     const r = await query(
-      `SELECT ${cols.map(c => `"${c.nome}"`).join(', ')} FROM ${f.tabela} WHERE "${chavePk}"::text = $1 ${f.onde ? `AND ${f.onde}` : ''} LIMIT 1`, [String(req.params.id)]);
+      `SELECT ${cols.map(c => `"${c.nome}"`).join(', ')} FROM ${fromDe(f)} WHERE "${chavePk}"::text = $1 ${f.onde ? `AND ${f.onde}` : ''} LIMIT 1`, [String(req.params.id)]);
     if (!r.rows[0]) return res.status(404).json({ erro: 'Registro não encontrado.' });
     res.json(r.rows[0]);
   } catch (err) { next(err); }
