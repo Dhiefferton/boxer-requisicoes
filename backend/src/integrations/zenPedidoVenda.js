@@ -41,6 +41,7 @@ const CFG = {
   invoiceSeries:          Number(process.env.ZEN_PV_INVOICE_SERIES_ID  || 1001),  // NF-e
   // Eletro Soldas → baixa de estoque em nome da Tekweld
   pessoaTekweld:          Number(process.env.ZEN_PV_TEKWELD_PERSON_ID  || 1001),  // Tekweld Importação E Comercio
+  fiscalOpNaoContrib:     Number(process.env.ZEN_PV_FISCAL_OP_NC_ID    || 1070),  // VendaNaoContribuinte (CFOP 6.108)
   fiscalOpBaixa:          Number(process.env.ZEN_PV_FISCAL_OP_BAIXA_ID || 1003),  // BaixaEstoque
   cfopBaixa:              Number(process.env.ZEN_PV_CFOP_BAIXA_ID      || 1392),  // 5.927
 };
@@ -142,13 +143,23 @@ export async function buscarClienteZen(documento, nome) {
   throw new Error(`Cliente ${mascarado} não está cadastrado no Zen. Cadastre o cliente no Zen e tente de novo.`);
 }
 
-// CFOP conforme o cliente: SP 5.102 · fora de SP com IE 6.102 · fora de SP sem IE 6.108
+// CFOP conforme o cliente (mesma regra da Lojinha):
+//   SP (mesmo estado) ............................................. 5.102
+//   outro estado, "Regime Normal" com I.E. (contribuinte) ......... 6.102
+//   outro estado, "Consumidor" / pessoa física / PJ sem I.E. ...... 6.108 → operação "Venda não contribuinte"
 function cfopDoCliente(pessoa) {
   const uf = String(pessoa?.city?.state?.code || '').toUpperCase();
   if (!uf || uf === CFG.ufEmpresa) return CFG.cfopDentroEstado;
-  const temIE = /\d/.test(String(pessoa?.document2Number || ''));
+  const ie = String(pessoa?.document2Number || '');
+  const temIE = /\d/.test(ie) && !/isent/i.test(ie);
+  if (pessoa?.type === 'CORPORATION' && !temIE) return CFG.cfopNaoContribuinte;
+  const regime = String(pessoa?.fiscalProfilePerson?.description || '');
+  if (/regime\s+normal/i.test(regime)) return CFG.cfopForaEstado;
+  if (/consumidor/i.test(regime) || pessoa?.type === 'INDIVIDUAL') return CFG.cfopNaoContribuinte;
   return temIE ? CFG.cfopForaEstado : CFG.cfopNaoContribuinte;
 }
+// Operação fiscal do pedido: "Venda não contribuinte" quando o CFOP é 6.108; senão "Venda"
+const operacaoDoCliente = (pessoa) => (cfopDoCliente(pessoa) === CFG.cfopNaoContribuinte ? CFG.fiscalOpNaoContrib : CFG.fiscalProfileOperation);
 
 function hojeSP() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date()); // YYYY-MM-DD
@@ -206,7 +217,7 @@ export async function criarPedidoVendaZen(pedido) {
     const venda = await zen('POST', '/sale/sale', {
       company:                { id: CFG.company },
       saleProfile:            { id: CFG.saleProfile },
-      fiscalProfileOperation: { id: baixa ? CFG.fiscalOpBaixa : CFG.fiscalProfileOperation },
+      fiscalProfileOperation: { id: baixa ? CFG.fiscalOpBaixa : operacaoDoCliente(cliente) },
       person:                 { id: cliente.id },
       personSalesperson:      { id: CFG.salesperson },
       freightType:            'NONE',
@@ -227,7 +238,14 @@ export async function criarPedidoVendaZen(pedido) {
     // 3. Itens — só enquanto o pedido está em preparação
     if (venda.status === 'PREPARING') {
       if (!cliente) cliente = await zen('GET', `/catalog/person/person/${venda.person.id}`);
-      const cfop = Number(venda.fiscalProfileOperation?.id) === CFG.fiscalOpBaixa ? CFG.cfopBaixa : cfopDoCliente(cliente);
+      const ehBaixa = Number(venda.fiscalProfileOperation?.id) === CFG.fiscalOpBaixa;
+      // Pedido já criado com a operação errada (ex.: consumidor de MG como "Venda"): corrige antes dos itens
+      if (!ehBaixa && Number(venda.fiscalProfileOperation?.id) !== operacaoDoCliente(cliente)) {
+        venda.fiscalProfileOperation = { id: operacaoDoCliente(cliente) };
+        await zen('PUT', '/sale/sale', venda);
+        venda = await zen('GET', `/sale/sale/${zenPedidoId}`);
+      }
+      const cfop = ehBaixa ? CFG.cfopBaixa : cfopDoCliente(cliente);
       const existentes = await zen('GET', `/sale/saleItem?q=${q(`sale.id==${zenPedidoId}`)}&max=200`);
       const jaIncluidos = new Set((existentes || []).map(i => String(i.productPacking?.code || '')));
 
