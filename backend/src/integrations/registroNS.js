@@ -19,6 +19,21 @@ export const garantirRegistroNS = () => (colunas ||= query(`
   ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS tratativa_card_id TEXT;
   ALTER TABLE lojinha_boxer_pedidos ADD COLUMN IF NOT EXISTS tratativa_card_id TEXT;`).catch(e => { colunas = null; throw e; }));
 
+/**
+ * Cliente (nome e CPF/CNPJ) da tratativa do SAC guardada no card: campo "Cliente" com o registro
+ * conectado (Database Cadastro: "Nome / Razão Social", "CPF / CNPJ") ou só o texto do campo.
+ */
+export function clienteDaTratativa(t) {
+  const campos = Array.isArray(t?.campos) ? t.campos : [];
+  const c = campos.find(x => /^\s*cliente\s*$/i.test(String(x?.nome || ''))) || campos.find(x => /^\s*cliente/i.test(String(x?.nome || '')));
+  if (!c) return { nome: null, documento: null };
+  const reg = Array.isArray(c.conectados) ? c.conectados[0] : null;
+  const doReg = (re) => String((reg?.campos || []).find(f => re.test(String(f?.nome || '')))?.valor || '').trim();
+  const documento = (doReg(/cpf|cnpj/i) || '').replace(/\D/g, '') || null;
+  const nome = doReg(/raz[aã]o social|^nome/i) || reg?.titulo || String(c.valor || '').split(',')[0].trim() || null;
+  return { nome, documento: documento && [11, 13, 14, 10].includes(documento.length) ? documento : null };
+}
+
 const ehTratativa = (c) => /tratativa|sac/i.test(c?.pipe?.name || '');
 const paiTratativa = (card) => {
   const pais = (card?.parent_relations || []).flatMap(r => r.cards || []);

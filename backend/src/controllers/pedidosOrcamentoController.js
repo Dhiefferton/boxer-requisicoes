@@ -574,7 +574,21 @@ export async function moverPedido(req, res, next) {
 // Antes de criar o pedido no Zen: relê o cadastro do cliente no Pipefy. A sincronização mantém
 // o cadastro lido na 1ª vez; se o CNPJ foi corrigido depois, o card ficava com o CNPJ velho.
 async function renovarClienteDoCard(pedido) {
-  if (!pedido?.pipefy_card_id) return;
+  // Card criado no sistema (Tratativa do SAC / perda de garantia): sem CNPJ/nome, usa o cliente da tratativa
+  if (!pedido?.pipefy_card_id) {
+    try {
+      if (String(pedido?.cliente_cnpj || '').replace(/\D/g, '').length >= 11 && pedido?.cliente_nome) return;
+      const t = (await query(`SELECT tratativa FROM pedidos_orcamento WHERE id = $1`, [pedido.id])).rows[0]?.tratativa;
+      const { clienteDaTratativa } = await import('../integrations/registroNS.js');
+      const c = clienteDaTratativa(t);
+      if (!c.documento && !c.nome) return;
+      await query(`UPDATE pedidos_orcamento SET cliente_cnpj = COALESCE(NULLIF(cliente_cnpj, ''), $2), cliente_nome = COALESCE(NULLIF(cliente_nome, ''), $3) WHERE id = $1`,
+        [pedido.id, c.documento, c.nome ? c.nome.slice(0, 255) : null]);
+      if (c.documento && String(pedido.cliente_cnpj || '').replace(/\D/g, '').length < 11) pedido.cliente_cnpj = c.documento;
+      if (c.nome && !pedido.cliente_nome) pedido.cliente_nome = c.nome;
+    } catch (e) { console.error(`⚠️ Não consegui ler o cliente da tratativa do card ${pedido?.id}:`, e.message); }
+    return;
+  }
   try {
     const campos = await renovarClienteDosCampos(pedido.pipefy_card_id, Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []);
     const d = extrairDadosOrcamento({ campos, titulo: null });

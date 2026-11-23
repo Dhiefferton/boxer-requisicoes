@@ -189,15 +189,19 @@ export async function criarOrcamentoPerda(req, res, next) {
         campos: [...camposGar, ...doPipefy], anexos };
       const tratativa = { ...(t || { origem: 'garantia', campos: [] }), garantia };
       const ns = p.tratativa_card_id || t?.ns || null;
+      // CPF/CNPJ do cliente: o do card da Garantia ou o do cadastro do cliente na tratativa
+      const { clienteDaTratativa } = await import('../integrations/registroNS.js');
+      const cliT = clienteDaTratativa(t);
+      const documento = String(p.documento || '').replace(/\D/g, '') || cliT.documento || null;
       const cliente = String(p.cliente_nome || `Garantia #${p.id}`).slice(0, 255);
       // Nasce em "Liberado p/ Orçar" (a coluna pelo nome; se não achar, a chave padrão)
       const colOrc = (await query(`SELECT chave FROM orc_colunas WHERE ativo AND NOT arquivada
           AND translate(lower(nome), 'çãâáà', 'caaaa') ~ '^liberad[oa]s?\\s+(p/|para)\\s*orcar' ORDER BY ordem LIMIT 1`).catch(() => ({ rows: [] }))).rows[0]?.chave
         || 'liberado_orcar';
       const ins = await query(
-        `INSERT INTO pedidos_orcamento (referencia, cliente_nome, status, criado_por, pipefy_campos, tratativa, tratativa_em, tratativa_card_id)
-         VALUES ($1, $1, $5, $2, '[]'::jsonb, $3::jsonb, NOW(), $4) RETURNING id`,
-        [cliente, req.usuario?.id || null, JSON.stringify(tratativa), ns, colOrc]);
+        `INSERT INTO pedidos_orcamento (referencia, cliente_nome, cliente_cnpj, status, criado_por, pipefy_campos, tratativa, tratativa_em, tratativa_card_id)
+         VALUES ($1, $1, $6, $5, $2, '[]'::jsonb, $3::jsonb, NOW(), $4) RETURNING id`,
+        [cliente, req.usuario?.id || null, JSON.stringify(tratativa), ns, colOrc, documento]);
       const orcId = ins.rows[0].id;
       await query(`INSERT INTO pedidos_orcamento_movimentos (pedido_id, tipo, para_status, descricao, detalhes, usuario_id, usuario_nome, origem)
         VALUES ($1, 'criado', $6, $2, $3::jsonb, $4, $5, 'usuario')`,
