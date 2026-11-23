@@ -9,8 +9,9 @@
 // ============================================================
 import { useEffect, useState } from 'react';
 import NomeCardEditavel from '../../components/operador/NomeCardEditavel.jsx';
-import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, ExternalLink, DownloadCloud, RefreshCw, FileText, Trash2 } from 'lucide-react';
-import { cifService } from '../../services/api';
+import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, ExternalLink, DownloadCloud, RefreshCw, FileText, Trash2, Printer } from 'lucide-react';
+import { cifService, tratativaService } from '../../services/api';
+import { imprimirEtiquetaEntrada, dadosEtiqueta, textoCampo, campoPorRotulo } from '../../utils/etiquetaEntrada';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { podeNaTela } from '../../utils/telas';
@@ -395,6 +396,41 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
     return () => window.removeEventListener('keydown', k);
   });
 
+  // Etiqueta de entrada 10x15 (Argox): dados da fase Entrada da Garantia
+  const ehEntrada = (status) => {
+    const c = colunas.find(x => x.status === status);
+    return status === 'entrada' || /^entrada/i.test(String(c?.titulo || '').trim());
+  };
+  const [imprimindo, setImprimindo] = useState(false);
+  async function imprimirEtiqueta() {
+    setImprimindo(true);
+    try {
+      const comValor = (lista, valorDe) => lista.map(c => ({ rotulo: c.rotulo, valor: valorDe(c.id) }));
+      const statusEntrada = colunas.find(c => ehEntrada(c.status))?.status;
+      const entrada = statusEntrada ? comValor(camposCifDe(statusEntrada), valorCif) : [];
+      const todos = [
+        ...comValor(camposCif.map(c => campoCif(c, 0, camposCif)), valorCif),
+        ...camposPipefy(p).map(f => ({ rotulo: f.nome || '', valor: Array.isArray(f.texto) ? f.texto.join(', ') : f.texto })),
+        ...comValor(camposLoj.map(c => campoDaConfig(c, 0, camposLoj)), valorLoj),
+      ];
+      let modelo = textoCampo(campoPorRotulo(todos, /^modelo/));
+      if (!modelo) {
+        try {
+          const { data } = await tratativaService.verCif(p.id);
+          const c = (data?.tratativa?.campos || []).find(x => /^modelo/i.test(String(x.nome || '').trim()));
+          modelo = c ? (c.conectados?.[0]?.titulo || String(c.valor || '').trim()) : '';
+        } catch { /* sem tratativa */ }
+      }
+      imprimirEtiquetaEntrada(dadosEtiqueta({ entrada, todos, cliente: p.cliente_nome, ns: nsGarantia, modelo }));
+    } finally { setImprimindo(false); }
+  }
+  const botaoEtiqueta = (
+    <button type="button" onClick={imprimirEtiqueta} disabled={imprimindo}
+      className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl border border-[var(--c-borda)] px-3 py-2 text-xs font-semibold text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40 disabled:opacity-40">
+      <Printer size={13} /> {imprimindo ? 'Montando etiqueta…' : 'Imprimir etiqueta de entrada (10x15)'}
+    </button>
+  );
+
   // Grava sozinho (sem Salvar/Descartar)
   const auto = useAutoSalvar(rascunho, setRascunho, async (r) => { await cifService.editarCampos(p.id, r); await carregar(); });
   const salvar = () => auto.salvarAgora();
@@ -525,6 +561,7 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
                   {g.campos.length
                     ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
                     : <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido.</p>}
+                  {ehEntrada(g.col.status) && botaoEtiqueta}
                 </CaixaFase>
               );
             })}
@@ -540,6 +577,7 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
             {camposAtuais.length
               ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, true))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.{botoes.configurar ? ' Crie em Configurar (engrenagem da coluna).' : ''}</p>}
+            {ehEntrada(atual) && botaoEtiqueta}
             <StatusAutoSalvar salvando={auto.salvando} pendente={sujo} salvoEm={auto.salvoEm} erro={auto.erroSalvar} onSalvar={auto.salvarAgora} onDescartar={auto.descartar} />
           </div>
 

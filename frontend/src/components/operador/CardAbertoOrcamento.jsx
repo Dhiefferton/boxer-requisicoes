@@ -9,8 +9,9 @@
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
 import NomeCardEditavel from './NomeCardEditavel.jsx';
-import { X, Settings, ArrowRight, ArrowLeft, ExternalLink, History, Ban, PackageCheck, Scissors, RotateCcw, Pencil, Check } from 'lucide-react';
-import { pedidosOrcamentoService } from '../../services/api';
+import { X, Settings, ArrowRight, ArrowLeft, ExternalLink, History, Ban, PackageCheck, Scissors, RotateCcw, Pencil, Check, Printer } from 'lucide-react';
+import { pedidosOrcamentoService, tratativaService } from '../../services/api';
+import { imprimirEtiquetaEntrada, dadosEtiqueta, textoCampo, campoPorRotulo } from '../../utils/etiquetaEntrada';
 import { Spinner } from '../ui';
 import { useAutoSalvar, StatusAutoSalvar } from '../../utils/autoSalvar';
 import { FotosCampo } from './FotosOrcamento';
@@ -126,6 +127,33 @@ export default function CardAbertoOrcamento({
       )}
     </>
   ) : null;
+
+  // Etiqueta de entrada 10x15 (Argox): dados da fase Entrada (Modelo do card ou da tratativa)
+  const [imprimindo, setImprimindo] = useState(false);
+  async function imprimirEtiqueta() {
+    setImprimindo(true);
+    try {
+      const comValor = (lista) => lista.map(c => ({ rotulo: c.rotulo, valor: valorDe(c.id) }));
+      const entrada = comValor(grupos.filter(g => g.chave === 'entrada').flatMap(g => g.campos));
+      const todos = [...comValor(grupos.flatMap(g => g.campos)),
+        ...(Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : []).map(c => ({ rotulo: c.nome || '', valor: c.valor }))];
+      let modelo = textoCampo(campoPorRotulo(todos, /^modelo/));
+      if (!modelo && daTratativa) {
+        try {
+          const { data } = await tratativaService.ver(pedido.id);
+          const c = (data?.tratativa?.campos || []).find(x => /^modelo/i.test(String(x.nome || '').trim()));
+          modelo = c ? (c.conectados?.[0]?.titulo || String(c.valor || '').trim()) : '';
+        } catch { /* sem tratativa */ }
+      }
+      imprimirEtiquetaEntrada(dadosEtiqueta({ entrada, todos, cliente: pedido.cliente_nome || pedido.referencia, ns: nsValor, modelo }));
+    } finally { setImprimindo(false); }
+  }
+  const botaoEtiqueta = (
+    <button type="button" onClick={imprimirEtiqueta} disabled={imprimindo}
+      className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl border border-[var(--c-borda)] px-3 py-2 text-xs font-semibold text-[var(--c-texto)] hover:bg-[var(--c-borda)]/40 disabled:opacity-40">
+      <Printer size={13} /> {imprimindo ? 'Montando etiqueta…' : 'Imprimir etiqueta de entrada (10x15)'}
+    </button>
+  );
 
   // Grava sozinho (sem Salvar/Descartar)
   const auto = useAutoSalvar(rascunho, setRascunho, async (r) => {
@@ -253,6 +281,7 @@ export default function CardAbertoOrcamento({
                   {g.campos.length
                     ? <dl className="flex flex-col gap-3">{g.campos.map(c => blocoCampo(c, g.editando))}</dl>
                     : g.chave !== 'inicio' && <p className="text-xs text-[var(--c-suave)]">Nenhum campo preenchido.</p>}
+                  {g.chave === 'entrada' && botaoEtiqueta}
                 </CaixaFase>
               );
             })}
@@ -282,6 +311,7 @@ export default function CardAbertoOrcamento({
             {faseExterna ? faseExterna.conteudo : fases && (camposAtuais.length
               ? <dl className="flex flex-col gap-4">{camposAtuais.map(c => blocoCampo(c, botoes.campos))}</dl>
               : <p className="text-xs text-[var(--c-suave)] py-4">Esta coluna não tem campos para preencher.</p>)}
+            {!faseExterna && fases && pedido.status === 'entrada' && botaoEtiqueta}
 
             <StatusAutoSalvar salvando={auto.salvando} pendente={sujo} salvoEm={auto.salvoEm} erro={auto.erroSalvar} onSalvar={auto.salvarAgora} onDescartar={auto.descartar} />
           </div>
