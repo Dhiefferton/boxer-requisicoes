@@ -93,7 +93,9 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, senha);
-      navigate('/inicio');
+      let destino = '/inicio';
+      try { destino = sessionStorage.getItem('voltar_apos_login') || '/inicio'; sessionStorage.removeItem('voltar_apos_login'); } catch { /* sem sessionStorage */ }
+      navigate(destino);
     } catch (err) {
       setErro(err.response?.data?.erro || 'Erro ao fazer login. Tente novamente.');
     } finally {

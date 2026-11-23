@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import NomeCardEditavel from '../../components/operador/NomeCardEditavel.jsx';
 import { Search, Check, X, Settings, Activity, History, ArrowRight, ArrowLeft, ExternalLink, DownloadCloud, RefreshCw, FileText, Trash2, Printer } from 'lucide-react';
 import { cifService, tratativaService } from '../../services/api';
-import { imprimirEtiquetaEntrada, dadosEtiqueta, textoCampo, campoPorRotulo } from '../../utils/etiquetaEntrada';
+import { imprimirEtiquetaEntrada, dadosEtiqueta, textoCampo, campoPorRotulo, linkDoCard, abrirJanelaEtiqueta } from '../../utils/etiquetaEntrada';
 import { Spinner } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { podeNaTela } from '../../utils/telas';
@@ -117,7 +117,8 @@ export default function LogisticaCif() {
   const [verConfig, setVerConfig] = useState(false);
   const [verMov, setVerMov] = useState(false);
   const [historico, setHistorico] = useState(null);
-  const [abertoId, setAbertoId] = useState(null);
+  // ?card=<id> (QR code da etiqueta de entrada): abre esse card direto
+  const [abertoId, setAbertoId] = useState(() => { try { return Number(new URLSearchParams(window.location.search).get('card')) || null; } catch { return null; } });
   const [arrastando, setArrastando] = useState(null);
   const [soltando, setSoltando] = useState(null);
   const [movendoId, setMovendoId] = useState(null);
@@ -403,6 +404,8 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
   };
   const [imprimindo, setImprimindo] = useState(false);
   async function imprimirEtiqueta() {
+    const janela = abrirJanelaEtiqueta();
+    if (!janela) return;
     setImprimindo(true);
     try {
       const comValor = (lista, valorDe) => lista.map(c => ({ rotulo: c.rotulo, valor: valorDe(c.id) }));
@@ -421,7 +424,7 @@ function CardAbertoCif({ p, cfg, cfgLoj, colunas, colLoj, botoes = {}, carregar,
           modelo = c ? (c.conectados?.[0]?.titulo || String(c.valor || '').trim()) : '';
         } catch { /* sem tratativa */ }
       }
-      imprimirEtiquetaEntrada(dadosEtiqueta({ entrada, todos, cliente: p.cliente_nome, ns: nsGarantia, modelo }));
+      await imprimirEtiquetaEntrada({ ...dadosEtiqueta({ entrada, todos, cliente: p.cliente_nome, ns: nsGarantia, modelo }), link: linkDoCard('garantia', p.id) }, janela);
     } finally { setImprimindo(false); }
   }
   const botaoEtiqueta = (

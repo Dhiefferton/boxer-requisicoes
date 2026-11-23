@@ -88,6 +88,8 @@ export default function PedidosOrcamento() {
   }
   // ?busca= vem da busca do topo da tela Início
   const [busca, setBusca] = useState(() => { try { return new URLSearchParams(window.location.search).get('busca') || ''; } catch { return ''; } });
+  // ?card=<id> (QR code da etiqueta de entrada): abre esse card direto
+  const [cardDaUrl] = useState(() => { try { return Number(new URLSearchParams(window.location.search).get('card')) || null; } catch { return null; } });
   const [novoCard, setNovoCard] = useState(false);
   const [ocultarVazias, setOcultarVazias] = useState(false); // botão "Esconder vazias" retirado: todas as colunas aparecem
   function alternarVazias() {
@@ -234,7 +236,7 @@ export default function PedidosOrcamento() {
                   </div>
                 ) : (
                   itens.map(pedido => (
-                    <CardPedido key={pedido.id} pedido={pedido} onAtualizar={carregar} podeEditar={podeEditar} botoes={botoes} onConfigurarColuna={(k) => setVerConfig(k)}
+                    <CardPedido key={pedido.id} pedido={pedido} abrirAoCarregar={cardDaUrl === pedido.id} onAtualizar={carregar} podeEditar={podeEditar} botoes={botoes} onConfigurarColuna={(k) => setVerConfig(k)}
                       registrarMover={(fn) => { moverDoCard.current[pedido.id] = fn; }}
                       onArrastar={() => setArrastando(pedido)} onFimArraste={() => { setArrastando(null); setSoltando(null); }} />
                   ))
@@ -295,7 +297,7 @@ function Coluna({ titulo, cor, badge, hex, total, arquivada = false, soAdmin = f
 }
 
 // espelho: o mesmo card mostrado numa tela que recebeu a cópia (ex.: Notas de Serviços) — tudo igual, sem mover o original
-export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigurarColuna, registrarMover, onArrastar, onFimArraste, espelho = false, FaseExterna = null, faseExternaProps = null, fixo = null }) {
+export function CardPedido({ pedido, abrirAoCarregar = false, onAtualizar, podeEditar, botoes, onConfigurarColuna, registrarMover, onArrastar, onFimArraste, espelho = false, FaseExterna = null, faseExternaProps = null, fixo = null }) {
   // fixo: cópia fixa noutra tela { movimentos, emails, baseNF } — nada é lido do card original
   const baseNF = fixo?.baseNF || `/pedidos-orcamento/${pedido.id}`;
   // Card aberto noutra tela: <FaseExterna {...faseExternaProps}>{fx => …}</FaseExterna> dá a fase de lá (só monta quando abre)
@@ -464,7 +466,7 @@ export function CardPedido({ pedido, onAtualizar, podeEditar, botoes, onConfigur
     finally { setCancelando(false); }
   }
 
-  const [aberto, setAberto] = useState(false);
+  const [aberto, setAberto] = useState(abrirAoCarregar);
   const parar = (e) => e.stopPropagation();
 
   // Caixa do Zen igual à da Lojinha: pedido de venda, ordem de separação e nota fiscal (+ PDF/XML faturada)

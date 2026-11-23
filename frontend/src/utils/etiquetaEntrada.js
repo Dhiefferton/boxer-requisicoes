@@ -7,6 +7,7 @@
 // (Orçamentos ou Garantia). Abre uma janela com a página no tamanho 100x150 mm
 // e chama a impressão do navegador — escolha a Argox e o papel 10x15.
 // ============================================================
+import QRCode from 'qrcode';
 import logoBoxer from '../assets/logo-boxer.svg';
 import { valorLista, lerRegistro } from '../components/operador/CamposCardOrcamento';
 
@@ -84,11 +85,29 @@ function acessoriosDe(lista) {
   return { marcados, outros };
 }
 
+/** Link que o QR code abre: o card na tela (Orçamentos ou Garantia) */
+export const linkDoCard = (tela, id) => `${window.location.origin}/${tela === 'garantia' ? 'logistica-cif' : 'pedidos-orcamento'}?card=${id}`;
+
 /**
  * Abre a etiqueta para imprimir.
- * @param d { data, cliente, ns, modelo, situacao, acessorios (valor do campo), entreguePor, nf }
+ * @param d { data, cliente, ns, modelo, situacao, acessorios (valor do campo), entreguePor, nf, link (QR) }
  */
-export function imprimirEtiquetaEntrada(d) {
+/** Abre a janela da etiqueta já no clique (depois de uma espera o navegador bloqueia o pop-up) */
+export function abrirJanelaEtiqueta() {
+  const w = window.open('', '_blank', 'width=480,height=720');
+  if (!w) alert('O navegador bloqueou a janela da etiqueta. Libere pop-ups para este site e tente de novo.');
+  else w.document.write('<p style="font-family:Arial;padding:16px">Montando a etiqueta…</p>');
+  return w;
+}
+
+export async function imprimirEtiquetaEntrada(d, janela = null) {
+  const w = janela || abrirJanelaEtiqueta();
+  if (!w) return;
+  let qr = '';
+  if (d.link) {
+    try { qr = await QRCode.toDataURL(d.link, { margin: 0, width: 360, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } }); }
+    catch { qr = ''; }
+  }
   const cond = condicaoDe(textoCampo(d.situacao));
   const listaAcess = valorLista(d.acessorios).flatMap(x => String(lerRegistro(x)?.descricao || x).split(/\s*[,;]\s*/));
   const { marcados, outros } = acessoriosDe(listaAcess);
@@ -132,8 +151,11 @@ export function imprimirEtiquetaEntrada(d) {
   .esp { width: 3mm; }
   .cx { width: 3.6mm; height: 3.6mm; border: 0.35mm solid #000; display: inline-flex; align-items: center; justify-content: center; font-size: 3mm; font-weight: 900; flex: none; }
   .outros { font-size: 2.6mm; margin-top: 0.8mm; }
-  .rod { margin-top: auto; }
+  .rod { margin-top: auto; display: flex; align-items: flex-end; gap: 3mm; }
+  .rod .dados { flex: 1; min-width: 0; }
   .rod .campo { display: flex; align-items: flex-end; gap: 2mm; margin-top: 2mm; }
+  .qr { width: 22mm; height: 22mm; flex: none; }
+  .qr img { width: 22mm; height: 22mm; display: block; image-rendering: pixelated; }
   .rod .rot { white-space: nowrap; font-weight: 700; font-size: 2.8mm; }
   .rod .val { flex: 1; font-size: 3.6mm; }
 </style></head><body>
@@ -151,15 +173,16 @@ export function imprimirEtiquetaEntrada(d) {
   ${grade(ACESSORIOS, k => marcados.has(k))}
   ${outros.length ? `<div class="outros"><b>Outros:</b> ${esc(outros.join(', '))}</div>` : ''}
   <div class="rod">
-    ${linha('Entregue por:', d.entreguePor)}
-    ${linha('NF entrada:', d.nf)}
+    <div class="dados">
+      ${linha('Entregue por:', d.entreguePor)}
+      ${linha('NF entrada:', d.nf)}
+    </div>
+    ${qr ? `<div class="qr"><img src="${qr}" alt="QR do card"></div>` : ''}
   </div>
 </div>
 <script>window.onload = function () { setTimeout(function () { window.focus(); window.print(); }, 300); };</script>
 </body></html>`;
 
-  const w = window.open('', '_blank', 'width=480,height=720');
-  if (!w) { alert('O navegador bloqueou a janela da etiqueta. Libere pop-ups para este site e tente de novo.'); return; }
   w.document.open();
   w.document.write(html);
   w.document.close();

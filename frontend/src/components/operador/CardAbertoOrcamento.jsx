@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import NomeCardEditavel from './NomeCardEditavel.jsx';
 import { X, Settings, ArrowRight, ArrowLeft, ExternalLink, History, Ban, PackageCheck, Scissors, RotateCcw, Pencil, Check, Printer } from 'lucide-react';
 import { pedidosOrcamentoService, tratativaService } from '../../services/api';
-import { imprimirEtiquetaEntrada, dadosEtiqueta, textoCampo, campoPorRotulo } from '../../utils/etiquetaEntrada';
+import { imprimirEtiquetaEntrada, dadosEtiqueta, textoCampo, campoPorRotulo, linkDoCard, abrirJanelaEtiqueta } from '../../utils/etiquetaEntrada';
 import { Spinner } from '../ui';
 import { useAutoSalvar, StatusAutoSalvar } from '../../utils/autoSalvar';
 import { FotosCampo } from './FotosOrcamento';
@@ -131,6 +131,9 @@ export default function CardAbertoOrcamento({
   // Etiqueta de entrada 10x15 (Argox): dados da fase Entrada (Modelo do card ou da tratativa)
   const [imprimindo, setImprimindo] = useState(false);
   async function imprimirEtiqueta() {
+    const janela = abrirJanelaEtiqueta();
+    if (!janela) return;
+    // Janela aberta já no clique (senão o navegador bloqueia por causa da espera da tratativa)
     setImprimindo(true);
     try {
       const comValor = (lista) => lista.map(c => ({ rotulo: c.rotulo, valor: valorDe(c.id) }));
@@ -145,7 +148,7 @@ export default function CardAbertoOrcamento({
           modelo = c ? (c.conectados?.[0]?.titulo || String(c.valor || '').trim()) : '';
         } catch { /* sem tratativa */ }
       }
-      imprimirEtiquetaEntrada(dadosEtiqueta({ entrada, todos, cliente: pedido.cliente_nome || pedido.referencia, ns: nsValor, modelo }));
+      await imprimirEtiquetaEntrada({ ...dadosEtiqueta({ entrada, todos, cliente: pedido.cliente_nome || pedido.referencia, ns: nsValor, modelo }), link: linkDoCard('orcamento', pedido.id) }, janela);
     } finally { setImprimindo(false); }
   }
   const botaoEtiqueta = (

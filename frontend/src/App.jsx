@@ -42,6 +42,15 @@ import { podeRecontar } from './utils/acessoInventario';
 import { veTela } from './utils/telas';
 import { Spinner } from './components/ui';
 
+// Sem login: guarda o endereço (ex.: link do QR code da etiqueta) para voltar a ele depois de entrar
+function IrParaLogin() {
+  try {
+    const destino = window.location.pathname + window.location.search;
+    if (destino && destino !== '/' && !destino.startsWith('/login')) sessionStorage.setItem('voltar_apos_login', destino);
+  } catch { /* sem sessionStorage */ }
+  return <Navigate to="/login" replace />;
+}
+
 function RotaProtegida({ children, semMenu = false }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return (
@@ -49,7 +58,7 @@ function RotaProtegida({ children, semMenu = false }) {
       <Spinner size={32} className="text-[var(--c-destaque)]" />
     </div>
   );
-  if (!usuario) return <Navigate to="/login" replace />;
+  if (!usuario) return <IrParaLogin />;
   // Redireciona para troca de senha obrigatória
   if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
   return <AppLayout semMenu={semMenu}>{children}</AppLayout>;
@@ -63,7 +72,7 @@ function RotaTela({ tela, recontagem, children }) {
       <Spinner size={32} className="text-[var(--c-destaque)]" />
     </div>
   );
-  if (!usuario) return <Navigate to="/login" replace />;
+  if (!usuario) return <IrParaLogin />;
   if (usuario.trocar_senha) return <Navigate to="/trocar-senha" replace />;
   if (!veTela(usuario, tela)) return <Navigate to="/inicio" replace />;
   if (recontagem && !podeRecontar(usuario)) return <Navigate to="/inventario" replace />;
