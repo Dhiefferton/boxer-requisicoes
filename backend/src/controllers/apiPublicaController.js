@@ -4,7 +4,9 @@
 // Outros sistemas consultam o Boxer com uma CHAVE de API criada pelo admin (Integrações).
 //   • Authorization: Bearer bx_live_…   (a chave só aparece uma vez; no banco fica o hash)
 //   • Cada chave enxerga só as telas que o admin liberou (qualquer tela, inclusive quadros).
-//   • Só GET. Nunca devolve senhas, tokens, hashes nem imagens (colunas bytea).
+//   • Só GET. Nunca devolve senhas, tokens, hashes nem imagens (colunas bytea) nas listas.
+//   • Anexos (fotos, PDFs, vídeos dos cards): GET /:tela/anexos lista e
+//     GET /:tela/anexos/:id/arquivo baixa o arquivo (25/11/2026).
 //   • Limite de consultas por minuto por chave e registro de todos os acessos.
 // ============================================================
 import crypto from 'crypto';
@@ -139,6 +141,110 @@ const fromDe = (f) => (f.extras
   ? `(SELECT p.*, ${Object.entries(f.extras).map(([n, sql]) => `${sql} AS "${n}"`).join(', ')} FROM ${f.tabela} p) AS t`
   : f.tabela);
 
+// ── Anexos dos cards (fotos, comprovantes, PDFs, vídeos) ──────
+// tabela de arquivos + filtro da tela + tabela de campos (pra dar nome ao campo do anexo)
+const ANEXOS = {
+  orcamentos:    { tabela: 'orc_fotos', campos: 'orc_campos' },
+  lojinha:       { tabela: 'loj_fotos', campos: 'loj_campos',
+                   onde: `pedido_id IN (SELECT id FROM lojinha_boxer_pedidos WHERE COALESCE(origem, '') NOT IN ('pipefy_garantia', 'tratativa_sac'))` },
+  logistica_cif: { tabela: 'loj_fotos', campos: 'cif_campos', onde: `pedido_id IN (SELECT id FROM lojinha_boxer_pedidos WHERE ${GARANTIA})` },
+};
+function anexosDaTela(tela) {
+  if (ANEXOS[tela]) return ANEXOS[tela];
+  const q = quadroDe(tela);
+  return q ? { tabela: 'bx_quadro_fotos', campos: `qd${q}_campos`, onde: `quadro_id = ${q}` } : null;
+}
+
+// Nome legível de cada campo: aceita as várias formas de id usadas nos cards
+// (id puro, bx_<id>, cif_bx_<id>, id do Pipefy).
+async function nomesDosCampos(tabela) {
+  try {
+    const r = await query(`SELECT to_jsonb(c) AS c FROM ${tabela} c`);
+    const mapa = new Map();
+    for (const { c } of r.rows) {
+      const nome = c.rotulo || c.nome || c.titulo;
+      if (!nome) continue;
+      for (const k of [c.id, `bx_${c.id}`, `cif_bx_${c.id}`, c.pipefy_campo, c.chave]) if (k != null && k !== '') mapa.set(String(k), nome);
+    }
+    return mapa;
+  } catch { return new Map(); }
+}
+
+const urlArquivo = (req, tela, id) => {
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+  return `${proto}://${req.get('host')}/api/v1/${tela}/anexos/${id}/arquivo`;
+};
+
+// GET /api/v1/:tela/anexos — pedido_id · campo_id · desde/ate · limite · pagina
+async function listarAnexos(req, res, tela) {
+  const a = anexosDaTela(tela);
+  if (!a) return res.status(404).json({ erro: 'Esta tela não tem anexos.' });
+  const params = [];
+  const push = (v) => { params.push(v); return `$${params.length}`; };
+  const where = a.onde ? [a.onde] : [];
+  if (req.query.pedido_id) {
+    if (!/^\d{1,10}$/.test(String(req.query.pedido_id))) return res.status(400).json({ erro: 'pedido_id inválido.' });
+    where.push(`pedido_id = ${push(Number(req.query.pedido_id))}`);
+  }
+  if (req.query.campo_id) where.push(`campo_id = ${push(String(req.query.campo_id))}`);
+  for (const [qn, op] of [['desde', '>='], ['ate', '<=']]) {
+    if (!req.query[qn]) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(req.query[qn]))) return res.status(400).json({ erro: `${qn} deve ser AAAA-MM-DD.` });
+    where.push(`created_at::date ${op} ${push(req.query[qn])}::date`);
+  }
+  const limite = Math.min(500, Math.max(1, parseInt(req.query.limite) || 100));
+  const pagina = Math.max(1, parseInt(req.query.pagina) || 1);
+  const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const total = (await query(`SELECT COUNT(*)::int AS n FROM ${a.tabela} ${w}`, params)).rows[0].n;
+  const r = await query(
+    `SELECT id, pedido_id, campo_id, to_jsonb(f) ->> 'nome' AS nome, mime,
+            COALESCE((to_jsonb(f) ->> 'tamanho')::bigint, octet_length(imagem)) AS tamanho,
+            usuario_nome, created_at
+       FROM ${a.tabela} f ${w} ORDER BY id DESC LIMIT ${limite} OFFSET ${(pagina - 1) * limite}`, params);
+  const nomes = await nomesDosCampos(a.campos);
+  const dados = r.rows.map(x => ({
+    id: x.id, pedido_id: x.pedido_id, campo_id: x.campo_id, campo_nome: nomes.get(String(x.campo_id)) || null,
+    nome: x.nome || `anexo-${x.id}`, mime: x.mime, tamanho: x.tamanho == null ? null : Number(x.tamanho),
+    enviado_por: x.usuario_nome || null, criado_em: x.created_at, url: urlArquivo(req, tela, x.id),
+  }));
+  res.json({ tela, recurso: 'anexos', total, pagina, limite, paginas: Math.max(1, Math.ceil(total / limite)), dados });
+}
+
+// GET /api/v1/:tela/anexos/:id — dados de um anexo
+async function umAnexo(req, res, tela, id) {
+  const a = anexosDaTela(tela);
+  if (!a) return res.status(404).json({ erro: 'Esta tela não tem anexos.' });
+  const r = await query(
+    `SELECT id, pedido_id, campo_id, to_jsonb(f) ->> 'nome' AS nome, mime,
+            COALESCE((to_jsonb(f) ->> 'tamanho')::bigint, octet_length(imagem)) AS tamanho, usuario_nome, created_at
+       FROM ${a.tabela} f WHERE id = $1 ${a.onde ? `AND ${a.onde}` : ''}`, [parseInt(id) || 0]);
+  const x = r.rows[0];
+  if (!x) return res.status(404).json({ erro: 'Anexo não encontrado.' });
+  const nomes = await nomesDosCampos(a.campos);
+  res.json({ id: x.id, pedido_id: x.pedido_id, campo_id: x.campo_id, campo_nome: nomes.get(String(x.campo_id)) || null,
+    nome: x.nome || `anexo-${x.id}`, mime: x.mime, tamanho: x.tamanho == null ? null : Number(x.tamanho),
+    enviado_por: x.usuario_nome || null, criado_em: x.created_at, url: urlArquivo(req, tela, x.id) });
+}
+
+// GET /api/v1/:tela/anexos/:id/arquivo — o arquivo em si
+// (grande no armazenamento externo: redireciona 302 pro link do arquivo)
+export async function baixarAnexo(req, res, next) {
+  try {
+    const tela = telaOuErro(req, res); if (!tela) return;
+    const a = anexosDaTela(tela);
+    if (!a) return res.status(404).json({ erro: 'Esta tela não tem anexos.' });
+    const r = await query(
+      `SELECT imagem, mime, to_jsonb(f) ->> 'nome' AS nome, to_jsonb(f) ->> 'blob_url' AS blob_url
+         FROM ${a.tabela} f WHERE id = $1 ${a.onde ? `AND ${a.onde}` : ''}`, [parseInt(req.params.id) || 0]);
+    const f = r.rows[0];
+    if (!f) return res.status(404).json({ erro: 'Anexo não encontrado.' });
+    if (f.blob_url) return res.redirect(302, f.blob_url);
+    res.set('Content-Type', f.mime || 'application/octet-stream');
+    res.set('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(f.nome || `anexo-${req.params.id}`)}`);
+    res.send(f.imagem);
+  } catch (err) { next(err); }
+}
+
 // ── Autenticação por chave ────────────────────────────────────
 export async function autenticarChave(req, res, next) {
   const t0 = Date.now();
@@ -180,7 +286,7 @@ export async function minhasTelas(req, res, next) {
     res.json({
       chave: req.chaveApi.nome,
       telas: req.chaveApi.telas.filter(t => nomes.has(t)).map(t => ({
-        tela: t, nome: nomes.get(t), recursos: Object.keys(fontesDaTela(t) || {}),
+        tela: t, nome: nomes.get(t), recursos: [...Object.keys(fontesDaTela(t) || {}), ...(anexosDaTela(t) ? ['anexos'] : [])],
         exemplo: `/api/v1/${t}/${Object.keys(fontesDaTela(t) || {})[0]}`,
       })),
     });
@@ -203,6 +309,10 @@ export async function recursosDaTela(req, res, next) {
     for (const [nome, f] of Object.entries(fontes)) {
       recursos.push({ recurso: nome, colunas: (await colunasRecurso(f)).map(c => c.nome), url: `/api/v1/${tela}/${nome}` });
     }
+    if (anexosDaTela(tela)) recursos.push({
+      recurso: 'anexos', colunas: ['id', 'pedido_id', 'campo_id', 'campo_nome', 'nome', 'mime', 'tamanho', 'enviado_por', 'criado_em', 'url'],
+      url: `/api/v1/${tela}/anexos`, arquivo: `/api/v1/${tela}/anexos/{id}/arquivo`,
+    });
     res.json({ tela, recursos });
   } catch (err) { next(err); }
 }
@@ -214,6 +324,7 @@ export async function recursosDaTela(req, res, next) {
 export async function listarRecurso(req, res, next) {
   try {
     const tela = telaOuErro(req, res); if (!tela) return;
+    if (req.params.recurso === 'anexos') return await listarAnexos(req, res, tela);
     const f = fontesDaTela(tela)[req.params.recurso];
     if (!f) return res.status(404).json({ erro: 'Recurso não encontrado nesta tela.' });
     const cols = await colunasRecurso(f);
@@ -267,6 +378,7 @@ export async function listarRecurso(req, res, next) {
 export async function umRegistro(req, res, next) {
   try {
     const tela = telaOuErro(req, res); if (!tela) return;
+    if (req.params.recurso === 'anexos') return await umAnexo(req, res, tela, req.params.id);
     const f = fontesDaTela(tela)[req.params.recurso];
     if (!f) return res.status(404).json({ erro: 'Recurso não encontrado nesta tela.' });
     const cols = await colunasRecurso(f);

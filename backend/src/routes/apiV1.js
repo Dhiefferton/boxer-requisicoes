@@ -3,7 +3,7 @@
 // ============================================================
 import { Router } from 'express';
 import {
-  autenticarChave, minhasTelas, recursosDaTela, listarRecurso, umRegistro,
+  autenticarChave, minhasTelas, recursosDaTela, listarRecurso, umRegistro, baixarAnexo,
 } from '../controllers/apiPublicaController.js';
 import { rodarRelatorioSalvo } from '../controllers/relatoriosController.js';
 
@@ -27,6 +27,7 @@ router.get('/relatorios/executar/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.get('/:tela/anexos/:id/arquivo', baixarAnexo);
 router.get('/:tela', recursosDaTela);
 router.get('/:tela/:recurso', listarRecurso);
 router.get('/:tela/:recurso/:id', umRegistro);
