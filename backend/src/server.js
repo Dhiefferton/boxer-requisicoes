@@ -8,6 +8,7 @@ import db from './config/db.js';
 import { iniciarSyncErp } from './jobs/syncErpEstoque.js';
 import erpRoutes from './routes/erp.js';
 import apiV1 from './routes/apiV1.js';
+import integracoesWms from './routes/integracoesWms.js';
 import planilhasRoutes from './routes/planilhas.js';
 import { marcarOrigem } from './integrations/usoPipefy.js';
 
@@ -23,6 +24,8 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '5mb' })); // anexos do card (PDF etc. até 2,5 MB em base64)
+// Integração Boxer WMS (servidor a servidor, chave de API): separação da Lojinha concluída
+app.use('/api/integracoes/wms', integracoesWms);
 app.use(marcarOrigem); // origem das chamadas ao Pipefy (relatório de uso)
 
 app.locals.db = db;

@@ -902,3 +902,66 @@ export async function listarMovimentosLojinha(req, res, next) {
     res.json({ movimentos: r.rows });
   } catch (err) { next(err); }
 }
+
+// ── Integração WMS (26/11/2026) ─────────────────────────────
+// O WMS separa os pedidos da Lojinha (perfil LOJINHA) e, ao finalizar a reserva, avisa aqui:
+// preenche os campos da coluna "Em Separação" (início, colaborador e término — só os que estiverem
+// vazios) e move o card para "Em Conferência". Pedido fora de "Em Separação"/"Liberação" não é movido.
+// POST /api/integracoes/wms/separacao  { ordemSeparacao, inicio, termino, separadores: ['Nome'] }
+const semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+const dataHoraBR = (v) => {
+  const d = v ? new Date(v) : new Date();
+  if (Number.isNaN(d.getTime())) return null;
+  const p = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+    .formatToParts(d).reduce((o, x) => ({ ...o, [x.type]: x.value }), {});
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
+};
+export async function separacaoConcluidaWms(req, res, next) {
+  try {
+    await garantirEstrutura();
+    const ordem = String(req.body?.ordemSeparacao || '').trim();
+    if (!ordem) return res.status(400).json({ erro: 'Informe ordemSeparacao.' });
+    const p = (await query(`SELECT * FROM lojinha_boxer_pedidos WHERE zen_ordem_separacao_id::text = $1 ORDER BY id DESC LIMIT 1`, [ordem])).rows[0];
+    if (!p) return res.status(404).json({ erro: `Nenhum pedido da Lojinha com a ordem de separação ${ordem}.`, ignorado: true });
+
+    const cfg = await cfgLojinha.ler();
+    const camposSep = cfg.campos.filter((c) => c.coluna === 'separacao');
+    const achar = (tipo, re) => camposSep.find((c) => c.tipo === tipo && re.test(semAcento(c.rotulo)));
+    const cInicio = achar('datahora', /inicio/);
+    const cTermino = achar('datahora', /termino|fim/);
+    const cColab = camposSep.find((c) => ['lista', 'unica', 'texto', 'responsavel'].includes(c.tipo) && /colaborador|separador/.test(semAcento(c.rotulo)));
+
+    // nome do WMS -> opção da lista (pelo primeiro nome, sem acento); sem opção parecida, vai o nome do WMS
+    const separadores = (Array.isArray(req.body?.separadores) ? req.body.separadores : []).map(String).filter(Boolean);
+    let colaborador = null;
+    if (separadores.length) {
+      const opcoes = Array.isArray(cColab?.opcoes) ? cColab.opcoes : [];
+      const nomes = separadores.map((n) => opcoes.find((o) => semAcento(o) === semAcento(n))
+        || opcoes.find((o) => semAcento(o).split(' ')[0] === semAcento(n).split(' ')[0]) || n);
+      colaborador = [...new Set(nomes)].join(', ');
+    }
+
+    const atuais = p.campos || {};
+    const vazio = (c) => c && !String(atuais[cfgLojinha.idCampoConfig(c)] ?? '').replace(/[\[\]"]/g, '').trim();
+    const novos = {};
+    if (vazio(cInicio) && req.body?.inicio) novos[cfgLojinha.idCampoConfig(cInicio)] = dataHoraBR(req.body.inicio);
+    if (vazio(cTermino)) novos[cfgLojinha.idCampoConfig(cTermino)] = dataHoraBR(req.body?.termino);
+    if (vazio(cColab) && colaborador) novos[cfgLojinha.idCampoConfig(cColab)] = colaborador;
+    Object.keys(novos).forEach((k) => { if (!novos[k]) delete novos[k]; });
+
+    const mover = ['liberacao', 'separacao'].includes(p.status);
+    const r = await query(
+      `UPDATE lojinha_boxer_pedidos SET campos = COALESCE(campos, '{}'::jsonb) || $2::jsonb,
+              status = CASE WHEN $3 THEN 'conferencia' ELSE status END,
+              separacao_em = COALESCE(separacao_em, NOW())
+        WHERE id = $1 RETURNING *`, [p.id, JSON.stringify(novos), mover]);
+    const rot = new Map(cfg.campos.map((c) => [cfgLojinha.idCampoConfig(c), c.rotulo]));
+    const preenchidos = Object.keys(novos).map((k) => rot.get(k) || k);
+    await registrarMovLoj(r.rows[0], mover ? 'separado_wms' : 'campos_editados', {
+      de: mover ? p.status : null, para: mover ? 'conferencia' : null, origem: 'sistema',
+      descricao: `Separação concluída no WMS (ordem #${ordem})${preenchidos.length ? ` — preenchido: ${preenchidos.join(', ')}` : ''}${mover ? ' — foi para Em Conferência' : ''}`,
+      detalhes: { ordem, separadores, novos },
+    });
+    res.json({ pedidoId: p.id, movido: mover, statusAnterior: p.status, preenchidos });
+  } catch (err) { next(err); }
+}
