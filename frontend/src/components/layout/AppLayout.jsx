@@ -14,6 +14,8 @@ import { useLocation } from 'react-router-dom';
 import BotaoTema from '../ui/BotaoTema';
 import logoBoxer from '../../assets/logo-boxer.svg';
 import BarraTopo from './BarraTopo';
+import SidebarBoxer, { LARGURA_SIDEBAR } from './SidebarBoxer';
+import { useSidebarNova } from '../../utils/menuSistema';
 
 // Sem barra lateral em nenhuma tela: a navegação é pela faixa do topo (BarraTopo) e pela tela Início
 export default function AppLayout({ children }) {
@@ -40,6 +42,14 @@ export default function AppLayout({ children }) {
   }
 
   function handleLogout() { logout(); navigate('/login'); }
+
+  // Sidebar nova (em teste, só o dono): no computador troca a barra do topo pela sidebar no
+  // estilo do WMS. No celular nada muda. Recolhida/aberta fica lembrada neste navegador.
+  const sidebarNova = useSidebarNova();
+  const [sbRecolhida, setSbRecolhida] = useState(() => { try { return localStorage.getItem('boxer_sidebar_nova') === '1'; } catch { return false; } });
+  function alternarSbNova() {
+    setSbRecolhida(v => { try { localStorage.setItem('boxer_sidebar_nova', v ? '0' : '1'); } catch { /* ignora */ } return !v; });
+  }
 
   // Menu: telas liberadas pelo perfil e pelas telas escolhidas no cadastro do colaborador
   const { nomes: nomesTelas, quadros } = useTelas();
@@ -141,10 +151,19 @@ export default function AppLayout({ children }) {
         </div>
       </aside>
 
-      <div className={`flex-1 flex flex-col min-w-0 ${semMenu ? '' : recolhida ? 'md:pl-16' : 'md:pl-56'}`}>
+      {sidebarNova && (
+        <SidebarBoxer recolhida={sbRecolhida} onRecolher={alternarSbNova} onSair={handleLogout}
+          carrinho={usuario?.perfil === 'colaborador' ? { total: totalItens, abrir: () => setCartOpen(true) } : null} />
+      )}
+
+      <div className={`flex-1 flex flex-col min-w-0 ${sidebarNova ? (sbRecolhida ? LARGURA_SIDEBAR.recolhida : LARGURA_SIDEBAR.aberta) : semMenu ? '' : recolhida ? 'md:pl-16' : 'md:pl-56'}`}>
 
       {/* ── Header (celular) ────────────────────────────────── */}
-      {semMenu && <BarraTopo onSair={handleLogout} carrinho={usuario?.perfil === 'colaborador' ? { total: totalItens, abrir: () => setCartOpen(true) } : null} />}
+      {semMenu && (
+        <div className={`sticky top-0 z-40 ${sidebarNova ? 'md:hidden' : ''}`}>
+          <BarraTopo onSair={handleLogout} carrinho={usuario?.perfil === 'colaborador' ? { total: totalItens, abrir: () => setCartOpen(true) } : null} />
+        </div>
+      )}
       {!semMenu && <header className={`md:hidden sticky top-0 z-40 bg-[var(--c-fundo)]/95 backdrop-blur border-b border-[var(--c-borda)]`}>
         <div className="w-full px-3 sm:px-4 md:px-6 h-14 flex items-center justify-between gap-3">
 

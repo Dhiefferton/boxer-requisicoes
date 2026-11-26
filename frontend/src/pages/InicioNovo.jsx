@@ -20,50 +20,9 @@ import { Search, X, LayoutTemplate, Radar, Users, Fuel, FileText, UserCog, Setti
 import { construtorService } from '../services/api';
 import { ExternalLink, Gauge, ListChecks, RefreshCcw, PackageCheck, ScanLine, Smartphone, CarFront, CalendarDays, Route, ClipboardCheck, Calculator } from 'lucide-react';
 import { MODULOS, enderecoDe, abrirComLogin } from '../utils/modulos';
+import { ICONES_MODULO, semAcento, SISTEMA, GRUPOS, CORES_MODULO, CORES_QUADROS, useSidebarNova } from '../utils/menuSistema';
 
-const ICONES_MODULO = { painel: Gauge, pedidos: ListChecks, reposicao: RefreshCcw, historico: History, separacao: ScanLine, conferencia: PackageCheck, coletor: Smartphone, frotas: CarFront, agenda: CalendarDays, viagens: Route, checklist: ClipboardCheck, custo: Calculator, operacoes: Radar, motoristas: Users, combustivel: Fuel, manutencao: Wrench, documentos: FileText, relatorios: BarChart3, usuarios: UserCog, configuracoes: Settings, motorista: Truck };
 const AZUL = 'var(--c-destaque)';
-// Busca de telas: ignora maiúsculas e acentos
-const semAcento = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-
-
-// Telas do sistema, por grupo (ordem da tela inicial). As telas criadas entram depois da Garantia.
-// Admin e Integrações ficam na barra superior.
-const SISTEMA = [
-  { chave: 'orcamentos', grupo: 'logistica', rota: '/pedidos-orcamento', nome: 'Orçamentos', icon: Wrench, cor: '#4f46e5', conta: true },
-  { chave: 'lojinha', grupo: 'logistica', rota: '/lojinha', nome: 'Lojinha Boxer', icon: ShoppingBag, cor: '#9333ea', conta: true },
-  { chave: 'logistica_cif', grupo: 'logistica', rota: '/logistica-cif', nome: 'Garantia - Boxer Soldas', icon: ShieldCheck, cor: '#0284c7', conta: true },
-  { quadros: true, grupo: 'logistica' },
-  { chave: 'databases', grupo: 'logistica', rota: '/databases', nome: 'Databases', icon: Database, cor: '#0369a1', desc: 'Bases de registros' },
-  { chave: 'armazenamento', grupo: 'logistica', rota: '/armazenamento', nome: 'Armazenamento', icon: Video, cor: '#4b5563', desc: 'Vídeos e arquivos' },
-  { chave: 'relatorios', grupo: 'logistica', rota: '/relatorios', nome: 'Relatórios', icon: BarChart3, cor: '#0ea5e9', desc: 'Histórico do Pipefy' },
-  { chave: 'painel', grupo: 'logistica', rota: '/painel-logistico', nome: 'Painel Logístico', icon: Gauge, cor: '#0f766e', desc: 'Indicadores e gestão' },
-  { chave: 'inventario', grupo: 'almoxarifado', rota: '/inventario', nome: 'Inventário', icon: Boxes, cor: '#d97706', desc: 'Contagens de estoque' },
-  { chave: 'catalogo', grupo: 'almoxarifado', rota: '/catalogo', nome: 'Catálogo / Requisição', icon: ClipboardList, cor: '#475569', desc: 'Requisição de materiais' },
-  { chave: 'historico', grupo: 'almoxarifado', rota: '/historico', nome: 'Histórico', icon: History, cor: '#64748b', desc: 'Requisições feitas' },
-  { chave: 'operador', grupo: 'almoxarifado', rota: '/operador', nome: 'Operador', icon: LayoutDashboard, cor: '#2563eb', desc: 'Separação das requisições' },
-  { chave: 'entradas', grupo: 'almoxarifado', rota: '/entradas', nome: 'Entradas', icon: PackageOpen, cor: '#0d9488', desc: 'Notas de entrada' },
-  { chave: 'estoque', grupo: 'almoxarifado', rota: '/estoque', nome: 'Estoque', icon: Warehouse, cor: '#0891b2', desc: 'Saldo de estoque' },
-  { chave: 'recebimento_importacao', grupo: 'almoxarifado', rota: '/recebimento-importacao', nome: 'Recebimento / Importação', icon: Truck, cor: '#7c3aed', desc: 'Conferência de importação' },
-  { chave: 'necessidade_pecas', grupo: 'almoxarifado', rota: '/necessidade-pecas', nome: 'Necessidade de Peças', icon: Puzzle, cor: '#dc2626', desc: 'Peças a comprar' },
-  { chave: 'compras', grupo: 'almoxarifado', rota: '/compras', nome: 'Compras', icon: ShoppingCart, cor: '#ca8a04', desc: 'Pedidos de compra' },
-  { chave: 'mrp', grupo: 'almoxarifado', rota: '/mrp', nome: 'MRP', icon: BarChart3, cor: '#be185d', desc: 'Planejamento' },
-];
-const GRUPOS = [
-  { chave: 'logistica', nome: 'Logística / Manutenção', resumo: 'orçamentos, lojinha, garantia, notas de serviços, tratativa' },
-  { chave: 'almoxarifado', nome: 'Almoxarifado', resumo: 'inventário, requisições, estoque, compras' },
-];
-const COR_PADRAO = '#2563eb'; // WMS / Frotas e o que vier sem cor
-// Cores dos cards do Armazém (WMS) e do Frotas (mesma paleta das telas do sistema)
-const CORES_MODULO = {
-  wms_painel: '#2563eb', wms_pedidos: '#4f46e5', wms_reposicao: '#d97706', wms_historico: '#64748b',
-  wms_separacao: '#9333ea', wms_conferencia: '#0d9488', wms_coletor: '#475569',
-  frotas_painel: '#0284c7', frotas_agenda: '#7c3aed', frotas_viagens: '#059669', frotas_operacoes: '#dc2626',
-  frotas_veiculos: '#2563eb', frotas_motoristas: '#0891b2', frotas_combustivel: '#ca8a04', frotas_custo: '#be185d',
-  frotas_manutencao: '#ea580c', frotas_documentos: '#0369a1', frotas_checklist: '#16a34a', frotas_relatorios: '#0ea5e9',
-  frotas_motorista: '#9333ea',
-};
-const CORES_QUADROS = ['#059669', '#0d9488', '#7c3aed', '#e11d48', '#2563eb', '#ca8a04', '#9333ea', '#0891b2'];
 
 const fmt = (v) => (v == null ? '—' : Number(v).toLocaleString('pt-BR'));
 const saudacao = () => { const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; };
@@ -141,6 +100,7 @@ export default function InicioNovo() {
   const aprovPct = p.aprovados_mes != null && (p.aprovados_mes + (p.recusados_mes || 0)) > 0
     ? Math.round((p.aprovados_mes / (p.aprovados_mes + (p.recusados_mes || 0))) * 100) : null;
   const primeiroNome = String(usuario?.nome || '').split(' ')[0];
+  const sidebarNova = useSidebarNova();
 
   return (
     <div className="space-y-6 max-w-[1500px] mx-auto">
@@ -170,8 +130,8 @@ export default function InicioNovo() {
         </CardProd>
       </div>
 
-      {/* Telas */}
-      <div>
+      {/* Telas - com a sidebar nova (computador) os cards saem do centro; no celular continuam */}
+      <div className={sidebarNova ? 'md:hidden' : undefined}>
         <div className="flex items-end gap-6 border-b border-[var(--c-borda)] mb-4">
           {[['telas', 'Telas'], ['favoritas', 'Favoritas']].map(([k, t]) => (
             <button key={k} onClick={() => setAba(k)}
