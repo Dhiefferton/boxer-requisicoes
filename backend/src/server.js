@@ -18,7 +18,12 @@ const PORT = process.env.PORT || 3001;
 app.set('trust proxy', 1);
 app.use(helmet());
 // API pública (chave de API, só leitura): aceita qualquer origem — a segurança é a chave
-app.use('/api/v1', cors({ origin: '*' }), apiV1);
+// Preflight (OPTIONS) aceita Authorization; expõe Content-Disposition (nome do arquivo baixado).
+// CORP cross-origin: o arquivo baixado pode ser lido por outro site (ex.: vitorassistencia.github.io).
+app.use('/api/v1',
+  cors({ origin: '*', allowedHeaders: ['Authorization', 'Content-Type'], exposedHeaders: ['Content-Disposition', 'Content-Length', 'Content-Type'], maxAge: 86400 }),
+  (req, res, next) => { res.set('Cross-Origin-Resource-Policy', 'cross-origin'); next(); },
+  apiV1);
 app.use(cors({
   origin:      process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true,

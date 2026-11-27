@@ -245,6 +245,62 @@ export async function baixarAnexo(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// ── Arquivos do pedido (27/11/2026) ───────────────────────────
+// Cada pedido da v1 (recurso "pedidos" de tela com anexos) ganha o campo
+// "arquivos": [{ id, nome_arquivo, content_type, tamanho, campo_id, campo_nome, url }].
+// O PDF do orçamento e o DOCX do laudo ficam na MESMA tabela de anexos do card
+// (orc_fotos); o content_type diferencia. Download:
+//   GET /api/v1/:tela/pedidos/:id/arquivos/:arquivoId
+const urlArquivoPedido = (req, tela, pedidoId, id) => {
+  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+  return `${proto}://${req.get('host')}/api/v1/${tela}/pedidos/${pedidoId}/arquivos/${id}`;
+};
+
+async function anexarArquivos(req, tela, recurso, linhas) {
+  const a = anexosDaTela(tela);
+  if (!a || recurso !== 'pedidos' || !linhas.length || !('id' in linhas[0])) return linhas;
+  const ids = linhas.map(l => parseInt(l.id)).filter(Number.isFinite);
+  if (!ids.length) return linhas;
+  const r = await query(
+    `SELECT id, pedido_id, campo_id, to_jsonb(f) ->> 'nome' AS nome, mime,
+            COALESCE((to_jsonb(f) ->> 'tamanho')::bigint, octet_length(imagem)) AS tamanho
+       FROM ${a.tabela} f WHERE pedido_id = ANY($1::int[]) ${a.onde ? `AND ${a.onde}` : ''} ORDER BY id`, [ids]);
+  const nomes = await nomesDosCampos(a.campos);
+  const porPedido = new Map();
+  for (const x of r.rows) {
+    const lista = porPedido.get(Number(x.pedido_id)) || [];
+    lista.push({
+      id: x.id, nome_arquivo: x.nome || `anexo-${x.id}`, content_type: x.mime || 'application/octet-stream',
+      tamanho: x.tamanho == null ? null : Number(x.tamanho), campo_id: x.campo_id, campo_nome: nomes.get(String(x.campo_id)) || null,
+      url: urlArquivoPedido(req, tela, x.pedido_id, x.id),
+    });
+    porPedido.set(Number(x.pedido_id), lista);
+  }
+  return linhas.map(l => ({ ...l, arquivos: porPedido.get(Number(l.id)) || [] }));
+}
+
+// GET /api/v1/:tela/pedidos/:id/arquivos/:arquivoId — baixa o arquivo (só se for desse pedido)
+export async function baixarArquivoPedido(req, res, next) {
+  try {
+    const tela = telaOuErro(req, res); if (!tela) return;
+    const a = anexosDaTela(tela);
+    if (!a) return res.status(404).json({ erro: 'Esta tela não tem anexos.' });
+    const r = await query(
+      `SELECT imagem, mime, to_jsonb(f) ->> 'nome' AS nome, to_jsonb(f) ->> 'blob_url' AS blob_url
+         FROM ${a.tabela} f WHERE id = $1 AND pedido_id = $2 ${a.onde ? `AND ${a.onde}` : ''}`,
+      [parseInt(req.params.arquivoId) || 0, parseInt(req.params.id) || 0]);
+    const f = r.rows[0];
+    if (!f) return res.status(404).json({ erro: 'Arquivo não encontrado neste pedido.' });
+    if (f.blob_url) return res.redirect(302, f.blob_url); // arquivo grande (vídeo) no armazenamento externo
+    const nome = f.nome || `anexo-${req.params.arquivoId}`;
+    const ascii = nome.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+    res.set('Content-Type', f.mime || 'application/octet-stream');
+    res.set('Content-Disposition', `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(nome)}`);
+    res.set('Content-Length', String(f.imagem.length));
+    res.send(f.imagem);
+  } catch (err) { next(err); }
+}
+
 // ── Autenticação por chave ────────────────────────────────────
 export async function autenticarChave(req, res, next) {
   const t0 = Date.now();
@@ -312,6 +368,7 @@ export async function recursosDaTela(req, res, next) {
     if (anexosDaTela(tela)) recursos.push({
       recurso: 'anexos', colunas: ['id', 'pedido_id', 'campo_id', 'campo_nome', 'nome', 'mime', 'tamanho', 'enviado_por', 'criado_em', 'url'],
       url: `/api/v1/${tela}/anexos`, arquivo: `/api/v1/${tela}/anexos/{id}/arquivo`,
+      arquivo_do_pedido: `/api/v1/${tela}/pedidos/{pedido_id}/arquivos/{arquivo_id}`,
     });
     res.json({ tela, recursos });
   } catch (err) { next(err); }
@@ -370,7 +427,8 @@ export async function listarRecurso(req, res, next) {
     const total = (await query(`SELECT COUNT(*)::int AS n FROM ${fromDe(f)} ${w}`, params)).rows[0].n;
     const linhas = await query(
       `SELECT ${selecionadas.map(c => `"${c.nome}"`).join(', ')} FROM ${fromDe(f)} ${w} ORDER BY ${ordem} LIMIT ${limite} OFFSET ${(pagina - 1) * limite}`, params);
-    res.json({ tela, recurso: req.params.recurso, total, pagina, limite, paginas: Math.max(1, Math.ceil(total / limite)), dados: linhas.rows });
+    const dados = await anexarArquivos(req, tela, req.params.recurso, linhas.rows);
+    res.json({ tela, recurso: req.params.recurso, total, pagina, limite, paginas: Math.max(1, Math.ceil(total / limite)), dados });
   } catch (err) { next(err); }
 }
 
@@ -386,7 +444,7 @@ export async function umRegistro(req, res, next) {
     const r = await query(
       `SELECT ${cols.map(c => `"${c.nome}"`).join(', ')} FROM ${fromDe(f)} WHERE "${chavePk}"::text = $1 ${f.onde ? `AND ${f.onde}` : ''} LIMIT 1`, [String(req.params.id)]);
     if (!r.rows[0]) return res.status(404).json({ erro: 'Registro não encontrado.' });
-    res.json(r.rows[0]);
+    res.json((await anexarArquivos(req, tela, req.params.recurso, [r.rows[0]]))[0]);
   } catch (err) { next(err); }
 }
 
