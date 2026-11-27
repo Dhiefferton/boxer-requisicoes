@@ -124,7 +124,7 @@ export default function SidebarBoxer({ recolhida, onRecolher, onSair, carrinho }
           <div className={`${base} ${corItem(false)} cursor-pointer`} role="button" tabIndex={0} title={recolhida ? 'Buscar (Ctrl K)' : undefined}
             onClick={() => setBuscando(true)} onKeyDown={e => { if (e.key === 'Enter') setBuscando(true); }}>
             <Search size={recolhida ? 18 : 16} className="shrink-0" />
-            {!recolhida && <><span className="flex-1">Buscar</span><span className="text-[10px] opacity-60 border border-current rounded px-1">Ctrl K</span></>}
+            {!recolhida && <span className="flex-1">Buscar</span>}
           </div>
           <NavLink to="/inicio" title={recolhida ? 'Início' : undefined} className={({ isActive }) => `${base} ${corItem(isActive)}`}>
             <Home size={recolhida ? 18 : 16} className="shrink-0" />{!recolhida && <span>Início</span>}
