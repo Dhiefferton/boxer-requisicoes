@@ -391,6 +391,27 @@ export function CardPedido({ pedido, abrirAoCarregar = false, onAtualizar, podeE
     finally { setRetirando(false); }
   }
 
+  // Adicionar peças no orçamento (campos "Adicionar peças no orçamento" = Sim e "Código das Peças")
+  const adicionar = camposAdicionarPecas(pedido);
+  const podeAdicionar = adicionar.quer && adicionar.codigos.length > 0 && !!pedido.zen_pedido_id && !pedido.zen_nota_id;
+  const [adicionando, setAdicionando] = useState(false);
+  async function adicionarPecas() {
+    if (!confirm(
+      `Adicionar as peças ${adicionar.codigos.join(', ')} no pedido #${pedido.zen_pedido_id} do Zen?\n\n` +
+      'A ordem de separação atual será desfeita (as peças voltam pro estoque), as peças novas entram no pedido ' +
+      '(preço da base de peças), o pedido é aprovado de novo e ganha uma nova ordem de separação. ' +
+      'O card volta para "Em Separação".'
+    )) return;
+    setAdicionando(true);
+    try {
+      const { data } = await pedidosOrcamentoService.adicionarPecas(pedido.id);
+      const lista = (data.adicionadas || []).map(p => `${p.codigo}${p.quantidade > 1 ? ` x${p.quantidade}` : ''}`).join(', ');
+      alert(`Pronto! Peças adicionadas: ${lista}.\nNova ordem de separação: #${data.zen_ordem_separacao_id || '—'}.`);
+      onAtualizar();
+    } catch (err) { alert(err.response?.data?.erro || 'Erro ao adicionar as peças no Zen.'); onAtualizar(); }
+    finally { setAdicionando(false); }
+  }
+
   const [cancelando, setCancelando] = useState(false);
   const [verHistorico, setVerHistorico] = useState(false);
   // Peças mudaram no Pipefy depois do pedido já estar no Zen
@@ -582,6 +603,10 @@ export function CardPedido({ pedido, abrirAoCarregar = false, onAtualizar, podeE
     acoesZen.push({ id: 'zen', onClick: atualizarItensZen, ocupado: atualizandoItens, alerta: itensAlterados,
       texto: itensAlterados ? 'Atualizar peças no Zen' : 'Peças no Zen', textoOcupado: 'Atualizando no Zen…' });
   }
+  if (podeAdicionar) { // todos os colaboradores
+    acoesZen.push({ id: 'adicionar', onClick: adicionarPecas, ocupado: adicionando, alerta: true,
+      texto: 'Adicionar peças no Zen', textoOcupado: 'Adicionando no Zen…' });
+  }
   if (podeEditar && precisaRetirar && codigosRecusados.length) {
     acoesZen.push({ id: 'retirar', onClick: retirarRecusadas, ocupado: retirando, alerta: true,
       texto: 'Retirar peças recusadas no Zen', textoOcupado: 'Retirando no Zen…' });
@@ -712,6 +737,23 @@ const textoRegistro = (v) => {
   if (t.startsWith('{') || t.startsWith('[')) { try { return textoRegistro(JSON.parse(t)); } catch { /* texto */ } }
   return t;
 };
+// Campos "Adicionar peças no orçamento" (Sim/Não) e "Código das Peças" do card
+function camposAdicionarPecas(pedido) {
+  const ed = pedido.campos_editados || {};
+  const pf = Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [];
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const valor = (re) => {
+    for (const c of (CONFIG_ORCAMENTO.campos || []).filter(x => x.ativo !== false && re.test(norm(x.rotulo)))) {
+      const id = c.pipefy_campo || `bx_${c.id}`;
+      const v = id in ed ? ed[id] : pf.find(x => x?.id === id)?.valor;
+      if (v != null && String(v).trim() !== '') return String(v);
+    }
+    return '';
+  };
+  const codigos = [...new Set(valor(/^codigos? das pecas/).split(/[\s,;|/]+/).map(x => x.trim().toUpperCase()).filter(Boolean))];
+  return { quer: /^sim/i.test(valor(/^adicionar pecas/).trim()), codigos };
+}
+
 function tecnicoDoPedido(pedido) {
   const ed = pedido.campos_editados || {};
   const pf = Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [];

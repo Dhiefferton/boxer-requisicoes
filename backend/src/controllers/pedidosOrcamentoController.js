@@ -88,6 +88,9 @@ function garantirColunas() {
         );
         console.log('✅ pedidos_orcamento: colunas do Aprovado Parcial criadas');
       }
+      // Peças acrescentadas pelo botão "Adicionar peças no Zen" (27/11/2026)
+      const ad = await query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'pedidos_orcamento' AND column_name = 'itens_adicionados'`);
+      if (ad.rowCount === 0) await query(`ALTER TABLE pedidos_orcamento ADD COLUMN IF NOT EXISTS itens_adicionados JSONB`);
       await garantirTabelaMovimentos();
       // NS de entrada: cards trazidos do Pipefy antes da correção. Desfaz o número do
       // próprio card (usado por engano) e pega o primeiro campo de NS preenchido.
@@ -776,6 +779,7 @@ async function salvarCamposNativos(pedido, novos) {
   }
   const campos = [...porId.values()];
   const d = extrairDadosOrcamento({ campos, titulo: null });
+  d.itens = somarItensAdicionados(d.itens, pedido.itens_adicionados);
   const doc = String(campos.find(c => c.id === CAMPO_DOC_CLIENTE)?.valor || '').trim() || d.cliente_cnpj;
   await query(
     `UPDATE pedidos_orcamento
@@ -1387,6 +1391,116 @@ export async function atualizarItensZen(req, res, next) {
       zen_ordem_separacao_id: r.ordemSeparacaoId,
       adicionados: r.adicionados, removidos: r.removidos, alterados: r.alterados,
     });
+  } catch (err) { next(err); }
+}
+
+// ── Adicionar peças no orçamento (27/11/2026) ─────────────────
+// Campos do card "Adicionar peças no orçamento" (Sim/Não) e "Código das Peças"
+// (ex.: 701598,401111). O botão "Adicionar peças no Zen" faz o contrário das
+// peças recusadas: desfaz a ordem de separação, inclui as peças no pedido de
+// venda (preço da base de peças), aprova de novo, gera nova ordem de separação
+// e o card volta para "Em Separação". Código repetido = mais 1 unidade.
+// As peças acrescentadas ficam em itens_adicionados e são somadas às peças
+// dos campos sempre que o card é editado (não somem numa edição depois).
+function somarItensAdicionados(itens, adicionados) {
+  const lista = (Array.isArray(itens) ? itens : []).map(i => ({ ...i }));
+  for (const a of Array.isArray(adicionados) ? adicionados : []) {
+    const cod = String(a.codigo || '').trim().toUpperCase();
+    const ja = lista.find(i => String(i.codigo || '').trim().toUpperCase() === cod);
+    if (ja) ja.quantidade = (Number(ja.quantidade) || 0) + (Number(a.quantidade) || 0);
+    else lista.push({ ...a });
+  }
+  return lista;
+}
+
+async function camposAdicionarPecas(pedido) {
+  const cfg = await lerConfigOrcamento().catch(() => null);
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const ed = pedido.campos_editados || {};
+  const pf = Array.isArray(pedido.pipefy_campos) ? pedido.pipefy_campos : [];
+  const valor = (re) => {
+    for (const c of (cfg?.campos || []).filter(x => x.ativo !== false && re.test(norm(x.rotulo)))) {
+      const id = idCampoConfig(c);
+      const v = id in ed ? ed[id] : pf.find(x => x?.id === id)?.valor;
+      if (v != null && String(v).trim() !== '') return String(v);
+    }
+    return '';
+  };
+  return { quer: /^sim/i.test(valor(/^adicionar pecas/).trim()), texto: valor(/^codigos? das pecas/) };
+}
+
+// Código -> quantidade (repetido soma), na ordem digitada
+function contarCodigos(texto) {
+  const m = new Map();
+  for (const c of String(texto || '').split(/[\s,;|/]+/).map(x => x.trim().toUpperCase()).filter(Boolean)) m.set(c, (m.get(c) || 0) + 1);
+  return m;
+}
+
+// POST /pedidos-orcamento/:id/adicionar-pecas
+export async function adicionarPecas(req, res, next) {
+  try {
+    await garantirColunas();
+    const pedido = (await query(`SELECT * FROM pedidos_orcamento WHERE id = $1 AND status != 'cancelado'`, [parseInt(req.params.id)])).rows[0];
+    if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado.' });
+    if (!pedido.zen_pedido_id) return res.status(400).json({ erro: 'Pedido sem pedido de venda no Zen.' });
+    if (pedido.zen_nota_id) return res.status(400).json({ erro: 'Este pedido já tem nota fiscal — não dá mais pra acrescentar peças.' });
+
+    const { quer, texto } = await camposAdicionarPecas(pedido);
+    if (!quer) return res.status(400).json({ erro: 'Marque "Adicionar peças no orçamento" = Sim no card.' });
+    const pedidos = contarCodigos(texto);
+    if (!pedidos.size) return res.status(400).json({ erro: 'Preencha "Código das Peças" no card (ex.: 701598,401111).' });
+    const ultimo = (await query(
+      `SELECT detalhes->>'texto' AS texto FROM pedidos_orcamento_movimentos WHERE pedido_id = $1 AND tipo = 'pecas_adicionadas' ORDER BY criado_em DESC LIMIT 1`,
+      [pedido.id])).rows[0];
+    if (ultimo && String(ultimo.texto || '').trim() === texto.trim()) {
+      return res.status(400).json({ erro: `Estas peças (${texto}) já foram adicionadas. Para acrescentar outras, troque o "Código das Peças".` });
+    }
+
+    // Preço e descrição: base de peças usada nos campos "Peça N" do card
+    const baseId = (await query(`SELECT lista FROM orc_campos WHERE ativo AND tipo = 'registro' AND lista ~ '^[0-9]+$' AND rotulo ~* '^pe[cç]a\\s*\\d' ORDER BY ordem, id LIMIT 1`)).rows[0]?.lista;
+    const novos = [];
+    const semBase = [];
+    for (const [codigo, qtd] of pedidos) {
+      const reg = baseId ? (await query(
+        `SELECT descricao, valor FROM bx_base_registros WHERE base_id = $1 AND ativo AND descricao ~* $2 ORDER BY id LIMIT 1`,
+        [Number(baseId), `^\\s*${codigo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*-`])).rows[0] : null;
+      if (!reg) { semBase.push(codigo); continue; }
+      const m = String(reg.descricao).match(/^\s*[^-]+-\s*(.*)$/s);
+      novos.push({ codigo, descricao: m ? m[1].trim() : reg.descricao, quantidade: qtd, valor_unitario: reg.valor == null ? null : Number(reg.valor) });
+    }
+    if (semBase.length) {
+      return res.status(400).json({ erro: `Peça(s) ${semBase.join(', ')} não encontrada(s) na base de peças (preço). Cadastre na base e tente de novo.` });
+    }
+
+    const itensNovos = somarItensAdicionados(pedido.itens, novos);
+    let r;
+    try {
+      r = await atualizarItensPedidoZen({ ...pedido, itens: itensNovos });
+    } catch (err) {
+      console.error(`❌ ZenERP adicionar peças #${pedido.id}:`, err.message);
+      await query(`UPDATE pedidos_orcamento SET zen_erro = $1, atualizado_em = NOW() WHERE id = $2`, [err.message.slice(0, 1000), pedido.id]);
+      await registrarMovimento(pedido.id, 'erro_zen', {
+        de: pedido.status, usuario: req.usuario, detalhes: { acao: 'adicionar_pecas', texto },
+        descricao: `Falha ao adicionar as peças no Zen: ${err.message.slice(0, 500)}`,
+      });
+      return res.status(502).json({ erro: `Não foi possível adicionar as peças no ZenERP: ${err.message}` });
+    }
+
+    await query(
+      `UPDATE pedidos_orcamento
+          SET itens = $1::jsonb, itens_adicionados = $2::jsonb, zen_ordem_separacao_id = COALESCE($3, zen_ordem_separacao_id),
+              zen_romaneio_id = NULL, zen_erro = NULL, itens_alterados_em = NULL,
+              status = 'separando', atualizado_em = NOW()
+        WHERE id = $4`,
+      [JSON.stringify(itensNovos), JSON.stringify(somarItensAdicionados(pedido.itens_adicionados, novos)), r.ordemSeparacaoId || null, pedido.id]
+    );
+    const resumo = novos.map(n => `${n.codigo}${n.quantidade > 1 ? ` x${n.quantidade}` : ''}`).join(', ');
+    await registrarMovimento(pedido.id, 'pecas_adicionadas', {
+      de: pedido.status, para: 'separando', usuario: req.usuario,
+      descricao: `Peças adicionadas ao pedido #${pedido.zen_pedido_id}: ${resumo} — nova ordem de separação #${r.ordemSeparacaoId || '—'}`,
+      detalhes: { texto, pecas: novos, ordem_nova: r.ordemSeparacaoId || null },
+    });
+    res.json({ sucesso: true, adicionadas: novos, zen_ordem_separacao_id: r.ordemSeparacaoId || null });
   } catch (err) { next(err); }
 }
 

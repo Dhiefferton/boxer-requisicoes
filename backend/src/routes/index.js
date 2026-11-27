@@ -38,7 +38,7 @@ import {
   gerarRelatorio, listarRelatorios, detalharRelatorio
 } from '../controllers/necessidadesPecasController.js';
 import {
-  listarPedidos, criarPedido, moverPedido, enviarFotoOrcamento, verFotoOrcamento, excluirFotoOrcamento, listarModelos, criarModelo, editarPedido, cancelarPedido, cancelarPedidoZen, excluirPedidoZenAdmin, listarPipesPipefy, sincronizarPipefy, importarEntradaPipefy, retirarRecusadas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, renomearPedido, criarCardBoxer, clienteZen, listarMovimentos
+  listarPedidos, criarPedido, moverPedido, enviarFotoOrcamento, verFotoOrcamento, excluirFotoOrcamento, listarModelos, criarModelo, editarPedido, cancelarPedido, cancelarPedidoZen, excluirPedidoZenAdmin, listarPipesPipefy, sincronizarPipefy, importarEntradaPipefy, retirarRecusadas, adicionarPecas, atualizarItensZen, voltarSeparacaoRota, estruturaOrcamento, editarCampos, renomearPedido, criarCardBoxer, clienteZen, listarMovimentos
 } from '../controllers/pedidosOrcamentoController.js';
 import {
   listarInventarios, previaInventario, criarInventario, detalharInventario, meuInventario,
@@ -252,6 +252,8 @@ router.post('/pedidos-orcamento/:id/cancelar',  autenticar, exigirPerfil('operad
 router.post('/pedidos-orcamento/:id/cancelar-zen', autenticar, exigirPerfil('operador', 'admin'), cancelarPedidoZen);
 router.post('/pedidos-orcamento/:id/excluir-zen', autenticar, exigirPerfil('admin'), excluirPedidoZenAdmin);
 router.post('/pedidos-orcamento/:id/retirar-recusadas', autenticar, exigirPerfil('operador', 'admin'), retirarRecusadas);
+// Adicionar peças no Zen: liberado para todos os colaboradores (pedido do Dhiefferton, 27/11/2026)
+router.post('/pedidos-orcamento/:id/adicionar-pecas', autenticar, adicionarPecas);
 router.post('/pedidos-orcamento/:id/atualizar-itens-zen', autenticar, exigirPerfil('admin'), atualizarItensZen);
 router.post('/pedidos-orcamento/:id/voltar-separacao', autenticar, exigirPerfil('admin'), voltarSeparacaoRota);
 router.get('/pedidos-orcamento/pipefy-pipes',   autenticar, exigirPerfil('admin'), listarPipesPipefy);
